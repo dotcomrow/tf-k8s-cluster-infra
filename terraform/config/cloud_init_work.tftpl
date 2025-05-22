@@ -1,0 +1,581 @@
+#cloud-config
+hostname: ${hostname}
+
+users:
+  - name: ubuntu
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    groups: users, admin
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_keys}
+
+ssh_pwauth: false
+
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common
+  - zsh
+  - nfs-common
+  - gnupg
+  - lsb-release
+  - nftables
+  - linux-firmware
+  - alsa-utils
+  - ubuntu-drivers-common
+
+growpart:
+  mode: auto
+  devices: ["/"]
+
+mounts:
+  - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
+
+write_files:
+  - path: /etc/sysctl.d/99-disable-ipv6.conf
+    permissions: '0644'
+    content: |
+      net.ipv6.conf.all.disable_ipv6 = 1
+      net.ipv6.conf.default.disable_ipv6 = 1
+      net.ipv6.conf.lo.disable_ipv6 = 1
+
+  - path: /etc/default/grub.d/99-disable-ipv6.cfg
+    permissions: '0644'
+    content: |
+      GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX ipv6.disable=1"
+
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    permissions: '0644'
+    content: |
+      blacklist nouveau
+      options nouveau modeset=0
+
+  - path: /usr/local/bin/disable-swap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      swapoff -a
+      cp /etc/fstab /etc/fstab.bak
+      sed -i '/^[^#].*\bswap\b/s/^/#/' /etc/fstab
+
+  - path: /etc/systemd/system/mount-shared-storage.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Mount NFS shared storage
+      After=network-online.target nfs-common.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/mount -t nfs ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/rke2-preload-images.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      IMAGE_DIR="/var/lib/rancher/rke2/agent/images"
+      ARCH="amd64"
+
+      mkdir -p "$IMAGE_DIR"
+
+      RKE2_VERSION=$(/usr/local/bin/rke2 --version | awk '{print $3}' | head -n1)
+      RKE2_VERSION_ENCODED=$(echo "${k8s_version}" | sed 's/+/%2B/g')
+      IMAGE_NAME="rke2-images.linux-$ARCH.tar.zst"
+      IMAGE_URL="https://github.com/rancher/rke2/releases/download/$RKE2_VERSION_ENCODED/$IMAGE_NAME"
+
+      echo "📦 Downloading $IMAGE_URL..."
+      curl -fSL "$IMAGE_URL" -o "/tmp/$IMAGE_NAME"
+
+      echo "📦 Decompressing..."
+      zstd -d "/tmp/$IMAGE_NAME" -o "/tmp/rke2-images.tar"
+
+      echo "📂 Moving to $IMAGE_DIR..."
+      mv /tmp/rke2-images.tar "$IMAGE_DIR/rke2-images.tar"
+
+      echo "✅ Preload complete"
+
+  - path: /etc/systemd/system/rke2-preload-images.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Preload RKE2 container images
+      ConditionPathExists=/usr/local/bin/rke2
+      After=network-online.target
+      Before=rke2-server.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/rke2-preload-images.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/setup-hosts-dns.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "Hostname=$(hostname)" >> /run/systemd/network/10-netplan-eth0.network || true
+      sudo systemctl restart systemd-networkd || true
+
+      HOSTNAME=$(hostname)
+      grep -q "127.0.1.1 $HOSTNAME" /etc/hosts || echo "127.0.1.1 $HOSTNAME" >> /etc/hosts
+
+      cat <<EOF | sudo tee /etc/systemd/resolved.conf > /dev/null
+      [Resolve]
+      DNS=10.43.0.10 10.0.0.10
+      FallbackDNS=1.1.1.1 8.8.8.8
+      Domains=~svc.cluster.local ~internal.lan
+      MulticastDNS=no
+      LLMNR=no
+      DNSSEC=no
+      Cache=yes
+      EOF
+
+      sudo systemctl enable systemd-resolved
+      sudo systemctl restart systemd-resolved
+
+      # Ensure systemd-resolved uses proper nameservers
+      sudo rm -f /etc/resolv.conf
+      sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+      sudo tee /etc/systemd/system/sysctl-ensure.service > /dev/null <<EOF
+      [Unit]
+      Description=Force re-apply sysctl settings
+      After=network.target
+      Wants=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/sysctl --system
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+      sudo systemctl daemon-reexec
+      sudo systemctl enable sysctl-ensure.service
+
+      # Disable IPv6
+      sudo modprobe -r ip6_tables || true
+      sudo modprobe -r nf_defrag_ipv6 || true
+      sudo modprobe -r nf_conntrack_ipv6 || true
+      sudo modprobe -r ipv6 || true
+
+      echo "install ipv6 /bin/true" | sudo tee /etc/modprobe.d/force-disable-ipv6.conf
+      echo "install ip6_tables /bin/true" | sudo tee -a /etc/modprobe.d/force-disable-ipv6.conf
+
+      if [ -e /usr/sbin/ip6tables ]; then
+        sudo mv /usr/sbin/ip6tables /usr/sbin/ip6tables.disabled
+      fi
+
+      sudo tee /etc/modprobe.d/disable-ipv6.conf > /dev/null <<EOF
+      blacklist ipv6
+      blacklist nf_conntrack_ipv6
+      blacklist nf_defrag_ipv6
+      blacklist ip6_tables
+      EOF
+
+      sudo update-initramfs -u
+
+  - path: /etc/systemd/system/setup-hosts-dns.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Setup hosts and DNS configuration
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/setup-hosts-dns.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/setup-nfs-modules.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      modprobe nfs
+      modprobe nfsd
+      echo nfs >> /etc/modules
+      echo nfsd >> /etc/modules
+      cat <<EOF > /etc/systemd/system/load-nfs-modules.service
+      [Unit]
+      Description=Load NFS kernel modules
+      DefaultDependencies=no
+      After=local-fs.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/modprobe nfs
+      ExecStart=/sbin/modprobe nfsd
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+      systemctl daemon-reload
+      systemctl enable load-nfs-modules.service
+
+  - path: /usr/local/bin/setup-docker.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      until curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -; do sleep 5; done
+      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+      sudo apt-get update -y
+      DEBIAN_FRONTEND=noninteractive sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+  - path: /usr/local/bin/setup-nvidia.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      sudo apt-get install -y linux-headers-$(uname -r)
+      ubuntu-drivers autoinstall
+      ubuntu-drivers install --gpgpu nvidia:${NVIDIA_DRIVER}-server
+      sudo apt-get install -y nvidia-utils-${NVIDIA_DRIVER}-server
+      update-initramfs -u
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+        sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#" | \
+        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+      wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+      dpkg -i cuda-keyring_1.1-1_all.deb
+      sudo apt-get update -y
+      sudo apt-get install -y nvidia-container-toolkit nvidia-docker2
+      systemctl enable nvidia-persistenced
+      systemctl start nvidia-persistenced
+      modprobe nvidia nvidia-uvm nvidia-modeset
+      nvidia-ctk runtime configure --runtime=containerd --set-as-default
+      nvidia-ctk runtime configure --runtime=docker --set-as-default
+      sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
+      systemctl restart docker
+      systemctl restart containerd
+
+  - path: /usr/local/bin/setup-rke2.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      until which rke2 >/dev/null 2>&1; do curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION=${k8s_version} sh -; sleep 5; done
+      until which helm >/dev/null 2>&1; do curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; sleep 5; done
+      mkdir -p /etc/rancher/rke2
+      cp /mnt/shared-storage/config.yaml /etc/rancher/rke2/config.yaml
+      until [ -f "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token" ]; do sleep 2; done
+      TOKEN=$(cat "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token")
+      echo "token: $TOKEN" >> /etc/rancher/rke2/config.yaml
+      sed -i '/^server:/d' /etc/rancher/rke2/config.yaml
+      echo "server: https://srvr-node.internal.lan:9345" >> /etc/rancher/rke2/config.yaml
+
+  - path: /etc/systemd/system/rke2-agent.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+
+  - path: /etc/systemd/system/containerd.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+
+  - path: /usr/local/bin/tune-system.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "* soft nofile 1048576
+      * hard nofile 1048576
+      root soft nofile 1048576
+      root hard nofile 1048576" > /etc/security/limits.d/99-nofile.conf
+
+      mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
+      echo "[Manager]
+      DefaultLimitNOFILE=1048576" | tee /etc/systemd/system.conf.d/99-default-ulimits.conf /etc/systemd/user.conf.d/99-default-ulimits.conf
+
+      systemctl daemon-reload
+
+  - path: /usr/local/bin/setup-fluentbit.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      mkdir -p /etc/google-cloud-ops-agent
+      echo "${GCP_LOGGING_KEY}" | base64 -d > /etc/google-cloud-ops-agent/logging-key.json
+
+      mkdir -p /usr/share/keyrings
+      curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor -o /usr/share/keyrings/fluent-bit-archive-keyring.gpg
+
+      DISTRO=$(lsb_release -cs)
+      if [ "$DISTRO" = "${UBUNTU_RELEASE_CODE_NAME}" ]; then
+        echo "Detected codename $DISTRO unsupported, falling back to jammy"
+        DISTRO="jammy"
+      fi
+
+      echo "deb [signed-by=/usr/share/keyrings/fluent-bit-archive-keyring.gpg] https://packages.fluentbit.io/ubuntu/$DISTRO $DISTRO main" > /etc/apt/sources.list.d/fluent-bit.list
+      sudo apt-get update
+      sudo apt-get install -y td-agent-bit
+
+      mkdir -p /etc/td-agent-bit/conf.d
+
+      cat <<EOF > /etc/td-agent-bit/td-agent-bit.conf
+      [SERVICE]
+          Flush         1
+          Daemon        Off
+          Log_Level     info
+          Plugins_File  plugins.conf
+          Parsers_File  parsers.conf
+          HTTP_Server   Off
+          HTTP_Listen   0.0.0.0
+          HTTP_Port     2020
+          storage.metrics on
+
+      @INCLUDE /etc/td-agent-bit/conf.d/*.conf
+
+      [INPUT]
+          Name               tail
+          Path               /var/log/cloud-init*.log
+          Tag                cloudinit
+          Read_from_Head     Off
+          DB                 /var/log/flb_cloudinit.db
+          DB.Sync            normal
+          Mem_Buf_Limit      5MB
+          Skip_Long_Lines    On
+
+      [FILTER]
+          Name      parser
+          Match     cloudinit
+          Key_Name  log
+          Parser    cloudinit_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  cloudinit
+          Rename message textPayload
+          Rename process process
+          Rename pid pid
+          Rename timestamp timestamp
+
+      [FILTER]
+          Name    nest
+          Match   cloudinit
+          Operation nest
+          Wildcard process
+          Wildcard pid
+          Wildcard timestamp
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match cloudinit
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key cloudinit
+      EOF
+
+      # cloud-init logs
+      cat <<EOF > /etc/td-agent-bit/conf.d/cloudinit.conf
+      [INPUT]
+          Name               tail
+          Path               /var/log/cloud-init*.log
+          Tag                cloudinit
+          Read_from_Head     Off
+          DB                 /var/log/flb_cloudinit.db
+          DB.Sync            normal
+          Mem_Buf_Limit      5MB
+          Skip_Long_Lines    On
+
+      [FILTER]
+          Name      parser
+          Match     cloudinit
+          Key_Name  log
+          Parser    cloudinit_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  cloudinit
+          Rename process process
+          Rename pid pid
+          Rename message textPayload
+          Rename timestamp timestamp
+
+      [FILTER]
+          Name    nest
+          Match   cloudinit
+          Operation nest
+          Wildcard process
+          Wildcard pid
+          Wildcard timestamp
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match cloudinit
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key cloudinit
+      EOF
+
+      # journal logs (systemd, rke2, etc.)
+      cat <<EOF > /etc/td-agent-bit/conf.d/journald.conf
+      [INPUT]
+          Name    systemd
+          Tag     journal.*
+          DB      /var/log/flb_journal.db
+          Systemd_Filter  _SYSTEMD_UNIT=bootstrap-rke2.service
+          Systemd_Filter  _SYSTEMD_UNIT=rke2-server.service
+          Systemd_Filter  _SYSTEMD_UNIT=cloud-final.service
+          Read_From_Tail  On
+
+      [FILTER]
+          Name      parser
+          Match     journal.*
+          Key_Name  MESSAGE
+          Parser    journald_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  journal.*
+          Rename message textPayload
+
+      [FILTER]
+          Name    nest
+          Match   journal.*
+          Operation nest
+          Wildcard identifier
+          Wildcard pid
+          Wildcard hostname
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match journal.*
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key systemd-journal
+      EOF
+
+      # Optional: catch all syslog (if rsyslog is enabled)
+      cat <<EOF > /etc/td-agent-bit/conf.d/syslog.conf
+      [INPUT]
+          Name              tail
+          Path              /var/log/syslog
+          Tag               syslog
+          Read_from_Head    Off
+          DB                /var/log/flb_syslog.db
+          Mem_Buf_Limit     5MB
+          Skip_Long_Lines   On
+
+      [FILTER]
+          Name   parser
+          Match  syslog
+          Key_Name log
+          Parser syslog_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  syslog
+          Rename message textPayload
+
+      [FILTER]
+          Name    nest
+          Match   syslog
+          Operation nest
+          Wildcard hostname
+          Wildcard identifier
+          Wildcard pid
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match syslog
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key syslog
+      EOF
+
+      # cloudinit_parser
+      cat <<EOF >> /etc/td-agent-bit/parsers.conf
+
+      [PARSER]
+          Name        cloudinit_parser
+          Format      regex
+          Regex       ^(?<timestamp>[^ ]+\s[^ ]+) (?<process>[^\[]+)\[(?<pid>\d+)\]:(?<message>.*)
+          Time_Key    timestamp
+          Time_Format %Y-%m-%d %H:%M:%S
+
+      [PARSER]
+          Name        syslog_parser
+          Format      regex
+          Regex       ^(?<timestamp>\w{3} +\d{1,2} \d{2}:\d{2}:\d{2}) (?<hostname>[^\s]+) (?<identifier>[^:]+): (?<message>.*)
+          Time_Key    timestamp
+          Time_Format %b %d %H:%M:%S
+
+      [PARSER]
+          Name        journald_parser
+          Format      regex
+          Regex       ^(?<timestamp>\d{4}-\d{2}-\d{2}T[0-9:.+\-Z]+) (?<hostname>[^\s]+) (?<identifier>[^\[]+)\[(?<pid>\d+)\]: (?<message>.*)
+          Time_Key    timestamp
+          Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+      EOF
+
+      systemctl enable td-agent-bit
+      systemctl start td-agent-bit
+
+runcmd:
+  - sysctl --system
+  - update-grub
+  - /usr/local/bin/disable-swap.sh
+  - /usr/local/bin/setup-hosts-dns.sh
+  - sudo systemctl enable setup-hosts-dns.service
+  - sudo systemctl start setup-hosts-dns.service
+  - /usr/local/bin/setup-nfs-modules.sh
+  - systemctl enable --now mount-shared-storage.service
+  - /usr/local/bin/setup-docker.sh
+  - /usr/local/bin/setup-nvidia.sh
+  - /usr/local/bin/setup-fluentbit.sh
+  - /usr/local/bin/setup-rke2.sh
+
+  - systemctl enable rke2-preload-images.service
+  - systemctl start rke2-preload-images.service
+
+  - /usr/local/bin/tune-system.sh
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+  - systemctl daemon-reload
+  - systemctl enable rke2-agent
+  - systemctl start rke2-agent
+  - reboot

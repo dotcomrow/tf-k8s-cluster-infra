@@ -1,0 +1,1340 @@
+#cloud-config
+hostname: ${hostname}
+users:
+  - name: ubuntu
+    sudo:
+      - "ALL=(ALL) NOPASSWD:ALL"
+    groups: users, admin
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_keys}
+
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+packages:
+  - qemu-guest-agent
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg-agent
+  - software-properties-common
+  - zsh
+  - nfs-common
+  - gnupg
+  - lsb-release
+  - nftables
+
+growpart:
+  mode: auto
+  devices: ["/"]
+
+mounts:
+  - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
+
+write_files:
+  - path: /etc/sysctl.d/99-disable-ipv6.conf
+    permissions: '0644'
+    content: |
+      net.ipv6.conf.all.disable_ipv6 = 1
+      net.ipv6.conf.default.disable_ipv6 = 1
+      net.ipv6.conf.lo.disable_ipv6 = 1
+
+  - path: /etc/default/grub.d/99-disable-ipv6.cfg
+    permissions: '0644'
+    content: |
+      GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX ipv6.disable=1"
+
+  - path: /etc/systemd/system/mount-shared-storage.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Mount NFS shared storage
+      After=network-online.target nfs-common.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/mount -t nfs ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/10-disable-swap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "🔧 Disabling swap and modifying fstab..."
+      swapoff -a || { echo "❌ Failed to disable swap"; exit 1; }
+      cp /etc/fstab /etc/fstab.bak || { echo "❌ Failed to backup fstab"; exit 1; }
+      sed -i '/^[^#].*\bswap\b/s/^/#/' /etc/fstab
+
+  - path: /etc/systemd/system/disable-swap.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Disable swap and update fstab
+      After=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/10-disable-swap.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/20-configure-logging.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      echo "📦 Configuring Fluent Bit for GCP logging..."
+
+      mkdir -p /etc/google-cloud-ops-agent
+      echo "${GCP_LOGGING_KEY}" | base64 -d > /etc/google-cloud-ops-agent/logging-key.json
+
+      mkdir -p /usr/share/keyrings
+      curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor -o /usr/share/keyrings/fluent-bit-archive-keyring.gpg
+
+      DISTRO=$(lsb_release -cs)
+      if [ "$DISTRO" = "${UBUNTU_RELEASE_CODE_NAME}" ]; then
+        echo "Detected codename $DISTRO unsupported, falling back to jammy"
+        DISTRO="jammy"
+      fi
+
+      echo "deb [signed-by=/usr/share/keyrings/fluent-bit-archive-keyring.gpg] https://packages.fluentbit.io/ubuntu/$DISTRO $DISTRO main" > /etc/apt/sources.list.d/fluent-bit.list
+      sudo apt-get update
+      sudo apt-get install -y td-agent-bit
+
+      mkdir -p /etc/td-agent-bit/conf.d
+
+      cat <<EOF > /etc/td-agent-bit/td-agent-bit.conf
+      [SERVICE]
+          flush         1
+          daemon        Off
+          log_level     info
+          plugins_file  plugins.conf
+          parsers_file  parsers.conf
+          http_server   Off
+          http_listen   0.0.0.0
+          http_port     2020
+          storage.metrics on
+
+      @INCLUDE /etc/td-agent-bit/conf.d/*.conf
+      EOF
+
+      # cloud-init logs
+      cat <<EOF > /etc/td-agent-bit/conf.d/cloudinit.conf
+      [INPUT]
+          Name               tail
+          Path               /var/log/cloud-init*.log
+          Tag                cloudinit
+          Read_from_Head     Off
+          DB                 /var/log/flb_cloudinit.db
+          DB.Sync            normal
+          Mem_Buf_Limit      5MB
+          Skip_Long_Lines    On
+
+      [FILTER]
+          Name      parser
+          Match     cloudinit
+          Key_Name  log
+          Parser    cloudinit_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  cloudinit
+          Rename process process
+          Rename pid pid
+          Rename message textPayload
+          Rename timestamp timestamp
+
+      [FILTER]
+          Name    nest
+          Match   cloudinit
+          Operation nest
+          Wildcard process
+          Wildcard pid
+          Wildcard timestamp
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match cloudinit
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key cloudinit
+      EOF
+
+      # journal logs (systemd, rke2, etc.)
+      cat <<EOF > /etc/td-agent-bit/conf.d/journald.conf
+      [INPUT]
+          Name    systemd
+          Tag     journal.*
+          DB      /var/log/flb_journal.db
+          Systemd_Filter  _SYSTEMD_UNIT=bootstrap-rke2.service
+          Systemd_Filter  _SYSTEMD_UNIT=rke2-server.service
+          Systemd_Filter  _SYSTEMD_UNIT=cloud-final.service
+          Read_From_Tail  On
+
+      [FILTER]
+          Name      parser
+          Match     journal.*
+          Key_Name  MESSAGE
+          Parser    journald_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  journal.*
+          Rename message textPayload
+
+      [FILTER]
+          Name    nest
+          Match   journal.*
+          Operation nest
+          Wildcard identifier
+          Wildcard pid
+          Wildcard hostname
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match journal.*
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key systemd-journal
+      EOF
+
+      # Optional: catch all syslog (if rsyslog is enabled)
+      cat <<EOF > /etc/td-agent-bit/conf.d/syslog.conf
+      [INPUT]
+          Name              tail
+          Path              /var/log/syslog
+          Tag               syslog
+          Read_from_Head    Off
+          DB                /var/log/flb_syslog.db
+          Mem_Buf_Limit     5MB
+          Skip_Long_Lines   On
+
+      [FILTER]
+          Name   parser
+          Match  syslog
+          Key_Name log
+          Parser syslog_parser
+          Reserve_Data true
+          Preserve_Key true
+
+      [FILTER]
+          Name   modify
+          Match  syslog
+          Rename message textPayload
+
+      [FILTER]
+          Name    nest
+          Match   syslog
+          Operation nest
+          Wildcard hostname
+          Wildcard identifier
+          Wildcard pid
+          Nested_under logging.googleapis.com/labels
+
+      [OUTPUT]
+          Name  stackdriver
+          Match syslog
+          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
+          resource ${MONITORED_RESOURCE_TYPE}
+          location ${MONITORED_RESOURCE_LOCATION}
+          namespace ${MONITORED_RESOURCE_NAMESPACE}
+          node_id ${MONITORED_RESOURCE_NODE_ID}
+          log_name_key syslog
+      EOF
+
+      # cloudinit_parser
+      cat <<EOF >> /etc/td-agent-bit/parsers.conf
+
+      [PARSER]
+          Name        cloudinit_parser
+          Format      regex
+          Regex       ^(?<timestamp>[^ ]+\s[^ ]+) (?<process>[^\[]+)\[(?<pid>\d+)\]:(?<message>.*)
+          Time_Key    timestamp
+          Time_Format %Y-%m-%d %H:%M:%S
+
+      [PARSER]
+          Name        syslog_parser
+          Format      regex
+          Regex       ^(?<timestamp>\w{3} +\d{1,2} \d{2}:\d{2}:\d{2}) (?<hostname>[^\s]+) (?<identifier>[^:]+): (?<message>.*)
+          Time_Key    timestamp
+          Time_Format %b %d %H:%M:%S
+
+      [PARSER]
+          Name        journald_parser
+          Format      regex
+          Regex       ^(?<timestamp>\d{4}-\d{2}-\d{2}T[0-9:.+\-Z]+) (?<hostname>[^\s]+) (?<identifier>[^\[]+)\[(?<pid>\d+)\]: (?<message>.*)
+          Time_Key    timestamp
+          Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+      EOF
+
+      systemctl daemon-reload
+      systemctl enable td-agent-bit
+      systemctl restart td-agent-bit
+
+  - path: /usr/local/bin/setup-hosts-dns.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      echo "Hostname=$(hostname)" >> /run/systemd/network/10-netplan-eth0.network || true
+      sudo systemctl restart systemd-networkd || true
+
+      HOSTNAME=$(hostname)
+      grep -q "127.0.1.1 $HOSTNAME" /etc/hosts || echo "127.0.1.1 $HOSTNAME" >> /etc/hosts
+
+      cat <<EOF | sudo tee /etc/systemd/resolved.conf > /dev/null
+      [Resolve]
+      DNS=10.43.0.10 10.0.0.10
+      FallbackDNS=1.1.1.1 8.8.8.8
+      Domains=~svc.cluster.local ~internal.lan
+      MulticastDNS=no
+      LLMNR=no
+      DNSSEC=no
+      Cache=yes
+      EOF
+
+      sudo systemctl enable systemd-resolved
+      sudo systemctl restart systemd-resolved
+
+      # Ensure systemd-resolved uses proper nameservers
+      sudo rm -f /etc/resolv.conf
+      sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+      sudo tee /etc/systemd/system/sysctl-ensure.service > /dev/null <<EOF
+      [Unit]
+      Description=Force re-apply sysctl settings
+      After=network.target
+      Wants=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/sysctl --system
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+      sudo systemctl daemon-reexec
+      sudo systemctl enable sysctl-ensure.service
+
+      # Disable IPv6
+      sudo modprobe -r ip6_tables || true
+      sudo modprobe -r nf_defrag_ipv6 || true
+      sudo modprobe -r nf_conntrack_ipv6 || true
+      sudo modprobe -r ipv6 || true
+
+      echo "install ipv6 /bin/true" | sudo tee /etc/modprobe.d/force-disable-ipv6.conf
+      echo "install ip6_tables /bin/true" | sudo tee -a /etc/modprobe.d/force-disable-ipv6.conf
+
+      if [ -e /usr/sbin/ip6tables ]; then
+        sudo mv /usr/sbin/ip6tables /usr/sbin/ip6tables.disabled
+      fi
+
+      sudo tee /etc/modprobe.d/disable-ipv6.conf > /dev/null <<EOF
+      blacklist ipv6
+      blacklist nf_conntrack_ipv6
+      blacklist nf_defrag_ipv6
+      blacklist ip6_tables
+      EOF
+
+      sudo update-initramfs -u
+
+  - path: /etc/systemd/system/setup-hosts-dns.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Setup hosts and DNS configuration
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/setup-hosts-dns.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/configure-logging.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Configure Fluent Bit logging to GCP
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/20-configure-logging.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/01-set-dhcp-hostname.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "🌐 Setting DHCP hostname early..."
+      echo "Hostname=${hostname}" >> /run/systemd/network/10-netplan-eth0.network
+
+      systemctl restart systemd-networkd
+
+  - path: /etc/systemd/system/set-dhcp-hostname.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Set DHCPHostname and restart systemd-networkd
+      After=network-pre.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/01-set-dhcp-hostname.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/rke2-preload-images.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      IMAGE_DIR="/var/lib/rancher/rke2/agent/images"
+      ARCH="amd64"
+
+      mkdir -p "$IMAGE_DIR"
+
+      RKE2_VERSION=$(/usr/local/bin/rke2 --version | awk '{print $3}' | head -n1)
+      RKE2_VERSION_ENCODED=$(echo "${k8s_version}" | sed 's/+/%2B/g')
+      IMAGE_NAME="rke2-images.linux-$ARCH.tar.zst"
+      IMAGE_URL="https://github.com/rancher/rke2/releases/download/$RKE2_VERSION_ENCODED/$IMAGE_NAME"
+
+      echo "📦 Downloading $IMAGE_URL..."
+      curl -fSL "$IMAGE_URL" -o "/tmp/$IMAGE_NAME"
+
+      echo "📦 Decompressing..."
+      zstd -d "/tmp/$IMAGE_NAME" -o "/tmp/rke2-images.tar"
+
+      echo "📂 Moving to $IMAGE_DIR..."
+      mv /tmp/rke2-images.tar "$IMAGE_DIR/rke2-images.tar"
+
+      echo "✅ Preload complete"
+
+  - path: /etc/systemd/system/rke2-preload-images.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Preload RKE2 container images
+      ConditionPathExists=/usr/local/bin/rke2
+      After=network-online.target
+      Before=rke2-server.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/rke2-preload-images.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/30-setup-runtime.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      echo "🐳 Installing Docker..."
+      until curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -; do
+        echo "Retrying Docker GPG key fetch..."; sleep 5;
+      done
+      sudo apt-key fingerprint 0EBFCD88
+      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+      sudo apt update
+      DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
+
+      echo "☸️ Installing kubectl, RKE2, Helm..."
+
+      # Retry with timeout and snapd recovery
+      install_with_snap_retry() {
+        local package="$1"
+        local max_retries=5
+        local retry_count=0
+
+        until snap install "$package" --classic && "$package" version --client 2>/dev/null; do
+          retry_count=$((retry_count + 1))
+          echo "❌ Failed to install $package, attempt $retry_count..."
+
+          if (( retry_count >= max_retries )); then
+            echo "🔁 Restarting snapd and trying again..."
+            systemctl restart snapd
+            retry_count=0
+          fi
+
+          sleep 5
+        done
+
+        echo "✅ $package installed successfully."
+      }
+
+      install_with_snap_retry kubectl
+
+      until which rke2 >/dev/null 2>&1; do
+        curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION=${k8s_version} sh -;
+        sleep 5
+      done
+
+      until which helm >/dev/null 2>&1; do
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash;
+        sleep 5
+      done
+
+      echo "🔌 Enabling QEMU guest agent..."
+      systemctl start qemu-guest-agent
+      systemctl enable qemu-guest-agent
+
+  - path: /etc/systemd/system/setup-runtime.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Install Docker, Snapd, RKE2, Helm, kubectl
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/30-setup-runtime.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/40-bootstrap-rke2.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "⚙️ Bootstrapping RKE2 configuration..."
+      mkdir -p /etc/rancher/rke2
+      cp /mnt/shared-storage/config.yaml /etc/rancher/rke2/config.yaml
+
+      sudo mkdir -p /etc/systemd/system/rke2-server.service.d/
+
+      systemctl enable rke2-server
+      systemctl start rke2-server
+
+      echo "🗑️ Cleaning previous RKE2 tokens..."
+      rm -rf /mnt/shared-storage/*.token
+
+      RKE2_TOKEN=$(cat /var/lib/rancher/rke2/server/node-token)
+      echo $RKE2_TOKEN > /mnt/shared-storage/$(hostname -I | cut -d" " -f1).token
+
+      until sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml version; do
+        echo "Waiting for kube-apiserver to respond..."
+        sleep 10
+      done
+
+      echo "⏳ Waiting for all 4 nodes to become Ready..."
+      while [[ $(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get nodes --no-headers | awk '$2 != "Ready" {exit 1} END {print NR}') -ne 4 ]]; do
+        echo "Waiting for all 4 nodes to be Ready..."
+        sleep 60
+      done
+      echo "✅ All nodes are Ready!"
+
+  - path: /etc/systemd/system/bootstrap-rke2.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Copy RKE2 config and expose node-token
+      After=setup-runtime.service
+      Requires=setup-runtime.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/40-bootstrap-rke2.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/99-set-nofile-limits.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "🔧 Increasing open file limits to 1048576..."
+
+      echo "📄 Updating PAM limits..."
+      tee /etc/security/limits.d/99-nofile.conf > /dev/null <<EOF
+      * soft nofile 1048576
+      * hard nofile 1048576
+      root soft nofile 1048576
+      root hard nofile 1048576
+      EOF
+
+      echo "📄 Updating system.conf.d for global systemd limits..."
+      mkdir -p /etc/systemd/system.conf.d
+      tee /etc/systemd/system.conf.d/99-default-ulimits.conf > /dev/null <<EOF
+      [Manager]
+      DefaultLimitNOFILE=1048576
+      EOF
+
+      echo "📄 Updating user.conf.d..."
+      mkdir -p /etc/systemd/user.conf.d
+      tee /etc/systemd/user.conf.d/99-default-ulimits.conf > /dev/null <<EOF
+      [Manager]
+      DefaultLimitNOFILE=1048576
+      EOF
+
+      echo "⚙️  Setting LimitNOFILE for rke2-server..."
+      mkdir -p /etc/systemd/system/rke2-server.service.d
+      tee /etc/systemd/system/rke2-server.service.d/override.conf > /dev/null <<EOF
+      [Service]
+      LimitNOFILE=1048576
+      EOF
+
+      echo "⚙️  Setting LimitNOFILE for containerd..."
+      mkdir -p /etc/systemd/system/containerd.service.d
+      tee /etc/systemd/system/containerd.service.d/override.conf > /dev/null <<EOF
+      [Service]
+      LimitNOFILE=1048576
+      EOF
+
+      echo "🔁 Reloading systemd..."
+      systemctl daemon-reload
+
+      systemctl restart rke2-server || true
+      systemctl restart containerd || true
+
+      echo "✅ Verifying limits..."
+      ulimit -n
+      cat /proc/$(pgrep -f kubelet | head -n 1)/limits | grep "Max open files"
+
+  - path: /etc/systemd/system/set-nofile-limits.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Raise nofile limit for rke2 and containerd
+      After=network.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/99-set-nofile-limits.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/50-k8s-addons.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+
+      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+      NS="kube-system"
+      CM_NAME="rke2-coredns-rke2-coredns"
+      DEPLOYMENT_NAME="rke2-coredns-rke2-coredns"
+      TMP_FILE="/tmp/coredns-patch.yaml"
+
+      echo "🔍 Fetching current CoreDNS config..."
+      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" get configmap "$CM_NAME" -o yaml > "$TMP_FILE"
+
+      echo "🛠 Patching CoreDNS ConfigMap to prioritize internal.lan..."
+      # Replace the line with the kubernetes plugin configuration
+      sudo sed -i 's/kubernetes .*cluster.local/kubernetes internal.lan cluster.local/' "$TMP_FILE"
+
+      echo "📦 Applying patched ConfigMap..."
+      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" apply -f "$TMP_FILE"
+
+      echo "🚀 Restarting CoreDNS deployment..."
+      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout restart deployment "$DEPLOYMENT_NAME"
+
+      echo "⏳ Waiting for CoreDNS to be ready..."
+      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout status deployment "$DEPLOYMENT_NAME" --timeout=60s
+
+      echo "✅ CoreDNS patch complete and ready."
+
+      echo "📥 Installing Cert-Manager..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager -n cert-manager
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-webhook -n cert-manager
+
+      echo "📥 Installing MetalLB..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
+
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: metallb.io/v1beta1
+      kind: IPAddressPool
+      metadata:
+        name: default
+        namespace: metallb-system
+      spec:
+        addresses:
+          - 10.0.0.110-10.0.0.150
+      ---
+      apiVersion: metallb.io/v1beta1
+      kind: L2Advertisement
+      metadata:
+        name: default
+        namespace: metallb-system
+      EOF
+
+      echo "📥 Installing Longhorn..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
+
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: longhorn
+        annotations:
+          storageclass.kubernetes.io/is-default-class: 'true'
+      provisioner: driver.longhorn.io
+      allowVolumeExpansion: true
+      reclaimPolicy: Retain
+      volumeBindingMode: Immediate
+      parameters:
+        numberOfReplicas: '1'
+        staleReplicaTimeout: '30'
+      ---
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: longhorn-rwx
+      provisioner: driver.longhorn.io
+      allowVolumeExpansion: true
+      reclaimPolicy: Retain
+      volumeBindingMode: Immediate
+      parameters:
+        numberOfReplicas: '1'
+        staleReplicaTimeout: '30'
+        fromBackup: ''
+      ---
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: ephemeral-fast
+      provisioner: kubernetes.io/no-provisioner
+      volumeBindingMode: WaitForFirstConsumer
+      reclaimPolicy: Delete
+      EOF
+
+  - path: /etc/systemd/system/k8s-addons.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Install K8s Add-ons (Cert-Manager, MetalLB, Longhorn)
+      After=bootstrap-rke2.service
+      Requires=bootstrap-rke2.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/50-k8s-addons.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/60-install-apisix-rancher.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+
+      echo "📦 Installing NGINX Ingress Controller..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
+
+      # Wait for the NGINX ingress controller to be ready
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/ingress-nginx-controller -n ingress-nginx
+
+      echo "🛠️ Assigning LoadBalancer IP 10.0.0.110 to ingress-nginx-controller..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch svc ingress-nginx-controller -n ingress-nginx \
+        --type='merge' \
+        -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.110"}}'
+
+      echo "📦 Adding Helm repos for APISIX and Bitnami..."
+      sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+
+      echo "📥 Installing Gateway API CRDs..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
+
+      echo "🚀 Installing APISIX Gateway and Dashboard..."
+      sudo helm upgrade --install apisix apisix/apisix \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --create-namespace \
+        --namespace apisix \
+        --set service.type=NodePort \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix \
+        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
+        --set ingress-controller.args[0]="ingress-apisix" \
+        --set ingress-controller.args[1]="--namespace-selector=" \
+        --set config.enable_ipv6=false \
+        --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
+        --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
+        --set-string config.nginx_config.stream_proxy.tcp="[]" \
+        --set-string config.nginx_config.stream_proxy.udp="[]" \
+        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
+        --set extraEnv[0].value="false"
+
+      sudo apt install yq jq -y
+      NAMESPACE="apisix"
+      CONFIGMAP_NAME="apisix"
+      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+      TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
+
+      echo "📦 Exporting current config..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
+        -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
+
+      echo "🛠 Patching enable_ipv6: false..."
+      sudo yq -i -y '.apisix.enable_ipv6 = false' "$TMP_FILE"
+
+      echo "🚀 Updating ConfigMap..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
+        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
+        sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      echo "🔥 Restarting APISIX pod..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
+
+      echo "✅ IPv6 disabled and pod restarted."
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
+
+      sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      echo "⏳ Waiting for APISIX components..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-ingress-controller -n apisix
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-dashboard -n apisix
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
+
+      echo "🔐 Creating OAuth2 Proxy secret..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create secret generic oauth2-proxy-secret         \
+          --from-literal=client-id=${KONG_MANAGER_OAUTH2_CLIENT_ID}         \
+          --from-literal=client-secret=${KONG_MANAGER_OAUTH2_CLIENT_SECRET}         \
+          --from-literal=cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}         \
+          --namespace=apisix || true
+
+      echo "🚀 Deploying OAuth2 Proxy..."
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy
+        namespace: apisix
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:latest
+                env:
+                  - name: OAUTH2_PROXY_CLIENT_ID
+                    valueFrom:
+                      secretKeyRef:
+                        name: oauth2-proxy-secret
+                        key: client-id
+                  - name: OAUTH2_PROXY_CLIENT_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: oauth2-proxy-secret
+                        key: client-secret
+                  - name: OAUTH2_PROXY_COOKIE_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: oauth2-proxy-secret
+                        key: cookie-secret
+                  - name: OAUTH2_PROXY_PROVIDER
+                    value: 'github'
+                  - name: OAUTH2_PROXY_GITHUB_ORG
+                    value: '${GITHUB_ORG}'
+                  - name: OAUTH2_PROXY_GITHUB_TEAM
+                    value: '${KONG_MANAGER_GITHUB_AUTH_TEAM}'
+                  - name: OAUTH2_PROXY_REDIRECT_URL
+                    value: 'https://gateway-manager.suncoast.systems/oauth2/callback'
+                  - name: OAUTH2_PROXY_UPSTREAMS
+                    value: 'http://apisix-dashboard.apisix.svc.cluster.local:80/'
+                  - name: OAUTH2_PROXY_EMAIL_DOMAINS
+                    value: '${RANCHER_DOMAIN}'
+                  - name: OAUTH2_PROXY_COOKIE_SECURE
+                    value: 'true'
+                  - name: OAUTH2_PROXY_HTTP_ADDRESS
+                    value: '0.0.0.0:4180'
+                ports:
+                  - containerPort: 4180
+      EOF
+
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy
+        namespace: apisix
+      spec:
+        ports:
+          - port: 80
+            targetPort: 4180
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.111
+        selector:
+          app: oauth2-proxy
+      EOF
+
+      echo "🏗️ Installing Rancher..."
+      sudo helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace cattle-system || true
+
+      sudo helm upgrade --install rancher rancher-stable/rancher    \
+          --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
+          --namespace cattle-system         \
+          --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}         \
+          --set bootstrapPassword=$(openssl rand -base64 12)         \
+          --set ingress.tls.source=letsEncrypt         \
+          --set letsEncrypt.email=administrator@${RANCHER_DOMAIN}         \
+          --set letsEncrypt.ingress.class=nginx         \
+          --set ingress.enabled=true
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch ingress rancher -n cattle-system \
+          --type=merge -p '{"metadata": {"annotations": {"acme.cert-manager.io/http01-edit-in-place": "true"}}}'
+
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch certificate tls-rancher-ingress -n cattle-system \
+          --type=merge -p '{"metadata": {"annotations": {"acme.cert-manager.io/http01-edit-in-place": "true"}}}'
+  
+      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: management.cattle.io/v3
+      kind: GlobalRoleBinding
+      metadata:
+        name: github-k8s-cluster-admins
+        labels:
+          auth-provider: github
+      globalRoleName: admin
+      groupPrincipalName: 'github_team:${GITHUB_AUTH_VAL}'
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: github-team-cluster-admins
+      subjects:
+        - kind: Group
+          name: 'github_team:${GITHUB_AUTH_VAL}'  # Replace with your team
+          apiGroup: rbac.authorization.k8s.io
+      roleRef:
+        kind: ClusterRole
+        name: cluster-admin
+        apiGroup: rbac.authorization.k8s.io
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: ClusterRoleTemplateBinding
+      metadata:
+        name: github-team-cluster-owner
+        namespace: local            # Adjust if your cluster name is different
+      clusterName: local            # Adjust if your cluster name is different
+      groupName: 'github_team:${GITHUB_AUTH_VAL}'
+      roleTemplateName: cluster-owner
+      ---
+      accessMode: required
+      apiVersion: management.cattle.io/v3
+      kind: AuthConfig
+      metadata:
+        name: github
+        namespace: cattle-system
+      enabled: true
+      displayName: GitHub Authentication
+      clientId: '${GITHUB_CLIENT_ID}'
+      clientSecret: '${GITHUB_CLIENT_SECRET}'
+      hostname: 'github.com'
+      tls: true
+      type: githubConfig
+      logoutAllSupported: false
+      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
+      allowedPrincipalIds:
+        - 'github_team:${GITHUB_AUTH_VAL}'
+      scopes:
+        - 'read:user'
+        - 'user:email'
+        - 'read:org'
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: Setting
+      metadata:
+        name: auth-provider
+      value: github
+      EOF
+
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
+      xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        delete users.management.cattle.io {}
+
+      bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
+
+  - path: /etc/systemd/system/install-apisix-rancher.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Install APISIX Gateway, OAuth2 Proxy, Rancher
+      After=k8s-addons.service
+      Requires=k8s-addons.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/60-install-apisix-rancher.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/70-gpu.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+
+      echo "⚙️ Labeling node for GPU support..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node         nvidia.com/gpu.present=true         nvidia.com/gpu=1 --overwrite
+
+      echo "📥 Installing NVIDIA Helm repos..."
+      sudo helm repo add nvdp https://nvidia.github.io/k8s-device-plugin --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo add nvidia https://helm.ngc.nvidia.com/nvidia --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+
+      echo "📥 Creating nvidia namespace..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
+
+      echo "📦 Creating GPU time-slicing config..."
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: time-slicing-config
+        namespace: nvidia
+      data:
+        any: |-
+          version: v1
+          flags:
+            migStrategy: none
+          sharing:
+            timeSlicing:
+              renameByDefault: true
+              resources:
+                - name: nvidia.com/gpu
+                  replicas: 4
+      EOF
+
+      echo "🚀 Installing GPU Operator..."
+      sudo helm upgrade -i gpu-operator --wait         nvidia/gpu-operator    --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
+          -n nvidia         \
+          --version=v24.9.2         \
+          --set driver.enabled=false         \
+          --set devicePlugin.config.name=time-slicing-config         \
+          --set toolkit.env[0].name=CONTAINERD_SOCKET         \
+          --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock"
+
+      echo "🔧 Patching GPU Operator default config..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
+          -n gpu-operator --type merge        \
+          -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config", "default": "any"}}}}'
+
+  - path: /etc/systemd/system/gpu.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=GPU Operator Bootstrap
+      After=install-apisix-rancher.service
+      Requires=install-apisix-rancher.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/70-gpu.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/80-post-install.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete order --all -n cattle-system
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete challenge --all -n cattle-system
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
+
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-github-oauth
+        namespace: argocd
+      type: Opaque
+      stringData:
+        dex.github.clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: argocd
+        namespace: argocd
+      spec:
+        chart: argo-cd
+        repo: https://argoproj.github.io/argo-helm
+        version: 8.0.3
+        targetNamespace: argocd
+        valuesContent: |-
+          server:
+            service:
+              type: ClusterIP
+              ports:
+                - name: http
+                  port: 80
+                  targetPort: 8080
+            extraArgs:
+              - --insecure
+            ingress:
+              enabled: false
+          configs:
+            params:
+              server.insecure: true
+            cm:
+              admin.enabled: false
+              url: https://argocd.${RANCHER_DOMAIN}
+              dex.config: |
+                connectors:
+                  - type: github
+                    id: github
+                    name: GitHub
+                    config:
+                      clientID: ${ARGOCD_GITHUB_CLIENT_ID}
+                      clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
+                      orgs:
+                        - name: dotcomrow
+              application.namespaces: |
+                - argocd
+                - logging-and-monitoring
+              application.namespaceResourceBlacklist: |
+                - group: ""
+                  kind: Namespace
+            rbac:
+              policy.csv: |
+                p, role:admin, applications, *, *, allow
+                p, role:admin, clusters, get, *, allow
+                p, role:admin, repositories, *, *, allow
+                p, role:admin, logs, get, *, allow
+                p, role:admin, exec, create, *, allow
+                p, role:admin, projects, *, *, allow
+                g, dotcomrow:ARGOCD_ADMINS, role:admin
+              policy.default: role:readonly
+      ---
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: argocd-route
+        namespace: argocd
+      spec:
+        http:
+          - name: argocd
+            match:
+              hosts:
+                - argocd.${RANCHER_DOMAIN}
+              paths:
+                - "/"
+                - "/*"
+            backends:
+              - serviceName: argocd-server
+                servicePort: 80
+      EOF
+
+      KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
+      ARGOCD_NAMESPACE="argocd"
+      DEPLOYMENT_NAME="argocd-server"
+      TIMEOUT_SECONDS=900
+
+      echo "⏳ Waiting for Argo CD deployment '$DEPLOYMENT_NAME' to appear..."
+
+      # Wait for deployment to appear (up to TIMEOUT_SECONDS)
+      SECONDS_WAITED=0
+      while ! sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n "$ARGOCD_NAMESPACE" get deployment "$DEPLOYMENT_NAME" &>/dev/null; do
+        if (( SECONDS_WAITED >= TIMEOUT_SECONDS )); then
+          echo "❌ Timeout waiting for deployment '$DEPLOYMENT_NAME' to appear."
+          exit 1
+        fi
+        sleep 5
+        (( SECONDS_WAITED += 5 ))
+      done
+
+      echo "✅ Deployment '$DEPLOYMENT_NAME' found. Waiting for it to be ready..."
+
+      # Wait for deployment to be available
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" wait \
+        --for=condition=available \
+        --timeout=300s \
+        deployment/"$DEPLOYMENT_NAME" \
+        -n "$ARGOCD_NAMESPACE"
+
+      echo "✅ Argo CD is ready."
+
+      echo "Adding repo key..."
+      REPO_URL_B64=$(echo -n "git@github.com:dotcomrow/argocd-post-install.git" | base64 -w0)
+      INSECURE_B64=$(echo -n "true" | base64 -w0)
+      PRIVATE_KEY_B64="${ARGOCD_REPO_POST_INSTALL_KEY}"
+
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: argocd-post-install-apps-repo-secret 
+        namespace: argocd
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      type: Opaque
+      data:
+        url: $REPO_URL_B64
+        sshPrivateKey: $PRIVATE_KEY_B64
+        insecure: $INSECURE_B64
+      EOF
+
+      echo "🚀 Applying App of Apps configuration..."
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -n "$ARGOCD_NAMESPACE" -f - <<EOF
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: argocd-post-install-apps-repo-app
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: git@github.com:dotcomrow/argocd-post-install.git
+          targetRevision: prod 
+          path: apps
+          directory:
+            recurse: true
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: argocd
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+      EOF
+
+      echo "✅ App of Apps applied."
+
+  - path: /etc/systemd/system/post-install.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Post Install Tasks
+      After=gpu.service
+      Requires=gpu.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/80-post-install.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/fix-dns-nfs.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Fix systemd-resolved DNS config for NFS
+      After=network-online.target systemd-resolved.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/bash -c "systemctl restart systemd-resolved; rm -f /etc/resolv.conf; ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf"
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - sysctl --system
+  - update-grub
+  - systemctl daemon-reload
+
+  - systemctl enable set-dhcp-hostname.service
+  - systemctl start set-dhcp-hostname.service
+
+  - systemctl enable fix-dns-nfs.service
+  - systemctl start fix-dns-nfs.service
+
+  - systemctl enable --now mount-shared-storage.service
+
+  - systemctl enable disable-swap.service
+  - systemctl start disable-swap.service
+
+  - sudo systemctl enable setup-hosts-dns.service
+  - sudo systemctl start setup-hosts-dns.service
+
+  - systemctl enable configure-logging.service
+  - systemctl start configure-logging.service
+
+  - systemctl enable setup-runtime.service
+  - systemctl start setup-runtime.service
+
+  - systemctl enable rke2-preload-images.service
+  - systemctl start rke2-preload-images.service
+
+  - systemctl enable bootstrap-rke2.service
+  - systemctl start bootstrap-rke2.service
+
+  - systemctl enable set-nofile-limits.service
+  - systemctl start set-nofile-limits.service
+
+  - systemctl enable k8s-addons.service
+  - systemctl start k8s-addons.service
+
+  - systemctl enable install-apisix-rancher.service
+  - systemctl start install-apisix-rancher.service
+
+  - systemctl enable gpu.service
+  - systemctl start gpu.service
+
+  - systemctl enable post-install.service
+  - systemctl start post-install.service

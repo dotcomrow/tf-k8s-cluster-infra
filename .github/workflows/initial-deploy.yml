@@ -1,0 +1,178 @@
+name: Initial create workflow
+
+on:
+  push:
+
+permissions: write-all
+
+jobs:
+  deploy:
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ github.repository_owner }}
+      TF_API_TOKEN: ${{ secrets.TFE_TOKEN }}
+    name: "Build and Deploy"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Get next version
+        uses: reecetech/version-increment@2023.9.3
+        id: version
+        with:
+          scheme: calver
+          increment: patch
+
+      - name: Lookup Project ID
+        id: lookup_project_id
+        run: |
+            curl \
+            --header "Authorization: Bearer ${{ secrets.TFE_TOKEN }}" \
+            --header "Content-Type: application/vnd.api+json" \
+            --request GET \
+            --output project_output.txt \
+            https://app.terraform.io/api/v2/organizations/${{ github.repository_owner }}/projects
+            echo "project_id=$(jq -r --arg name '${{ vars.TFE_PROJECT }}' '.data[] | select(.attributes.name | test($name; "i")) | .id' project_output.txt)" >> $GITHUB_OUTPUT
+
+      - name: Create workspace
+        id: create_workspace
+        run: |
+              cat > payload.json <<EOF
+              {
+                "data": {
+                  "attributes": {
+                    "name": "${{ github.event.repository.name }}",
+                    "auto-apply": "true"
+                  },
+                  "type": "workspaces",
+                  "relationships": {
+                    "project": {
+                      "data": {
+                        "type": "projects",
+                        "id": "${{ steps.lookup_project_id.outputs.project_id }}"
+                      }
+                    }
+                  }
+                }
+              }
+              EOF
+              curl \
+              --header "Authorization: Bearer ${{ secrets.TFE_TOKEN }}" \
+              --header "Content-Type: application/vnd.api+json" \
+              --request POST \
+              --data @payload.json \
+              --output output.txt \
+              https://app.terraform.io/api/v2/organizations/${{ github.repository_owner }}/workspaces
+              echo "workspace_id=$(cat output.txt | jq -r '.[].id')" >> $GITHUB_OUTPUT
+
+      - name: Create workspace variables
+        run: |
+          cat > payload.json <<EOF
+          {
+            "data": {
+              "type":"vars",
+              "attributes": {
+                "key":"project_name",
+                "value":"${{ github.event.repository.name }}",
+                "description":"project name",
+                "category":"terraform",
+                "hcl":false,
+                "sensitive":false
+              },
+              "relationships": {
+                "workspace": {
+                  "data": {
+                    "id":"${{ steps.create_workspace.outputs.workspace_id }}",
+                    "type":"workspaces"
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          curl \
+          --header "Authorization: Bearer ${{ secrets.TFE_TOKEN }}" \
+          --header "Content-Type: application/vnd.api+json" \
+          --request POST \
+          --data @payload.json \
+          https://app.terraform.io/api/v2/vars
+
+          cat > payload.json <<EOF
+          {
+            "data": {
+              "type":"vars",
+              "attributes": {
+                "key":"org_name",
+                "value":"${{ github.repository_owner }}",
+                "description":"organization name",
+                "category":"terraform",
+                "hcl":false,
+                "sensitive":false
+              },
+              "relationships": {
+                "workspace": {
+                  "data": {
+                    "id":"${{ steps.create_workspace.outputs.workspace_id }}",
+                    "type":"workspaces"
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          curl \
+          --header "Authorization: Bearer ${{ secrets.TFE_TOKEN }}" \
+          --header "Content-Type: application/vnd.api+json" \
+          --request POST \
+          --data @payload.json \
+          https://app.terraform.io/api/v2/vars
+
+      - name: Create release
+        uses: "actions/github-script@v6"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        with:
+          github-token: "${{ github.token }}"
+          script: |
+            try {
+              const response = await github.rest.repos.createRelease({
+                draft: false,
+                generate_release_notes: true,
+                name: process.env.VERSION,
+                owner: context.repo.owner,
+                prerelease: false,
+                repo: context.repo.repo,
+                tag_name: process.env.VERSION,
+                target_commitish: 'prod'
+              });
+              core.exportVariable('RELEASE_ID', response.data.id);
+              core.exportVariable('RELEASE_UPLOAD_URL', response.data.upload_url);
+            } catch (error) {
+              core.setFailed(error.message);
+            }
+
+      - uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.1.1
+        id: upload
+        with:
+          workspace: ${{ github.event.repository.name }}
+          directory: terraform
+
+      - name: Create Apply Run
+        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
+        id: apply-run
+        if: success() || failure()
+        with:
+          workspace: ${{ github.event.repository.name }}
+          configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
+          plan_only: false
+
+      - name: Disable initial workflow
+        run: |
+            gh api \
+                --method PUT \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                /repos/${{ github.repository_owner }}/${{ github.event.repository.name }}/actions/workflows/initial-deploy.yml/disable
+        env:
+            GH_TOKEN: ${{ github.token }}
