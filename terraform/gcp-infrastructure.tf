@@ -74,9 +74,8 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
   }
 }
 
-output "rancher_wif_credentials_json" {
-  description = "Federated external_account credentials JSON for Rancher Workload Identity"
-  value = jsonencode({
+locals {
+  rancher_wif_credentials_json = jsonencode({
     type                             = "external_account"
     audience                         = "//iam.googleapis.com/${google_iam_workload_identity_pool_provider.rancher_provider.name}"
     subject_token_type               = "urn:ietf:params:oauth:token-type:jwt"
@@ -86,5 +85,4 @@ output "rancher_wif_credentials_json" {
       file = "/var/run/secrets/tokens/oidc"
     }
   })
-  sensitive = true
 }
