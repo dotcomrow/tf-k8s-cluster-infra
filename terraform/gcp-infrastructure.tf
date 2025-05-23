@@ -25,7 +25,7 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   provider = google-beta
   workload_identity_pool_id          = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider"
-
+  project = google_project.infra.project_id
   display_name = "OIDC Provider for Rancher Cluster ${var.cluster_name}"
 
   oidc {
@@ -41,6 +41,7 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
 
 resource "google_service_account" "rancher_sa" {
   account_id   = "rancher-${var.cluster_name}-agent"
+  project = google_project.infra.project_id
   display_name = "WIF Service Account for Rancher Cluster ${var.cluster_name}"
 }
 
