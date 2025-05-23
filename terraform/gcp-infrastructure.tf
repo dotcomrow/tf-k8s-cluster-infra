@@ -48,11 +48,11 @@ resource "google_service_account" "rancher_sa" {
 }
 
 resource "google_service_account_iam_member" "rancher_wif_binding" {
-  provider = google.infra
+  provider           = google.infra
   service_account_id = google_service_account.rancher_sa.name
   role               = "roles/iam.workloadIdentityUser"
 
-  member = "principalSet://iam.googleapis.com/projects/${google_project.infra.project_id}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
+  member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
 }
 
 resource "google_storage_bucket" "free_tier_safe_bucket" {
