@@ -3,6 +3,12 @@ terraform {
     proxmox = {
       source = "bpg/proxmox"
     }
+    google = {
+      source = "hashicorp/google"
+    }
+    google-beta = {
+      source = "hashicorp/google-beta"
+    }
   }
 }
 
@@ -24,4 +30,12 @@ provider "proxmox" {
       }
     }
   }
+}
+
+provider "google" {
+  region      = var.region
+}
+
+provider "google-beta" {
+  region      = var.region
 }

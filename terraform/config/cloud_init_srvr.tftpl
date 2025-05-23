@@ -835,8 +835,8 @@ write_files:
 
       echo "🔐 Creating OAuth2 Proxy secret..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create secret generic oauth2-proxy-secret         \
-          --from-literal=client-id=${KONG_MANAGER_OAUTH2_CLIENT_ID}         \
-          --from-literal=client-secret=${KONG_MANAGER_OAUTH2_CLIENT_SECRET}         \
+          --from-literal=client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}         \
+          --from-literal=client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}         \
           --from-literal=cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}         \
           --namespace=apisix || true
 
@@ -881,7 +881,7 @@ write_files:
                   - name: OAUTH2_PROXY_GITHUB_ORG
                     value: '${GITHUB_ORG}'
                   - name: OAUTH2_PROXY_GITHUB_TEAM
-                    value: '${KONG_MANAGER_GITHUB_AUTH_TEAM}'
+                    value: '${GATEWAY_MANAGER_GITHUB_AUTH_TEAM}'
                   - name: OAUTH2_PROXY_REDIRECT_URL
                     value: 'https://gateway-manager.suncoast.systems/oauth2/callback'
                   - name: OAUTH2_PROXY_UPSTREAMS
@@ -928,11 +928,6 @@ write_files:
           --set ingress.enabled=true
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch ingress rancher -n cattle-system \
-          --type=merge -p '{"metadata": {"annotations": {"acme.cert-manager.io/http01-edit-in-place": "true"}}}'
-
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch certificate tls-rancher-ingress -n cattle-system \
-          --type=merge -p '{"metadata": {"annotations": {"acme.cert-manager.io/http01-edit-in-place": "true"}}}'
   
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3

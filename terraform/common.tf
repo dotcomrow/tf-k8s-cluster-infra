@@ -11,6 +11,11 @@ resource "null_resource" "download_iso" {
       SSH_PRIVATE_KEY = var.proxmox_ssh_private_key
     }
   }
+
+  depends_on = [
+    google_iam_workload_identity_pool_provider.rancher_provider,
+    google_service_account.rancher_sa
+  ]
 }
 
 resource "null_resource" "remove_known_hosts" {

@@ -77,10 +77,6 @@ variable "GITHUB_CLIENT_SECRET" {
   default = "github"
 }
 
-variable "GCP_LOGGING_KEY" {
-  default = "gcp"
-}
-
 variable "MONITORED_RESOURCE_TYPE" {
   default = "gce_instance"
 }
@@ -101,15 +97,15 @@ variable "OAUTH2_PROXY_COOKIE_SECRET" {
   default = "oauth2"
 }
 
-variable "KONG_MANAGER_OAUTH2_CLIENT_ID" {
+variable "GATEWAY_MANAGER_OAUTH2_CLIENT_ID" {
   default = "kong"
 }
 
-variable "KONG_MANAGER_OAUTH2_CLIENT_SECRET" {
+variable "GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET" {
   default = "kong"
 }
 
-variable "KONG_MANAGER_GITHUB_AUTH_TEAM" {
+variable "GATEWAY_MANAGER_GITHUB_AUTH_TEAM" {
   default = "k8s_cluster_admins"
 }
 
@@ -129,10 +125,6 @@ variable "NVIDIA_DRIVER" {
   default = "570"
 }
 
-variable "FLEET_REPO_POST_INSTALL_KEY" {
-  default = "fleet"
-}
-
 variable "ARGOCD_REPO_POST_INSTALL_KEY" {
   default = "argocd"
 }
@@ -147,4 +139,60 @@ variable "ARGOCD_GITHUB_CLIENT_ID" {
 
 variable "ARGOCD_GITHUB_CLIENT_SECRET" {
   default = "argocd"
+}
+
+variable "project_name" {
+  description = "The GCP project ID"
+  type        = string
+}
+
+variable "region" {
+  description = "The region to use (ex. global or us-east1)"
+  type        = string
+}
+
+variable "gcp_org_id" {
+  description = "The organization id to create the project under"
+  type        = string
+  nullable = false
+}
+
+variable billing_account {
+    description = "The billing account to associate with the project"
+    type        = string
+    nullable = false
+}
+
+variable "bucket_name" {
+  description = "Name of the bucket"
+  type        = string
+  default = "proxmox-gcsfuse-bucket"
+}
+
+variable "retention_days" {
+  description = "Number of days to retain files before auto-deletion"
+  type        = number
+  default     = 30
+}
+
+variable "cluster_name" {
+  description = "Name of the on-prem Rancher cluster"
+  type        = string
+  default     = "local"
+}
+
+variable "namespace" {
+  description = "Namespace in the Rancher-managed Kubernetes cluster where the workload will run"
+  type        = string
+  default     = "default"
+}
+
+variable "service_account" {
+  description = "Kubernetes service account name used in the workload namespace for GCP Workload Identity Federation"
+  type        = string
+  default     = "workload-identity-agent"
+}
+
+variable "k8s_oidc_issuer" {
+  default = "https://kubernetes.default.svc"
 }
