@@ -53,6 +53,11 @@ resource "google_service_account_iam_member" "rancher_wif_binding" {
   role               = "roles/iam.workloadIdentityUser"
 
   member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
+
+  depends_on = [
+    google_iam_workload_identity_pool.rancher_pool,
+    google_iam_workload_identity_pool_provider.rancher_provider
+  ]
 }
 
 resource "google_storage_bucket" "free_tier_safe_bucket" {
