@@ -35,10 +35,10 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   }
 
   attribute_mapping = {
-    "google.subject" = "assertion.sub"
-    "attribute.k8s_ns" = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[1]"
-    "attribute.k8s_sa" = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[2]"
-  }
+    "google.subject"   = "assertion.sub"
+    "attribute.k8s_ns" = "assertion.sub.matches('system:serviceaccount:([^:]+):([^:]+)') ? assertion.sub.match(1) : ''"
+    "attribute.k8s_sa" = "assertion.sub.matches('system:serviceaccount:([^:]+):([^:]+)') ? assertion.sub.match(2) : ''"
+    }
 }
 
 resource "google_service_account" "rancher_sa" {
