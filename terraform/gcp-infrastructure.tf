@@ -17,6 +17,7 @@ resource "google_project_iam_member" "rancher_logging_permission" {
 
 resource "google_iam_workload_identity_pool" "rancher_pool" {
   provider = google-beta
+  project = google_project.infra.project_id
   workload_identity_pool_id = "rancher-${var.cluster_name}-pool"
   display_name              = "Rancher Cluster ${var.cluster_name} Pool"
 }
@@ -47,6 +48,7 @@ resource "google_service_account" "rancher_sa" {
 
 resource "google_service_account_iam_member" "rancher_wif_binding" {
   service_account_id = google_service_account.rancher_sa.name
+  
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.rancher_pool.name}/attribute.k8s_ns/${var.namespace}/attribute.k8s_sa/${var.service_account}"
 }
