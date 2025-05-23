@@ -35,9 +35,7 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   }
 
   attribute_mapping = {
-    "google.subject"   = "assertion.sub"
-    "attribute.k8s_ns" = "assertion.sub.matches('system:serviceaccount:([^:]+):([^:]+)') ? assertion.sub.match(1) : ''"
-    "attribute.k8s_sa" = "assertion.sub.matches('system:serviceaccount:([^:]+):([^:]+)') ? assertion.sub.match(2) : ''"
+    "google.subject" = "assertion.sub"
     }
 }
 
@@ -49,9 +47,8 @@ resource "google_service_account" "rancher_sa" {
 
 resource "google_service_account_iam_member" "rancher_wif_binding" {
   service_account_id = google_service_account.rancher_sa.name
-  
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.rancher_pool.name}/attribute.k8s_ns/${var.namespace}/attribute.k8s_sa/${var.service_account}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.rancher_pool.name}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
 }
 
 resource "google_storage_bucket" "free_tier_safe_bucket" {
