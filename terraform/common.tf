@@ -14,7 +14,8 @@ resource "null_resource" "download_iso" {
 
   depends_on = [
     google_iam_workload_identity_pool_provider.rancher_provider,
-    google_service_account.rancher_sa
+    google_service_account.rancher_sa,
+    google_service_account_iam_member.rancher_wif_binding
   ]
 }
 
