@@ -76,6 +76,12 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
   }
 }
 
+resource "google_storage_bucket_iam_member" "wif_bucket_access" {
+  bucket = google_storage_bucket.free_tier_safe_bucket.name
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.rancher_sa.email}"
+}
+
 locals {
   rancher_wif_credentials_json = jsonencode({
     type                             = "external_account"
