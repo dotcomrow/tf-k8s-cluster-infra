@@ -33,6 +33,18 @@ provider "proxmox" {
 }
 
 provider "google" {
+  alias   = "infra"
+  region  = var.region
+  project = google_project.infra.project_id
+}
+
+provider "google-beta" {
+  alias   = "infra"
+  region  = var.region
+  project = google_project.infra.project_id
+}
+
+provider "google" {
   region      = var.region
 }
 

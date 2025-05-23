@@ -10,20 +10,21 @@ resource "google_project" "infra" {
 }
 
 resource "google_project_iam_member" "rancher_logging_permission" {
+  provider    = google.infra
   project = google_project.infra.project_id
   role    = "roles/logging.logWriter"
   member  = "serviceAccount:${google_service_account.rancher_sa.email}"
 }
 
 resource "google_iam_workload_identity_pool" "rancher_pool" {
-  provider = google-beta
+  provider = google-beta.infra
   project = google_project.infra.project_id
   workload_identity_pool_id = "rancher-${var.cluster_name}-pool"
   display_name              = "Rancher Cluster ${var.cluster_name} Pool"
 }
 
 resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
-  provider = google-beta
+  provider = google-beta.infra
   project  = google_project.infra.project_id
 
   workload_identity_pool_id          = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
@@ -40,12 +41,14 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
 }
 
 resource "google_service_account" "rancher_sa" {
+  provider = google.infra
   account_id   = "rancher-${var.cluster_name}-agent"
   project = google_project.infra.project_id
   display_name = "WIF Service Account for Rancher Cluster ${var.cluster_name}"
 }
 
 resource "google_service_account_iam_member" "rancher_wif_binding" {
+  provider = google.infra
   service_account_id = google_service_account.rancher_sa.name
   role               = "roles/iam.workloadIdentityUser"
 
@@ -53,6 +56,7 @@ resource "google_service_account_iam_member" "rancher_wif_binding" {
 }
 
 resource "google_storage_bucket" "free_tier_safe_bucket" {
+  provider = google.infra
   name     = "${var.bucket_name}-${random_id.suffix_gcp.hex}"
   location = var.region
   project  = google_project.infra.project_id
@@ -77,6 +81,7 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
 }
 
 resource "google_storage_bucket_iam_member" "wif_bucket_access" {
+  provider = google.infra
   bucket = google_storage_bucket.free_tier_safe_bucket.name
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.rancher_sa.email}"
