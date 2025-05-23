@@ -24,19 +24,20 @@ resource "google_iam_workload_identity_pool" "rancher_pool" {
 
 resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   provider = google-beta
+  project  = google_project.infra.project_id
+
   workload_identity_pool_id          = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider"
-  project = google_project.infra.project_id
-  display_name = "OIDC Provider for ${var.cluster_name}"
+  display_name                       = "OIDC Provider for ${var.cluster_name}"
 
   oidc {
     issuer_uri = var.k8s_oidc_issuer
   }
 
   attribute_mapping = {
-    "google.subject"      = "assertion.sub"
-    "attribute.k8s_ns"    = "assertion.kubernetes.io/serviceaccount/namespace"
-    "attribute.k8s_sa"    = "assertion.kubernetes.io/serviceaccount/name"
+    "google.subject" = "assertion.sub"
+    "attribute.k8s_ns" = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[1]"
+    "attribute.k8s_sa" = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[2]"
   }
 }
 
