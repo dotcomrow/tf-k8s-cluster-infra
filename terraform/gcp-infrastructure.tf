@@ -54,7 +54,7 @@ resource "google_service_account_iam_member" "rancher_wif_binding" {
 }
 
 resource "google_storage_bucket" "free_tier_safe_bucket" {
-  name     = var.bucket_name
+  name     = "${var.bucket_name}-${random_id.suffix_gcp.hex}"
   location = var.region
   project  = google_project.infra.project_id
   force_destroy = true
