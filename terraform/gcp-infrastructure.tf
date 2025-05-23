@@ -27,7 +27,7 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider"
   project = google_project.infra.project_id
-  display_name = "OIDC Provider for Rancher Cluster ${var.cluster_name}"
+  display_name = "OIDC Provider for ${var.cluster_name}"
 
   oidc {
     issuer_uri = var.k8s_oidc_issuer
