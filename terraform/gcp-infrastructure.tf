@@ -38,7 +38,10 @@ resource "google_iam_workload_identity_pool" "rancher_pool" {
   workload_identity_pool_id   = "rancher-${var.cluster_name}-pool-${random_id.suffix_gcp.hex}"
   display_name                = "Rancher Cluster ${var.cluster_name} Pool"
 
-  depends_on = [ google_project.infra ]
+  depends_on = [ 
+    google_project.infra,
+    google_project_iam_member.grant_wif_creator_to_sa
+  ] 
 }
 
 # Workload Identity Pool Provider
