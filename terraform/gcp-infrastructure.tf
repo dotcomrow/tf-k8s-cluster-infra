@@ -44,16 +44,16 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   }
 
   attribute_mapping = {
-    "google.subject"      = "assertion.sub"
-    "attribute.k8s_sa"    = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[1]"
-    "attribute.k8s_ns"    = "assertion.sub.extract('system:serviceaccount:(.*?):(.*?)')[0]"
-    }
+    "google.subject"   = "assertion.sub"
+    "attribute.k8s_ns" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)', 1)"
+    "attribute.k8s_sa" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)', 2)"
+  }
 
   depends_on = [ google_project.infra ]
 }
 
 locals {
-  principal_set_member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/attribute.k8s_ns/default/attribute.k8s_sa/workload-identity-agent"
+  principal_set_member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/attribute.k8s_ns/${var.namespace}/attribute.k8s_sa/${var.service_account}"
 }
 
 resource "google_service_account_iam_member" "rancher_wif_binding" {
