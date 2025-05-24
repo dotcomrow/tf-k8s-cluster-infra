@@ -11,12 +11,12 @@ resource "google_project" "infra" {
   billing_account = var.billing_account
 }
 
-data "google_client_config" "current" {}
+data "google_client_openid_userinfo" "me" {}
 
 resource "google_project_iam_member" "grant_wif_creator_to_sa" {
   project = google_project.infra.project_id
   role    = "roles/iam.workloadIdentityPoolAdmin"
-  member  = "serviceAccount:${data.google_client_config.current.email}"
+  member  = "serviceAccount:${data.google_client_config.me.email}"
 
   depends_on = [google_project.infra]
 }
