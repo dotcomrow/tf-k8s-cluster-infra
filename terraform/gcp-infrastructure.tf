@@ -17,6 +17,8 @@ resource "google_service_account" "rancher_sa" {
   account_id  = "rancher-${var.cluster_name}-agent"
   project     = google_project.infra.project_id
   display_name = "WIF Service Account for Rancher Cluster ${var.cluster_name}"
+
+  depends_on = [ google_project.infra ]
 }
 
 # Workload Identity Pool
@@ -25,6 +27,8 @@ resource "google_iam_workload_identity_pool" "rancher_pool" {
   project                     = google_project.infra.project_id
   workload_identity_pool_id   = "rancher-${var.cluster_name}-pool"
   display_name                = "Rancher Cluster ${var.cluster_name} Pool"
+
+  depends_on = [ google_project.infra ]
 }
 
 # Workload Identity Pool Provider
@@ -42,6 +46,8 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   attribute_mapping = {
     "google.subject" = "assertion.sub"
   }
+
+  depends_on = [ google_project.infra ]
 }
 
 # IAM Binding for Workload Identity Impersonation
@@ -64,6 +70,8 @@ resource "google_project_iam_member" "rancher_logging_permission" {
   project  = google_project.infra.project_id
   role     = "roles/logging.logWriter"
   member   = "serviceAccount:${google_service_account.rancher_sa.email}"
+
+  depends_on = [ google_project.infra ]
 }
 
 # Optional: GCS bucket to test access
@@ -89,6 +97,8 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
   labels = {
     purpose = "k8s-gp-store"
   }
+
+  depends_on = [ google_project.infra ]
 }
 
 resource "google_storage_bucket_iam_member" "wif_bucket_access" {
