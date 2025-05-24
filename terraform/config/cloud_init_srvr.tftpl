@@ -764,7 +764,15 @@ write_files:
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Installing NGINX Ingress Controller..."
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
+
+      sudo -E helm upgrade --install ingress-nginx ingress-nginx \
+        --repo https://kubernetes.github.io/ingress-nginx \
+        --namespace ingress-nginx --create-namespace \
+        --set controller.allowSnippetAnnotations=true \
+        --set controller.service.loadBalancerIP="10.0.0.110" \
+        --set-string controller.config.server-snippet='location ^~ /.well-known/acme-challenge/ {\n  allow all;\n  try_files \$uri =404;\n}'
+
+      #sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
 
       # Wait for the NGINX ingress controller to be ready
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/ingress-nginx-controller -n ingress-nginx
@@ -1086,6 +1094,7 @@ write_files:
       #!/bin/bash
       set -e
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
+
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete order --all -n cattle-system
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete challenge --all -n cattle-system
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
