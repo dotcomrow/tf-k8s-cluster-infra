@@ -87,7 +87,7 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
   }
 
   labels = {
-    purpose = "k8s-gp-storage"
+    purpose = "k8s-gp-store"
   }
 }
 
