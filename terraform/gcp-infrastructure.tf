@@ -1,35 +1,39 @@
+# Create random suffix
 resource "random_id" "suffix_gcp" {
   byte_length = 2
 }
 
+# Create GCP project
 resource "google_project" "infra" {
-  name       = var.project_name
-  project_id = "${var.project_name}-${random_id.suffix_gcp.hex}"
-  org_id     = var.gcp_org_id
-  billing_account = "${var.billing_account}"
+  name            = var.project_name
+  project_id      = "${var.project_name}-${random_id.suffix_gcp.hex}"
+  org_id          = var.gcp_org_id
+  billing_account = var.billing_account
 }
 
-resource "google_project_iam_member" "rancher_logging_permission" {
+# Service account for WIF impersonation
+resource "google_service_account" "rancher_sa" {
   provider    = google.infra
-  project = google_project.infra.project_id
-  role    = "roles/logging.logWriter"
-  member  = "serviceAccount:${google_service_account.rancher_sa.email}"
+  account_id  = "rancher-${var.cluster_name}-agent"
+  project     = google_project.infra.project_id
+  display_name = "WIF Service Account for Rancher Cluster ${var.cluster_name}"
 }
 
+# Workload Identity Pool
 resource "google_iam_workload_identity_pool" "rancher_pool" {
-  provider = google-beta.infra
-  project = google_project.infra.project_id
-  workload_identity_pool_id = "rancher-${var.cluster_name}-pool"
-  display_name              = "Rancher Cluster ${var.cluster_name} Pool"
+  provider                    = google-beta.infra
+  project                     = google_project.infra.project_id
+  workload_identity_pool_id   = "rancher-${var.cluster_name}-pool"
+  display_name                = "Rancher Cluster ${var.cluster_name} Pool"
 }
 
+# Workload Identity Pool Provider
 resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
-  provider = google-beta.infra
-  project  = google_project.infra.project_id
-
-  workload_identity_pool_id          = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
+  provider                        = google-beta.infra
+  project                         = google_project.infra.project_id
+  workload_identity_pool_id       = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider"
-  display_name                       = "OIDC Provider for ${var.cluster_name}"
+  display_name                    = "OIDC Provider for ${var.cluster_name}"
 
   oidc {
     issuer_uri = var.k8s_oidc_issuer
@@ -37,16 +41,13 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
 
   attribute_mapping = {
     "google.subject" = "assertion.sub"
-    }
+    # optional extra mapping if you want attribute-based access later
+    "attribute.k8s_ns" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)')[0]"
+    "attribute.k8s_sa" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)')[1]"
+  }
 }
 
-resource "google_service_account" "rancher_sa" {
-  provider = google.infra
-  account_id   = "rancher-${var.cluster_name}-agent"
-  project = google_project.infra.project_id
-  display_name = "WIF Service Account for Rancher Cluster ${var.cluster_name}"
-}
-
+# IAM Binding for Workload Identity Impersonation
 resource "google_service_account_iam_member" "rancher_wif_binding" {
   provider           = google.infra
   service_account_id = google_service_account.rancher_sa.name
@@ -60,13 +61,21 @@ resource "google_service_account_iam_member" "rancher_wif_binding" {
   ]
 }
 
-resource "google_storage_bucket" "free_tier_safe_bucket" {
+# Optional: Logging permission for the service account
+resource "google_project_iam_member" "rancher_logging_permission" {
   provider = google.infra
-  name     = "${var.bucket_name}-${random_id.suffix_gcp.hex}"
-  location = var.region
   project  = google_project.infra.project_id
-  force_destroy = true
+  role     = "roles/logging.logWriter"
+  member   = "serviceAccount:${google_service_account.rancher_sa.email}"
+}
 
+# Optional: GCS bucket to test access
+resource "google_storage_bucket" "free_tier_safe_bucket" {
+  provider     = google.infra
+  name         = "${var.bucket_name}-${random_id.suffix_gcp.hex}"
+  location     = var.region
+  project      = google_project.infra.project_id
+  force_destroy = true
   storage_class = "STANDARD"
 
   uniform_bucket_level_access = true
@@ -87,11 +96,12 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
 
 resource "google_storage_bucket_iam_member" "wif_bucket_access" {
   provider = google.infra
-  bucket = google_storage_bucket.free_tier_safe_bucket.name
-  role   = "roles/storage.objectAdmin"
-  member = "serviceAccount:${google_service_account.rancher_sa.email}"
+  bucket   = google_storage_bucket.free_tier_safe_bucket.name
+  role     = "roles/storage.objectAdmin"
+  member   = "serviceAccount:${google_service_account.rancher_sa.email}"
 }
 
+# Optional: External credentials block (e.g., for cloud-init or Secret)
 locals {
   rancher_wif_credentials_json = jsonencode({
     type                             = "external_account"
