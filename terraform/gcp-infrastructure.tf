@@ -50,13 +50,16 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   depends_on = [ google_project.infra ]
 }
 
-# IAM Binding for Workload Identity Impersonation
+locals {
+  principal_set_member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
+}
+
 resource "google_service_account_iam_member" "rancher_wif_binding" {
   provider           = google.infra
   service_account_id = google_service_account.rancher_sa.name
   role               = "roles/iam.workloadIdentityUser"
 
-  member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
+  member     = local.principal_set_member
 
   depends_on = [
     google_iam_workload_identity_pool.rancher_pool,
