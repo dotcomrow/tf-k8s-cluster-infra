@@ -64,6 +64,22 @@ locals {
   principal_set_member = "principalSet://iam.googleapis.com/projects/${google_project.infra.number}/locations/global/workloadIdentityPools/${google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id}/subject/system:serviceaccount:${var.namespace}:${var.service_account}"
 }
 
+resource "null_resource" "wait_for_oidc_issuer" {
+  provisioner "local-exec" {
+    command = <<EOT
+      for i in $(seq 1 60); do
+        echo "🔄 Waiting for OIDC issuer to respond..."
+        curl --silent --fail --show-error --location --max-time 5 "${var.k8s_oidc_issuer}/.well-known/openid-configuration" && exit 0
+        sleep 5
+      done
+      echo "❌ Timeout waiting for OIDC issuer at ${var.k8s_oidc_issuer}"
+      exit 1
+    EOT
+    interpreter = ["bash", "-c"]
+  }
+}
+
+
 resource "google_service_account_iam_member" "rancher_wif_binding" {
   provider           = google.infra
   service_account_id = google_service_account.rancher_sa.name
@@ -72,8 +88,7 @@ resource "google_service_account_iam_member" "rancher_wif_binding" {
   member     = local.principal_set_member
 
   depends_on = [
-    google_iam_workload_identity_pool.rancher_pool,
-    google_iam_workload_identity_pool_provider.rancher_provider
+    null_resource.wait_for_oidc_issuer
   ]
 }
 
