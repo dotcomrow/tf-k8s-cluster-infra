@@ -764,13 +764,39 @@ write_files:
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Installing NGINX Ingress Controller..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete ingressclass nginx
 
-      sudo -E helm upgrade --install ingress-nginx ingress-nginx \
+      # 1. Create your values.yaml inline
+      cat <<EOF > /tmp/ingress-values.yaml
+      controller:
+        allowSnippetAnnotations: true
+        service:
+          loadBalancerIP: "10.0.0.110"
+        config:
+          server-snippet: |
+            location ^~ /.well-known/acme-challenge/ {
+              allow all;
+              try_files \$uri =404;
+            }
+        deployment:
+          minReadySeconds: 30
+          # omit progressDeadlineSeconds so default is used (likely 600)
+      EOF
+
+      # 2. Render the chart locally to YAML
+      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml template ingress-nginx ingress-nginx \
         --repo https://kubernetes.github.io/ingress-nginx \
-        --namespace ingress-nginx --create-namespace \
-        --set controller.allowSnippetAnnotations=true \
-        --set controller.service.loadBalancerIP="10.0.0.110" \
-        --set-string controller.config.server-snippet='location ^~ /.well-known/acme-challenge/ {\n  allow all;\n  try_files \$uri =404;\n}'
+        --namespace ingress-nginx \
+        --values /tmp/ingress-values.yaml > /tmp/ingress-rendered.yaml
+
+      # 3. Fix invalid `progressDeadlineSeconds: 0` manually:
+      sed -i 's/progressDeadlineSeconds: 0/progressDeadlineSeconds: 600/' /tmp/ingress-rendered.yaml
+
+      # 4. Create namespace (if needed)
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace ingress-nginx --dry-run=client -o yaml | sudo kubectl apply -f -
+
+      # 5. Apply manifests directly (bypass Helm install)
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /tmp/ingress-rendered.yaml
 
       #sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
 
