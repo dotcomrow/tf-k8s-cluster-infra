@@ -134,3 +134,50 @@ locals {
     }
   })
 }
+
+# Debug output for the WIF credentials
+
+output "project_id" {
+  value       = google_project.infra.project_id
+  description = "GCP Project ID"
+}
+
+output "project_number" {
+  value       = google_project.infra.number
+  description = "GCP Project Number"
+}
+
+output "workload_identity_pool_id" {
+  value       = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
+  description = "Workload Identity Pool ID (short ID, not full name)"
+}
+
+output "workload_identity_pool_full_name" {
+  value       = google_iam_workload_identity_pool.rancher_pool.name
+  description = "Full resource name of Workload Identity Pool"
+}
+
+output "workload_identity_pool_provider_id" {
+  value       = google_iam_workload_identity_pool_provider.rancher_provider.workload_identity_pool_provider_id
+  description = "Workload Identity Pool Provider ID"
+}
+
+output "workload_identity_pool_provider_full_name" {
+  value       = google_iam_workload_identity_pool_provider.rancher_provider.name
+  description = "Full resource name of Workload Identity Pool Provider"
+}
+
+output "principal_set_member" {
+  value       = local.principal_set_member
+  description = "The exact principalSet string being used in the IAM binding"
+}
+
+output "wif_service_account_email" {
+  value       = google_service_account.rancher_sa.email
+  description = "Email of the WIF service account being bound"
+}
+
+output "oidc_issuer_uri" {
+  value       = var.k8s_oidc_issuer
+  description = "OIDC issuer URI configured in the WIF provider"
+}
