@@ -13,8 +13,11 @@ resource "null_resource" "download_iso" {
   }
 
   depends_on = [
-    google_iam_workload_identity_pool_provider.rancher_provider,
-    google_service_account.rancher_sa
+    google_service_account.rancher_sa,
+    google_service_account_key.logging_key,
+    google_storage_bucket.free_tier_safe_bucket,
+    google_storage_bucket_iam_member.storage_bucket_access,
+    google_project.infra
   ]
 }
 

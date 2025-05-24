@@ -63,11 +63,13 @@ resource "google_storage_bucket_iam_member" "storage_bucket_access" {
   bucket   = google_storage_bucket.free_tier_safe_bucket.name
   role     = "roles/storage.objectAdmin"
   member   = "serviceAccount:${google_service_account.rancher_sa.email}"
+  depends_on = [ google_storage_bucket.free_tier_safe_bucket ]
 }
 
 resource "google_service_account_key" "logging_key" {
   service_account_id = google_service_account.rancher_sa.name
   private_key_type   = "TYPE_GOOGLE_CREDENTIALS_FILE"
+  depends_on = [ google_storage_bucket_iam_member.storage_bucket_access ]
 }
 
 # Optional: External credentials block (e.g., for cloud-init or Secret)
