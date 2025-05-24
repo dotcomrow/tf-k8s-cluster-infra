@@ -41,9 +41,6 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
 
   attribute_mapping = {
     "google.subject" = "assertion.sub"
-    # optional extra mapping if you want attribute-based access later
-    "attribute.k8s_ns" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)')[0]"
-    "attribute.k8s_sa" = "assertion.sub.extract('system:serviceaccount:([^:]+):([^:]+)')[1]"
   }
 }
 
