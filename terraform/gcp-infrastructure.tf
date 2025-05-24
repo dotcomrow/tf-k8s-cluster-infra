@@ -48,11 +48,11 @@ resource "google_logging_project_bucket_config" "vm_logs_bucket" {
 }
 
 resource "google_logging_project_sink" "core_vm_sink" {
-  name        = "core-vm-log-sink"
-  destination = google_logging_project_bucket_config.vm_logs_bucket.id
-  project     = google_project.infra.project_id
-  filter      = "resource.type=\"generic_node\" AND resource.labels.project_id=\"${google_project.infra.project_id}\""
-  unique_writer_identity = true
+  name                    = "core-vm-log-sink"
+  project                 = google_project.infra.project_id
+  destination             = "storage.googleapis.com/${google_logging_project_bucket_config.vm_logs_bucket.bucket}"
+  filter                  = "resource.type=\"generic_node\" AND resource.labels.project_id=\"${google_project.infra.project_id}\""
+  unique_writer_identity  = true
 
   depends_on = [google_logging_project_bucket_config.vm_logs_bucket]
 }
