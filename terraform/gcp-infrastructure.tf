@@ -57,7 +57,7 @@ resource "google_storage_bucket" "free_tier_safe_bucket" {
   }
 
   labels = {
-    purpose = "k8s-gp-store"
+    purpose = "k8s-gp-storage"
   }
 
   depends_on = [ google_project.infra ]
