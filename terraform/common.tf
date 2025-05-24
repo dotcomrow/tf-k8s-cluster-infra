@@ -17,10 +17,7 @@ resource "null_resource" "download_iso" {
     google_service_account_key.logging_key,
     google_storage_bucket.free_tier_safe_bucket,
     google_storage_bucket_iam_member.storage_bucket_access,
-    google_project.infra,
-    google_logging_project_sink.core_vm_sink,
-    google_project_iam_member.sink_writer,
-    google_logging_project_bucket_config.vm_logs_bucket
+    google_project.infra
   ]
 }
 

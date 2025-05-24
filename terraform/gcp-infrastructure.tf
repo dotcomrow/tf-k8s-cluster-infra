@@ -36,35 +36,6 @@ resource "google_project_iam_member" "rancher_logging_permission" {
   depends_on = [ google_project.infra ]
 }
 
-resource "google_logging_project_bucket_config" "vm_logs_bucket" {
-  project        = google_project.infra.project_id
-  location       = "global"
-  retention_days = 30
-  bucket_id      = "k8s-core-vm-logs" # Must be unique within the project
-
-  description = "Contains logs from the Rancher cluster ${var.cluster_name} Core VMs"
-
-  depends_on = [ google_project.infra ]
-}
-
-resource "google_logging_project_sink" "core_vm_sink" {
-  name                   = "core-vm-log-sink"
-  project                = google_project.infra.project_id
-  destination            = "storage.googleapis.com/${google_logging_project_bucket_config.vm_logs_bucket.bucket_id}"
-  filter                 = "resource.type=\"generic_node\" AND resource.labels.project_id=\"${google_project.infra.project_id}\""
-  unique_writer_identity = true
-
-  depends_on = [google_logging_project_bucket_config.vm_logs_bucket]
-}
-
-resource "google_project_iam_member" "sink_writer" {
-  project = google_project.infra.project_id
-  role    = "roles/logging.bucketWriter"
-  member  = google_logging_project_sink.core_vm_sink.writer_identity
-
-  depends_on = [ google_project.infra ]
-}
-
 # Optional: GCS bucket to test access
 resource "google_storage_bucket" "free_tier_safe_bucket" {
   provider     = google.infra
