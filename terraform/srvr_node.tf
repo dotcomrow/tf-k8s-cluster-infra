@@ -17,7 +17,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         GITHUB_AUTH_VAL = var.GITHUB_AUTH_VAL
         GITHUB_CLIENT_ID = var.GITHUB_CLIENT_ID
         GITHUB_CLIENT_SECRET = var.GITHUB_CLIENT_SECRET
-        GCP_LOGGING_KEY = base64encode(trimspace(local.rancher_credentials_json))
+        GCP_LOGGING_KEY = local.rancher_credentials_json
         MONITORED_RESOURCE_TYPE = var.MONITORED_RESOURCE_TYPE
         MONITORED_RESOURCE_LOCATION = var.MONITORED_RESOURCE_LOCATION
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE

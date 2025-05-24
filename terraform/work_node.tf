@@ -12,7 +12,7 @@ resource "proxmox_virtual_environment_file" "work_cloud_init_config" {
         k8s_version = var.RKE2_VERSION
         ssh_keys = join("\n      - ", [trimspace(var.admin_ssh_public_key)])
         proxmox_host_ip = var.proxmox_host_ip
-        GCP_LOGGING_KEY = base64encode(trimspace(local.rancher_credentials_json))
+        GCP_LOGGING_KEY = local.rancher_credentials_json
         MONITORED_RESOURCE_TYPE = var.MONITORED_RESOURCE_TYPE
         MONITORED_RESOURCE_LOCATION = var.MONITORED_RESOURCE_LOCATION
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE

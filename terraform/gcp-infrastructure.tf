@@ -74,5 +74,5 @@ resource "google_service_account_key" "logging_key" {
 
 # Optional: External credentials block (e.g., for cloud-init or Secret)
 locals {
-  rancher_credentials_json = base64encode(google_service_account_key.logging_key.private_key)
+  rancher_credentials_json = base64encode(trimspace(google_service_account_key.logging_key.private_key))
 }
