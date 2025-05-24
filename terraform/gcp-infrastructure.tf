@@ -31,17 +31,31 @@ resource "google_service_account" "rancher_sa" {
   depends_on = [ google_project.infra ]
 }
 
+resource "null_resource" "wait_for_iam_propagation" {
+  provisioner "local-exec" {
+    command = "echo '⏳ Waiting for IAM propagation...'; sleep 30"
+    interpreter = ["bash", "-c"]
+  }
+
+  triggers = {
+    project_id = google_project.infra.project_id
+  }
+
+  depends_on = [
+    google_project_iam_member.grant_wif_creator_to_sa
+  ]
+}
+
 # Workload Identity Pool
 resource "google_iam_workload_identity_pool" "rancher_pool" {
-  provider                    = google-beta.infra
-  project                     = google_project.infra.project_id
-  workload_identity_pool_id   = "rancher-${var.cluster_name}-pool-${random_id.suffix_gcp.hex}"
-  display_name                = "Rancher Cluster ${var.cluster_name} Pool"
+  provider = google-beta.infra
+  project  = google_project.infra.project_id
+  workload_identity_pool_id = "rancher-${var.cluster_name}-pool-${random_id.suffix_gcp.hex}"
+  display_name              = "Rancher Cluster ${var.cluster_name} Pool"
 
-  depends_on = [ 
-    google_project.infra,
-    google_project_iam_member.grant_wif_creator_to_sa
-  ] 
+  depends_on = [
+    null_resource.wait_for_iam_propagation
+  ]
 }
 
 # Workload Identity Pool Provider
