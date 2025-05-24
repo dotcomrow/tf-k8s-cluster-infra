@@ -25,7 +25,7 @@ resource "google_service_account" "rancher_sa" {
 resource "google_iam_workload_identity_pool" "rancher_pool" {
   provider                    = google-beta.infra
   project                     = google_project.infra.project_id
-  workload_identity_pool_id   = "rancher-${var.cluster_name}-pool"
+  workload_identity_pool_id   = "rancher-${var.cluster_name}-pool-${random_id.suffix_gcp.hex}"
   display_name                = "Rancher Cluster ${var.cluster_name} Pool"
 
   depends_on = [ google_project.infra ]
