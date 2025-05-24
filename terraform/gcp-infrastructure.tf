@@ -11,6 +11,16 @@ resource "google_project" "infra" {
   billing_account = var.billing_account
 }
 
+data "google_client_config" "current" {}
+
+resource "google_project_iam_member" "grant_wif_creator_to_sa" {
+  project = google_project.infra.project_id
+  role    = "roles/iam.workloadIdentityPoolAdmin"
+  member  = "serviceAccount:${data.google_client_config.current.email}"
+
+  depends_on = [google_project.infra]
+}
+
 # Service account for WIF impersonation
 resource "google_service_account" "rancher_sa" {
   provider    = google.infra
