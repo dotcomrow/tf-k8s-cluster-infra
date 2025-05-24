@@ -36,7 +36,7 @@ resource "google_iam_workload_identity_pool_provider" "rancher_provider" {
   provider                        = google-beta.infra
   project                         = google_project.infra.project_id
   workload_identity_pool_id       = google_iam_workload_identity_pool.rancher_pool.workload_identity_pool_id
-  workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider"
+  workload_identity_pool_provider_id = "rancher-${var.cluster_name}-provider-${random_id.suffix_gcp.hex}"
   display_name                    = "OIDC Provider for ${var.cluster_name}"
 
   oidc {
