@@ -60,7 +60,7 @@ resource "google_logging_project_sink" "core_vm_sink" {
 resource "google_project_iam_member" "sink_writer" {
   project = google_project.infra.project_id
   role    = "roles/logging.bucketWriter"
-  member  = google_logging_project_sink.log_sink.writer_identity
+  member  = google_logging_project_sink.core_vm_sink.writer_identity
 
   depends_on = [ google_project.infra ]
 }
