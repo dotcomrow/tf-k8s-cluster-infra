@@ -792,10 +792,10 @@ write_files:
       sed -i 's/progressDeadlineSeconds: 0/progressDeadlineSeconds: 600/' /tmp/ingress-rendered.yaml
 
       # 4. Create namespace (if needed)
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace ingress-nginx --dry-run=client -o yaml | sudo kubectl apply -f -
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace ingress-nginx --dry-run=client -o yaml | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 5. Apply manifests directly (bypass Helm install)
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /tmp/ingress-rendered.yaml
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /tmp/ingress-rendered.yaml --validate=false
 
       #sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
 
