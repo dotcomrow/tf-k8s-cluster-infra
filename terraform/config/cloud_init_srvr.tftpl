@@ -764,7 +764,6 @@ write_files:
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Installing NGINX Ingress Controller..."
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete ingressclass nginx
 
       # 1. Create your values.yaml inline
       cat <<EOF > /tmp/ingress-values.yaml
