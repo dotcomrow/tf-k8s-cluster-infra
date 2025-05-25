@@ -181,18 +181,4 @@ variable "cluster_name" {
   default     = "local"
 }
 
-variable "namespace" {
-  description = "Namespace in the Rancher-managed Kubernetes cluster where the workload will run"
-  type        = string
-  default     = "default"
-}
 
-variable "service_account" {
-  description = "Kubernetes service account name used in the workload namespace for GCP Workload Identity Federation"
-  type        = string
-  default     = "workload-identity-agent"
-}
-
-variable "k8s_oidc_issuer" {
-  default = "https://kubernetes.default.svc"
-}
