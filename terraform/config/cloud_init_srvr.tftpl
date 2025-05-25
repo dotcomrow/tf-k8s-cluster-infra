@@ -772,11 +772,7 @@ write_files:
         service:
           loadBalancerIP: "10.0.0.110"
         config:
-          server-snippet: |
-            location ^~ /.well-known/acme-challenge/ {
-              allow all;
-              try_files \$uri =404;
-            }
+          ssl-redirect: "false"
         deployment:
           minReadySeconds: 30
           # omit progressDeadlineSeconds so default is used (likely 600)
