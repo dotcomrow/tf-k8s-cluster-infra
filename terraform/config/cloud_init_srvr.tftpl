@@ -957,7 +957,8 @@ write_files:
         --set ingress.enabled=true \
         --set ingress.sslRedirect=false \
         --set ingress.annotations."nginx\.ingress\.kubernetes\.io/ssl-redirect"="false" \
-        --set ingress.annotations."nginx\.ingress\.kubernetes\.io/force-ssl-redirect"="false"
+        --set ingress.annotations."nginx\.ingress\.kubernetes\.io/force-ssl-redirect"="false" \
+        --set extraArgs="{--no-https,--disable-https}"
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
   
@@ -968,8 +969,17 @@ write_files:
 
       echo "🚀 Restarting ingress-nginx controller..."
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n ingress-nginx rollout restart deployment ingress-nginx-controller
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system patch issuer rancher --type='merge' -p '
+      spec:
+        acme:
+          solvers:
+          - http01:
+              ingress:
+                ingressClassName: nginx
+      '
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n ingress-nginx rollout restart deployment ingress-nginx-controller
+      
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
       kind: GlobalRoleBinding
