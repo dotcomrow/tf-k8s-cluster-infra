@@ -793,8 +793,6 @@ write_files:
       # 5. Apply manifests directly (bypass Helm install)
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /tmp/ingress-rendered.yaml --validate=false
 
-      #sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.9.4/deploy/static/provider/cloud/deploy.yaml
-
       # Wait for the NGINX ingress controller to be ready
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/ingress-nginx-controller -n ingress-nginx
 
