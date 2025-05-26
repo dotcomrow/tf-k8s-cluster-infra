@@ -828,7 +828,26 @@ write_files:
         --set-string config.nginx_config.stream_proxy.tcp="[]" \
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false"
+        --set extraEnv[0].value="false" \
+        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite}"
+
+      NAMESPACE="apisix"
+      CONFIGMAP_NAME="apisix"
+
+      echo "⏳ Patching APISIX configmap to disable IPv6..."
+
+      # 1. Get and edit the config inline
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get configmap "${CONFIGMAP_NAME}" -n "${NAMESPACE}" -o json | \
+        jq '.data["config.yaml"] |= sub("enable_ipv6: true"; "enable_ipv6: false")' | \
+        sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      echo "✅ Patched IPv6 setting in configmap."
+
+      # 2. Restart deployment to apply
+      echo "🔁 Restarting APISIX deployment..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment apisix -n "${NAMESPACE}"
+
+      echo "✅ Done. IPv6 should now be disabled at runtime."
 
       sudo apt install yq jq -y
       NAMESPACE="apisix"
