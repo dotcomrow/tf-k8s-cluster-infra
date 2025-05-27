@@ -945,40 +945,23 @@ write_files:
       sudo helm repo update
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace cattle-system || true
 
-      sudo helm upgrade --install rancher rancher-stable/rancher    \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
-        --namespace cattle-system         \
-        --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}         \
-        --set bootstrapPassword=$(openssl rand -base64 12)         \
-        --set ingress.tls.source=letsEncrypt         \
-        --set letsEncrypt.email=administrator@${RANCHER_DOMAIN}         \
-        --set letsEncrypt.ingress.class=nginx         \
-        --set ingress.enabled=true \
-        --set ingress.sslRedirect=false \
-        --set ingress.annotations."nginx\.ingress\.kubernetes\.io/ssl-redirect"="false" \
-        --set ingress.annotations."nginx\.ingress\.kubernetes\.io/force-ssl-redirect"="false" \
-        --set extraArgs="{--no-https,--disable-https}"
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout tls.key -out tls.crt -subj "/CN=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}/O=Rancher Self-Signed"
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
+        --cert=tls.crt --key=tls.key
+
+      sudo helm upgrade --install rancher rancher-stable/rancher \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --namespace cattle-system \
+        --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \
+        --set bootstrapPassword=$(openssl rand -base64 18) \
+        --set ingress.tls.source=secret \
+        --set ingress.secretName=tls-rancher-ingress \
+        --set ingress.enabled=true 
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
-  
-      echo "⏳ Patching ingress-nginx configmap to disable global ssl redirect..."
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n ingress-nginx patch configmap ingress-nginx-controller \
-        --type=merge -p '{"data":{"ssl-redirect":"false"}}'
-
-      echo "🚀 Restarting ingress-nginx controller..."
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system patch issuer rancher --type='merge' -p '
-      spec:
-        acme:
-          solvers:
-          - http01:
-              ingress:
-                ingressClassName: nginx
-      '
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n ingress-nginx rollout restart deployment ingress-nginx-controller
-      
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
       kind: GlobalRoleBinding
