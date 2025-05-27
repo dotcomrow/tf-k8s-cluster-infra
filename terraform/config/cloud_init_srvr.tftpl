@@ -956,8 +956,7 @@ write_files:
         --namespace cattle-system \
         --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \
         --set bootstrapPassword=$(openssl rand -base64 18) \
-        --set ingress.tls.source=secret \
-        --set ingress.secretName=tls-rancher-ingress \
+        --set ingress.tls.source=rancher \
         --set ingress.enabled=true 
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
