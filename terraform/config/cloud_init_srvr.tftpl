@@ -1120,12 +1120,6 @@ write_files:
       set -e
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete order --all -n cattle-system
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete challenge --all -n cattle-system
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml delete certificate tls-rancher-ingress -n cattle-system
-
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
