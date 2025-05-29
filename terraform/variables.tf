@@ -181,4 +181,34 @@ variable "cluster_name" {
   default     = "local"
 }
 
+variable "LINKERD_CLIENT_ID" {
+  default = "linkerd"
+}
 
+variable "LINKERD_CLIENT_SECRET" {
+  default = "linkerd"
+}
+
+variable "LINKERD_OAUTH2_PROXY_COOKIE_SECRET" {
+  default = "linkerd"
+}
+
+variable "LINKERD_GITHUB_AUTH_TEAM" {
+  default = "k8s_cluster_admins"
+}
+
+variable "JAEGER_CLIENT_ID" {
+  default = "jaeger"
+}
+
+variable "JAEGER_CLIENT_SECRET" {
+  default = "jaeger"
+}
+
+variable "JAEGER_OAUTH2_PROXY_COOKIE_SECRET" {
+  default = "jaeger"
+}
+
+variable "JAEGER_GITHUB_AUTH_TEAM" {
+  default = "k8s_cluster_admins"
+}
