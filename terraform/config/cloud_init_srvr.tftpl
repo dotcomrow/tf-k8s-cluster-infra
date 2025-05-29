@@ -1062,39 +1062,39 @@ write_files:
       echo "📥 Creating nvidia namespace..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
 
-      echo "📦 Creating GPU time-slicing config..."
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: time-slicing-config
-        namespace: nvidia
-      data:
-        any: |-
-          version: v1
-          flags:
-            migStrategy: none
-          sharing:
-            timeSlicing:
-              renameByDefault: true
-              resources:
-                - name: nvidia.com/gpu
-                  replicas: 4
-      EOF
+      # echo "📦 Creating GPU time-slicing config..."
+      # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # apiVersion: v1
+      # kind: ConfigMap
+      # metadata:
+      #   name: time-slicing-config
+      #   namespace: nvidia
+      # data:
+      #   any: |-
+      #     version: v1
+      #     flags:
+      #       migStrategy: none
+      #     sharing:
+      #       timeSlicing:
+      #         renameByDefault: true
+      #         resources:
+      #           - name: nvidia.com/gpu
+      #             replicas: 4
+      # EOF
 
       echo "🚀 Installing GPU Operator..."
       sudo helm upgrade -i gpu-operator --wait         nvidia/gpu-operator    --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
           -n nvidia         \
           --version=v24.9.2         \
           --set driver.enabled=false         \
-          --set devicePlugin.config.name=time-slicing-config         \
           --set toolkit.env[0].name=CONTAINERD_SOCKET         \
           --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock"
+          # --set devicePlugin.config.name=time-slicing-config         \
 
-      echo "🔧 Patching GPU Operator default config..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
-          -n gpu-operator --type merge        \
-          -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config", "default": "any"}}}}'
+      # echo "🔧 Patching GPU Operator default config..."
+      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
+      #     -n gpu-operator --type merge        \
+      #     -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config", "default": "any"}}}}'
 
   - path: /etc/systemd/system/gpu.service
     permissions: '0644'
