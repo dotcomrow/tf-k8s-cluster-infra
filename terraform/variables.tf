@@ -105,10 +105,6 @@ variable "GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET" {
   default = "kong"
 }
 
-variable "GATEWAY_MANAGER_GITHUB_AUTH_TEAM" {
-  default = "k8s_cluster_admins"
-}
-
 variable "VM_DISK_STORAGE" {
   default = "Cluster"
 }

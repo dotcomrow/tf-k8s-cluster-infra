@@ -941,13 +941,6 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-dashboard -n apisix
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
 
-      echo "🔐 Creating OAuth2 Proxy secret..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create secret generic oauth2-proxy-secret         \
-          --from-literal=client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}         \
-          --from-literal=client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}         \
-          --from-literal=cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}         \
-          --namespace=apisix || true
-
       echo "🚀 Deploying OAuth2 Proxy..."
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: apps/v1
