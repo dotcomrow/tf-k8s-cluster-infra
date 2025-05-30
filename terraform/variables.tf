@@ -212,3 +212,7 @@ variable "JAEGER_OAUTH2_PROXY_COOKIE_SECRET" {
 variable "JAEGER_GITHUB_AUTH_TEAM" {
   default = "k8s_cluster_admins"
 }
+
+variable "NFS_DRIVE_STORAGE" {
+  default = "200Gi"
+}

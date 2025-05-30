@@ -39,6 +39,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         JAEGER_CLIENT_SECRET = var.JAEGER_CLIENT_SECRET
         JAEGER_OAUTH2_PROXY_COOKIE_SECRET = var.JAEGER_OAUTH2_PROXY_COOKIE_SECRET
         JAEGER_GITHUB_AUTH_TEAM = var.JAEGER_GITHUB_AUTH_TEAM
+        NFS_DRIVE_STORAGE = var.NFS_DRIVE_STORAGE
       })
     file_name = "cloud_init_srvr.yaml"
   }

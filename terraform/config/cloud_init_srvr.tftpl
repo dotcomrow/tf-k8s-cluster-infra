@@ -1718,6 +1718,231 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
+
+      # Installing NFS system
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: nfs-system
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+      ---
+      # PVC for backing NFS server
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: nfs-storage
+        namespace: nfs-system
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: ${NFS_DRIVE_STORAGE}
+      ---
+      # NFS Server Deployment
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: nfs-server
+        namespace: nfs-system
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: nfs-server
+        template:
+          metadata:
+            labels:
+              app: nfs-server
+          spec:
+            containers:
+              - name: nfs-server
+                image: erichough/nfs-server:latest
+                securityContext:
+                  privileged: true
+                resources:
+                  limits:
+                    memory: "256Mi"
+                    cpu: "500m"
+                  requests:
+                    memory: "128Mi"
+                    cpu: "250m"
+                env:
+                  - name: NFS_EXPORT_0
+                    value: "/export *(rw,sync,no_subtree_check,no_root_squash)"
+                  - name: MOUNTD_PORT
+                    value: "20048"
+                  - name: STATD_PORT
+                    value: "32765"
+                  - name: STATD_OUTGOING_PORT
+                    value: "32766"
+                ports:
+                  - name: nfs
+                    containerPort: 2049
+                    protocol: TCP
+                  - name: mountd
+                    containerPort: 20048
+                    protocol: TCP
+                  - name: rpcbind
+                    containerPort: 111
+                    protocol: TCP
+                  - name: statd
+                    containerPort: 32765
+                    protocol: TCP
+                  - name: statd-listen
+                    containerPort: 32766
+                    protocol: TCP
+                volumeMounts:
+                  - mountPath: /export
+                    name: nfs-volume
+            volumes:
+              - name: nfs-volume
+                persistentVolumeClaim:
+                  claimName: nfs-storage
+      ---
+      # Headless Service for the NFS Server (for DNS)
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: nfs-server
+        namespace: nfs-system
+      spec:
+        clusterIP: None
+        selector:
+          app: nfs-server
+        ports:
+          - name: nfs
+            port: 2049
+            targetPort: 2049
+            protocol: TCP
+          - name: mountd
+            port: 20048
+            targetPort: 20048
+            protocol: TCP
+          - name: rpcbind
+            port: 111
+            targetPort: 111
+            protocol: TCP
+          - name: rpcbind-udp
+            port: 111
+            targetPort: 111
+            protocol: UDP
+          - name: statd
+            port: 32765
+            targetPort: 32765
+            protocol: TCP
+          - name: statd-udp
+            port: 32765
+            targetPort: 32765
+            protocol: UDP
+          - name: statd-listen
+            port: 32766
+            targetPort: 32766
+            protocol: TCP
+          - name: statd-listen-udp
+            port: 32766
+            targetPort: 32766
+            protocol: UDP
+      ---
+      # NFS Provisioner RBAC
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: nfs-client-provisioner
+        namespace: nfs-system
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: nfs-client-provisioner-runner
+      rules:
+        - apiGroups: [""]
+          resources: ["persistentvolumes"]
+          verbs: ["get", "list", "watch", "create", "delete"]
+        - apiGroups: [""]
+          resources: ["persistentvolumeclaims"]
+          verbs: ["get", "list", "watch", "update"]
+        - apiGroups: [""]
+          resources: ["endpoints"]  # 👈 ADD THIS
+          verbs: ["get", "list", "watch", "create", "update"]
+        - apiGroups: ["storage.k8s.io"]
+          resources: ["storageclasses"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["events"]
+          verbs: ["create", "update", "patch"]
+      ---
+      kind: ClusterRoleBinding
+      apiVersion: rbac.authorization.k8s.io/v1
+      metadata:
+        name: run-nfs-client-provisioner
+      subjects:
+        - kind: ServiceAccount
+          name: nfs-client-provisioner
+          namespace: nfs-system
+      roleRef:
+        kind: ClusterRole
+        name: nfs-client-provisioner-runner
+        apiGroup: rbac.authorization.k8s.io
+      ---
+      # NFS Provisioner Deployment
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: nfs-client-provisioner
+        namespace: nfs-system
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: nfs-client-provisioner
+        template:
+          metadata:
+            labels:
+              app: nfs-client-provisioner
+          spec:
+            serviceAccountName: nfs-client-provisioner
+            containers:
+              - name: nfs-client-provisioner
+                image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+                resources:
+                  limits:
+                    memory: "128Mi"
+                    cpu: "500m"
+                  requests:
+                    memory: "64Mi"
+                    cpu: "250m"
+                env:
+                  - name: PROVISIONER_NAME
+                    value: example.com/nfs
+                  - name: NFS_SERVER
+                    value: nfs-server.nfs-system.svc.cluster.local
+                  - name: NFS_PATH
+                    value: /export
+                volumeMounts:
+                  - name: nfs-client-root
+                    mountPath: /persistentvolumes
+            volumes:
+              - name: nfs-client-root
+                nfs:
+                  server: nfs-server.nfs-system.svc.cluster.local
+                  path: /export
+      ---
+      # StorageClass to use the provisioner
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: nfs-client
+      provisioner: example.com/nfs
+      parameters:
+        archiveOnDelete: "true"
+      reclaimPolicy: Retain
+      volumeBindingMode: Immediate
+      EOF
+      # End NFS install
+
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
