@@ -1212,11 +1212,11 @@ write_files:
 
                     echo "📄 Creating linkerd-identity-trust-roots configmap..."
                     kubectl get secret linkerd-trust-anchor -n linkerd -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/ca.crt
-
+                    read -r CA_CRT < /tmp/ca.crt
                     echo "📄 Creating linkerd-identity-trust-roots ConfigMap..."
                     kubectl delete configmap linkerd-identity-trust-roots -n linkerd --ignore-not-found
                     kubectl create configmap linkerd-identity-trust-roots \
-                      --from-literal=ca-bundle.crt=/tmp/ca.crt \
+                      --from-literal=ca-bundle.crt="$CA_CRT" \
                       -n linkerd
       ---
       apiVersion: rbac.authorization.k8s.io/v1
