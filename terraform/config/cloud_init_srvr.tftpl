@@ -983,8 +983,7 @@ write_files:
                   - --cookie-secure=true
                   - --set-authorization-header=true
                   - --pass-authorization-header=true
-                  - --github-org=${GITHUB_ORG}
-                  - --github-team=${GATEWAY_MANAGER_GITHUB_AUTH_TEAM}
+                  - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1180,7 +1179,20 @@ write_files:
           verbs: ["list"]
         - apiGroups: [""]
           resources: ["namespaces"]
-          verbs: ["get", "patch", "label"]
+          verbs: ["get", "update", "patch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: patch-linkerd-rolebinding
+      subjects:
+        - kind: ServiceAccount
+          name: patch-linkerd
+          namespace: cattle-system
+      roleRef:
+        kind: ClusterRole
+        name: patch-linkerd-role
+        apiGroup: rbac.authorization.k8s.io
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
@@ -1535,7 +1547,7 @@ write_files:
                   - --cookie-secure=true
                   - --set-authorization-header=true
                   - --pass-authorization-header=true
-                  - --allowed-group=dotcomrow:linkerd_admins
+                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
                 ports:
                   - containerPort: 4180
       ---
@@ -1683,7 +1695,7 @@ write_files:
                   - --cookie-secure=true
                   - --set-authorization-header=true
                   - --pass-authorization-header=true
-                  - --allowed-group=dotcomrow:linkerd_admins
+                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
       ---
       apiVersion: v1
       kind: Service
