@@ -1186,6 +1186,30 @@ write_files:
         name: linkerd-create-trust-roots
         apiGroup: rbac.authorization.k8s.io
       ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: linkerd-configmap-editor
+        namespace: linkerd
+      rules:
+        - apiGroups: [""]
+          resources: ["configmaps"]
+          verbs: ["get", "create", "delete", "patch", "update"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: linkerd-configmap-editor-binding
+        namespace: linkerd
+      subjects:
+        - kind: ServiceAccount
+          name: default
+          namespace: linkerd
+      roleRef:
+        kind: Role
+        name: linkerd-configmap-editor
+        apiGroup: rbac.authorization.k8s.io
+      ---
       apiVersion: batch/v1
       kind: Job
       metadata:
@@ -1212,11 +1236,11 @@ write_files:
 
                     echo "📄 Creating linkerd-identity-trust-roots configmap..."
                     kubectl get secret linkerd-trust-anchor -n linkerd -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/ca.crt
-                    read -r CA_CRT < /tmp/ca.crt
+                    
                     echo "📄 Creating linkerd-identity-trust-roots ConfigMap..."
                     kubectl delete configmap linkerd-identity-trust-roots -n linkerd --ignore-not-found
                     kubectl create configmap linkerd-identity-trust-roots \
-                      --from-literal=ca-bundle.crt="$CA_CRT" \
+                      --from-file=ca-bundle.crt=/tmp/ca.crt \
                       -n linkerd
       ---
       apiVersion: rbac.authorization.k8s.io/v1
