@@ -763,6 +763,42 @@ write_files:
       set -e
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
+      # setup project
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: management.cattle.io/v3
+      kind: Project
+      metadata:
+        name: infrastructure
+        namespace: local
+        labels:
+          field.cattle.io/projectId: infrastructure-project
+      spec:
+        displayName: "Infrastructure"
+        description: "Infrastructure Project for Rancher and Application Resources"
+        clusterName: local 
+      ---
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: linkerd
+        labels:
+          linkerd.io/is-control-plane: "true"
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+      ---
+      apiVersion: policy.linkerd.io/v1beta1
+      kind: ServerAuthorization
+      metadata:
+        name: allow-jaeger-unmeshed
+        namespace: linkerd
+      spec:
+        server:
+          name: jaeger-ui
+        client:
+          unauthenticated: true 
+      EOF
+      # end setup project
+
       echo "📦 Installing NGINX Ingress Controller..."
 
       # 1. Create your values.yaml inline
@@ -809,10 +845,12 @@ write_files:
       echo "📥 Installing Gateway API CRDs..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
 
+      sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --create-namespace \
         --namespace apisix \
         --set service.type=NodePort \
         --set ingress-controller.enabled=true \
@@ -1061,6 +1099,7 @@ write_files:
 
       echo "📥 Creating nvidia namespace..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
+      sudo -E kubectl annotate namespace nvidia field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # echo "📦 Creating GPU time-slicing config..."
       # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1119,44 +1158,8 @@ write_files:
       set -e
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
-      # setup project
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: management.cattle.io/v3
-      kind: Project
-      metadata:
-        name: infrastructure
-        namespace: local
-        labels:
-          field.cattle.io/projectId: infrastructure-project
-      spec:
-        displayName: "Infrastructure"
-        description: "Infrastructure Project for Rancher and Application Resources"
-        clusterName: local 
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-jaeger-unmeshed
-        namespace: linkerd
-      spec:
-        server:
-          name: jaeger-ui
-        client:
-          unauthenticated: true 
-      EOF
-      # end setup project
-
       # install linkerd and jaeger
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: linkerd
-        labels:
-          linkerd.io/is-control-plane: "true"
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-      ---
       apiVersion: v1
       kind: ServiceAccount
       metadata:
@@ -1975,6 +1978,8 @@ write_files:
       kind: Namespace
       metadata:
         name: argocd
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
       ---
       apiVersion: v1
       kind: Secret
