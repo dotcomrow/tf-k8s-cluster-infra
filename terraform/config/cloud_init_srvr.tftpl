@@ -763,42 +763,6 @@ write_files:
       set -e
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
-      # setup project
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: management.cattle.io/v3
-      kind: Project
-      metadata:
-        name: infrastructure
-        namespace: local
-        labels:
-          field.cattle.io/projectId: infrastructure-project
-      spec:
-        displayName: "Infrastructure"
-        description: "Infrastructure Project for Rancher and Application Resources"
-        clusterName: local 
-      ---
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: linkerd
-        labels:
-          linkerd.io/is-control-plane: "true"
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-jaeger-unmeshed
-        namespace: linkerd
-      spec:
-        server:
-          name: jaeger-ui
-        client:
-          unauthenticated: true 
-      EOF
-      # end setup project
-
       echo "📦 Installing NGINX Ingress Controller..."
 
       # 1. Create your values.yaml inline
@@ -836,6 +800,77 @@ write_files:
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch svc ingress-nginx-controller -n ingress-nginx \
         --type='merge' \
         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.110"}}'
+
+      echo "🏗️ Installing Rancher..."
+      sudo helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace cattle-system || true
+
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+        -keyout tls.key -out tls.crt -subj "/CN=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}/O=Rancher Self-Signed"
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
+        --cert=tls.crt --key=tls.key
+
+      sudo helm upgrade --install rancher rancher-stable/rancher \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --namespace cattle-system \
+        --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \
+        --set bootstrapPassword=$(openssl rand -base64 18) \
+        --set ingress.tls.source=rancher \
+        --set ingress.enabled=true 
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
+
+      # setup project
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: management.cattle.io/v3
+      kind: Project
+      metadata:
+        name: infrastructure
+        namespace: local
+        labels:
+          field.cattle.io/projectId: infrastructure-project
+      spec:
+        displayName: "Infrastructure"
+        description: "Infrastructure Project for Rancher and Application Resources"
+        clusterName: local 
+      ---
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: linkerd
+        labels:
+          linkerd.io/is-control-plane: "true"
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: linkerd    
+        namespace: linkerd
+      spec:
+        chart: linkerd-crds
+        repo: https://helm.linkerd.io/stable
+        version: 1.8.0
+        targetNamespace: linkerd
+      EOF
+      # end setup project
+
+      echo "Installing Linkerd ServerAuthorization for Jaeger UI..."
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: policy.linkerd.io/v1beta1
+      kind: ServerAuthorization
+      metadata:
+        name: allow-jaeger-unmeshed
+        namespace: linkerd
+      spec:
+        server:
+          name: jaeger-ui
+        client:
+          unauthenticated: true
+      EOF
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
@@ -977,27 +1012,6 @@ write_files:
         selector:
           app: oauth2-proxy
       EOF
-
-      echo "🏗️ Installing Rancher..."
-      sudo helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
-      sudo helm repo update
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace cattle-system || true
-
-      openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout tls.key -out tls.crt -subj "/CN=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}/O=Rancher Self-Signed"
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
-        --cert=tls.crt --key=tls.key
-
-      sudo helm upgrade --install rancher rancher-stable/rancher \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --namespace cattle-system \
-        --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \
-        --set bootstrapPassword=$(openssl rand -base64 18) \
-        --set ingress.tls.source=rancher \
-        --set ingress.enabled=true 
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
 
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
@@ -1321,17 +1335,6 @@ write_files:
         issuerRef:
           name: linkerd-identity-issuer
           kind: Issuer
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd    
-        namespace: linkerd
-      spec:
-        chart: linkerd-crds
-        repo: https://helm.linkerd.io/stable
-        version: 1.8.0
-        targetNamespace: linkerd
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
