@@ -1131,7 +1131,18 @@ write_files:
       spec:
         displayName: "Infrastructure"
         description: "Infrastructure Project for Rancher and Application Resources"
-        clusterName: local  
+        clusterName: local 
+      ---
+      apiVersion: policy.linkerd.io/v1beta1
+      kind: ServerAuthorization
+      metadata:
+        name: allow-jaeger-unmeshed
+        namespace: linkerd
+      spec:
+        server:
+          name: jaeger-ui
+        client:
+          unauthenticated: true 
       EOF
       # end setup project
 
@@ -1678,17 +1689,6 @@ write_files:
                   - --pass-authorization-header=true
                   - --allowed-group=dotcomrow:linkerd_admins
       ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-jaeger-unmeshed
-        namespace: linkerd
-      spec:
-        server:
-          name: jaeger-ui
-        client:
-          unauthenticated: true
-      ---
       apiVersion: v1
       kind: Service
       metadata:
@@ -1721,6 +1721,7 @@ write_files:
               paths:
                 - "/"
                 - "/oauth2/*"
+                - "/dist/*"
             backends:
               - serviceName: oauth2-proxy
                 servicePort: 80
