@@ -858,6 +858,13 @@ write_files:
       EOF
       # end setup project
 
+      # Wait for CRDs to be installed
+      for i in {1..600}; do
+        kubectl get crd serverauthorizations.policy.linkerd.io &>/dev/null && break
+        echo "⏳ Waiting for Linkerd CRDs..."
+        sleep 2
+      done
+
       echo "Installing Linkerd ServerAuthorization for Jaeger UI..."
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: policy.linkerd.io/v1beta1
