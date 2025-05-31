@@ -1769,6 +1769,26 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
+      echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
+      for i in {1..60}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd | grep -v 'Running\|Completed'; then
+          sleep 5
+        else
+          echo "✅ Linkerd is fully running!"
+          break
+        fi
+      done
+
+      curl -sL https://run.linkerd.io/install | sh
+      export PATH=$PATH:$HOME/.linkerd2/bin
+      sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
+      sudo linkerd version
+
+      sudo linkerd install --crds --ignore-cluster --kubeconfig=/etc/rancher/rke2/rke2.yaml | \
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      echo "🔍 Verifying identity and proxy injection..."
+      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd || echo "❌ linkerd check failed"
 
       # Installing NFS system
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1778,6 +1798,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
+          linkerd.io/inject: enabled
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2001,6 +2022,7 @@ write_files:
         name: argocd
         annotations:
           field.cattle.io/projectId: local:infrastructure
+          linkerd.io/inject: enabled
       ---
       apiVersion: v1
       kind: Secret
