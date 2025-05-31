@@ -921,6 +921,7 @@ write_files:
 
       echo "🛠 Patching enable_ipv6: false..."
       sudo yq -i -y '.apisix.enable_ipv6 = false' "$TMP_FILE"
+      sudo yq -i -y '.apisix.authentication.enable = false' "$TMP_FILE"
 
       echo "🚀 Updating ConfigMap..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
