@@ -879,304 +879,6 @@ write_files:
           unauthenticated: true
       EOF
 
-      echo "📦 Adding Helm repos for APISIX and Bitnami..."
-      sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
-      sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
-      sudo helm repo update
-
-      echo "📥 Installing Gateway API CRDs..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
-
-      sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      echo "🚀 Installing APISIX Gateway and Dashboard..."
-      sudo helm upgrade --install apisix apisix/apisix \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --namespace apisix \
-        --set service.type=NodePort \
-        --set ingress-controller.enabled=true \
-        --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
-        --set ingress-controller.args[0]="ingress-apisix" \
-        --set ingress-controller.args[1]="--namespace-selector=" \
-        --set config.enable_ipv6=false \
-        --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
-        --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
-        --set-string config.nginx_config.stream_proxy.tcp="[]" \
-        --set-string config.nginx_config.stream_proxy.udp="[]" \
-        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false" \
-        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite}"
-
-      sudo apt install yq jq -y
-      NAMESPACE="apisix"
-      CONFIGMAP_NAME="apisix"
-      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-      TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
-
-      echo "📦 Exporting current config..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
-        -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
-
-      echo "🛠 Patching enable_ipv6: false..."
-      sudo yq -i -y '.apisix.enable_ipv6 = false' "$TMP_FILE"
-
-      echo "🚀 Updating ConfigMap..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
-        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
-        sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
-
-      echo "🔥 Restarting APISIX pod..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
-
-      echo "✅ IPv6 disabled and pod restarted."
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
-
-      sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      echo "⏳ Waiting for APISIX components..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-ingress-controller -n apisix
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-dashboard -n apisix
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
-
-      echo "🚀 Deploying OAuth2 Proxy..."
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy
-        namespace: apisix
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-                ports:
-                  - containerPort: 4180
-                args:
-                  - --provider=github
-                  - --http-address=0.0.0.0:4180
-                  - --upstream=http://apisix-dashboard.apisix.svc.cluster.local
-                  - --email-domain=*
-                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
-                  - --client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}
-                  - --client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}
-                  - --redirect-url=https://gateway-manager.suncoast.systems/oauth2/callback
-                  - --scope=user:email,read:org
-                  - --cookie-secure=true
-                  - --set-authorization-header=true
-                  - --pass-authorization-header=true
-                  - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
-      EOF
-
-      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-      NAMESPACE="apisix"
-      CONFIGMAP_NAME="apisix-dashboard"
-      TMP_FILE="$(mktemp)"
-
-      echo "📥 Fetching current apisix-dashboard ConfigMap..."
-      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" -o jsonpath='{.data.conf\.yaml}' > "$TMP_FILE"
-
-      echo "🧹 Removing authentication block from conf.yaml..."
-      yq -i 'del(.authentication)' "$TMP_FILE"
-
-      echo "📦 Rebuilding updated ConfigMap..."
-      sudo kubectl create configmap "$CONFIGMAP_NAME" \
-        -n "$NAMESPACE" \
-        --from-file=conf.yaml="$TMP_FILE" \
-        --dry-run=client -o yaml | \
-        kubectl --kubeconfig="$KUBECONFIG" apply -f -
-
-      echo "♻️ Restarting apisix-dashboard pod..."
-      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix-dashboard
-
-      echo "✅ APISIX Dashboard authentication disabled."
-
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: oauth2-proxy
-        namespace: apisix
-      spec:
-        ports:
-          - port: 80
-            targetPort: 4180
-        type: LoadBalancer
-        loadBalancerIP: 10.0.0.111
-        selector:
-          app: oauth2-proxy
-      EOF
-
-      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: management.cattle.io/v3
-      kind: GlobalRoleBinding
-      metadata:
-        name: github-k8s-cluster-admins
-        labels:
-          auth-provider: github
-      globalRoleName: admin
-      groupPrincipalName: 'github_team:${GITHUB_AUTH_VAL}'
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: github-team-cluster-admins
-      subjects:
-        - kind: Group
-          name: 'github_team:${GITHUB_AUTH_VAL}'  # Replace with your team
-          apiGroup: rbac.authorization.k8s.io
-      roleRef:
-        kind: ClusterRole
-        name: cluster-admin
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: management.cattle.io/v3
-      kind: ClusterRoleTemplateBinding
-      metadata:
-        name: github-team-cluster-owner
-        namespace: local            # Adjust if your cluster name is different
-      clusterName: local            # Adjust if your cluster name is different
-      groupName: 'github_team:${GITHUB_AUTH_VAL}'
-      roleTemplateName: cluster-owner
-      ---
-      accessMode: required
-      apiVersion: management.cattle.io/v3
-      kind: AuthConfig
-      metadata:
-        name: github
-        namespace: cattle-system
-      enabled: true
-      displayName: GitHub Authentication
-      clientId: '${GITHUB_CLIENT_ID}'
-      clientSecret: '${GITHUB_CLIENT_SECRET}'
-      hostname: 'github.com'
-      tls: true
-      type: githubConfig
-      logoutAllSupported: false
-      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
-      allowedPrincipalIds:
-        - 'github_team:${GITHUB_AUTH_VAL}'
-      scopes:
-        - 'read:user'
-        - 'user:email'
-        - 'read:org'
-      ---
-      apiVersion: management.cattle.io/v3
-      kind: Setting
-      metadata:
-        name: auth-provider
-      value: github
-      EOF
-
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
-      xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        delete users.management.cattle.io {}
-
-      bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
-
-  - path: /etc/systemd/system/install-apisix-rancher.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Install APISIX Gateway, OAuth2 Proxy, Rancher
-      After=k8s-addons.service
-      Requires=k8s-addons.service
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/local/bin/60-install-apisix-rancher.sh
-      RemainAfterExit=true
-
-      [Install]
-      WantedBy=multi-user.target
-
-  - path: /usr/local/bin/70-gpu.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
-
-      echo "⚙️ Labeling node for GPU support..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node         nvidia.com/gpu.present=true         nvidia.com/gpu=1 --overwrite
-
-      echo "📥 Installing NVIDIA Helm repos..."
-      sudo helm repo add nvdp https://nvidia.github.io/k8s-device-plugin --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
-      sudo helm repo add nvidia https://helm.ngc.nvidia.com/nvidia --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
-      sudo helm repo update
-
-      echo "📥 Creating nvidia namespace..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
-      sudo -E kubectl annotate namespace nvidia field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      # echo "📦 Creating GPU time-slicing config..."
-      # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      # apiVersion: v1
-      # kind: ConfigMap
-      # metadata:
-      #   name: time-slicing-config
-      #   namespace: nvidia
-      # data:
-      #   any: |-
-      #     version: v1
-      #     flags:
-      #       migStrategy: none
-      #     sharing:
-      #       timeSlicing:
-      #         renameByDefault: true
-      #         resources:
-      #           - name: nvidia.com/gpu
-      #             replicas: 4
-      # EOF
-
-      echo "🚀 Installing GPU Operator..."
-      sudo helm upgrade -i gpu-operator --wait         nvidia/gpu-operator    --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
-          -n nvidia         \
-          --version=v24.9.2         \
-          --set driver.enabled=false         \
-          --set toolkit.env[0].name=CONTAINERD_SOCKET         \
-          --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock"
-          # --set devicePlugin.config.name=time-slicing-config         \
-
-      # echo "🔧 Patching GPU Operator default config..."
-      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
-      #     -n gpu-operator --type merge        \
-      #     -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config", "default": "any"}}}}'
-
-  - path: /etc/systemd/system/gpu.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=GPU Operator Bootstrap
-      After=install-apisix-rancher.service
-      Requires=install-apisix-rancher.service
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/local/bin/70-gpu.sh
-      RemainAfterExit=true
-
-      [Install]
-      WantedBy=multi-user.target
-
-  - path: /usr/local/bin/80-post-install.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      set -e
-      echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
-
       # install linkerd and jaeger
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
@@ -1511,25 +1213,6 @@ write_files:
           grafana:
             enabled: false
       ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: apisix-ingress-controller
-      rules:
-        - apiGroups: ["apisix.apache.org"]
-          resources:
-            - apisixroutes
-            - apisixpluginconfigs
-            - apisixconsumers
-            - apisixclusterconfigs
-          verbs: ["get", "list", "watch"]
-        - apiGroups: [""]
-          resources: ["services", "endpoints", "pods", "namespaces"]
-          verbs: ["get", "list", "watch"]
-        - apiGroups: ["networking.k8s.io"]
-          resources: ["ingresses", "ingressclasses"]
-          verbs: ["get", "list", "watch"] 
-      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -1643,41 +1326,6 @@ write_files:
           namespaceMetadata:
             enabled: false
       ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: jaeger-ui
-        annotations:
-          apisix.apache.org/timeout: "900"
-          apisix.apache.org/websocket: "true"
-          apisix.apache.org/enable-cors: "true"
-        namespace: linkerd
-      spec:
-        http:
-          - name: jaeger-auth
-            match:
-              hosts:
-                - jaeger.suncoast.systems
-              paths:
-                - "/"
-                - "/oauth2/*"
-                - "/jaeger/*"
-            backends:
-              - serviceName: oauth2-proxy-jaeger
-                servicePort: 80
-
-          - name: jaeger-websocket
-            websocket: true
-            match:
-              hosts:
-                - jaeger.suncoast.systems
-              paths:
-                - "/api/*"
-                - "/metrics/*"
-            backends:
-              - serviceName: jaeger
-                servicePort: 16686
-      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -1725,6 +1373,384 @@ write_files:
           - name: http
             port: 80
             targetPort: 4180
+      EOF
+      # end linkerd and jaeger install
+
+      echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
+      for i in {1..60}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd | grep -v 'Running\|Completed'; then
+          sleep 5
+        else
+          echo "✅ Linkerd is fully running!"
+          break
+        fi
+      done
+
+      curl -sL https://run.linkerd.io/install | sh
+      export PATH=$PATH:$HOME/.linkerd2/bin
+      sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
+      sudo linkerd version
+
+      sudo linkerd install --crds --ignore-cluster --kubeconfig=/etc/rancher/rke2/rke2.yaml | \
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      echo "🔍 Verifying identity and proxy injection..."
+      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd || echo "❌ linkerd check failed"
+
+      echo "📦 Adding Helm repos for APISIX and Bitnami..."
+      sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+
+      echo "📥 Installing Gateway API CRDs..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
+
+      sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+    
+      echo "🚀 Installing APISIX Gateway and Dashboard..."
+      sudo helm upgrade --install apisix apisix/apisix \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --namespace apisix \
+        --set service.type=NodePort \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix \
+        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
+        --set ingress-controller.args[0]="ingress-apisix" \
+        --set ingress-controller.args[1]="--namespace-selector=" \
+        --set config.enable_ipv6=false \
+        --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
+        --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
+        --set-string config.nginx_config.stream_proxy.tcp="[]" \
+        --set-string config.nginx_config.stream_proxy.udp="[]" \
+        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
+        --set extraEnv[0].value="false" \
+        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite}"
+
+      sudo apt install yq jq -y
+      NAMESPACE="apisix"
+      CONFIGMAP_NAME="apisix"
+      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+      TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
+
+      echo "📦 Exporting current config..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
+        -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
+
+      echo "🛠 Patching enable_ipv6: false..."
+      sudo yq -i -y '.apisix.enable_ipv6 = false' "$TMP_FILE"
+
+      echo "🚀 Updating ConfigMap..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
+        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
+        sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      echo "🔥 Restarting APISIX pod..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
+
+      echo "✅ IPv6 disabled and pod restarted."
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
+
+      sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      echo "⏳ Waiting for APISIX components..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-ingress-controller -n apisix
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-dashboard -n apisix
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
+
+      echo "🚀 Deploying OAuth2 Proxy..."
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy
+        namespace: apisix
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                ports:
+                  - containerPort: 4180
+                args:
+                  - --provider=github
+                  - --http-address=0.0.0.0:4180
+                  - --upstream=http://apisix-dashboard.apisix.svc.cluster.local
+                  - --email-domain=*
+                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+                  - --client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}
+                  - --client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}
+                  - --redirect-url=https://gateway-manager.suncoast.systems/oauth2/callback
+                  - --scope=user:email,read:org
+                  - --cookie-secure=true
+                  - --set-authorization-header=true
+                  - --pass-authorization-header=true
+                  - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
+      EOF
+
+      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+      NAMESPACE="apisix"
+      CONFIGMAP_NAME="apisix-dashboard"
+      TMP_FILE="$(mktemp)"
+
+      echo "📥 Fetching current apisix-dashboard ConfigMap..."
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" -o jsonpath='{.data.conf\.yaml}' > "$TMP_FILE"
+
+      echo "🧹 Removing authentication block from conf.yaml..."
+      yq -i 'del(.authentication)' "$TMP_FILE"
+
+      echo "📦 Rebuilding updated ConfigMap..."
+      sudo kubectl create configmap "$CONFIGMAP_NAME" \
+        -n "$NAMESPACE" \
+        --from-file=conf.yaml="$TMP_FILE" \
+        --dry-run=client -o yaml | \
+        kubectl --kubeconfig="$KUBECONFIG" apply -f -
+
+      echo "♻️ Restarting apisix-dashboard pod..."
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix-dashboard
+
+      echo "✅ APISIX Dashboard authentication disabled."
+
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy
+        namespace: apisix
+      spec:
+        ports:
+          - port: 80
+            targetPort: 4180
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.111
+        selector:
+          app: oauth2-proxy
+      EOF
+
+      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: management.cattle.io/v3
+      kind: GlobalRoleBinding
+      metadata:
+        name: github-k8s-cluster-admins
+        labels:
+          auth-provider: github
+      globalRoleName: admin
+      groupPrincipalName: 'github_team:${GITHUB_AUTH_VAL}'
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: github-team-cluster-admins
+      subjects:
+        - kind: Group
+          name: 'github_team:${GITHUB_AUTH_VAL}'  # Replace with your team
+          apiGroup: rbac.authorization.k8s.io
+      roleRef:
+        kind: ClusterRole
+        name: cluster-admin
+        apiGroup: rbac.authorization.k8s.io
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: ClusterRoleTemplateBinding
+      metadata:
+        name: github-team-cluster-owner
+        namespace: local            # Adjust if your cluster name is different
+      clusterName: local            # Adjust if your cluster name is different
+      groupName: 'github_team:${GITHUB_AUTH_VAL}'
+      roleTemplateName: cluster-owner
+      ---
+      accessMode: required
+      apiVersion: management.cattle.io/v3
+      kind: AuthConfig
+      metadata:
+        name: github
+        namespace: cattle-system
+      enabled: true
+      displayName: GitHub Authentication
+      clientId: '${GITHUB_CLIENT_ID}'
+      clientSecret: '${GITHUB_CLIENT_SECRET}'
+      hostname: 'github.com'
+      tls: true
+      type: githubConfig
+      logoutAllSupported: false
+      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
+      allowedPrincipalIds:
+        - 'github_team:${GITHUB_AUTH_VAL}'
+      scopes:
+        - 'read:user'
+        - 'user:email'
+        - 'read:org'
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: Setting
+      metadata:
+        name: auth-provider
+      value: github
+      EOF
+
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
+      xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        delete users.management.cattle.io {}
+
+      bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
+
+  - path: /etc/systemd/system/install-apisix-rancher.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Install APISIX Gateway, OAuth2 Proxy, Rancher
+      After=k8s-addons.service
+      Requires=k8s-addons.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/60-install-apisix-rancher.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/70-gpu.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+
+      echo "⚙️ Labeling node for GPU support..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node         nvidia.com/gpu.present=true         nvidia.com/gpu=1 --overwrite
+
+      echo "📥 Installing NVIDIA Helm repos..."
+      sudo helm repo add nvdp https://nvidia.github.io/k8s-device-plugin --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo add nvidia https://helm.ngc.nvidia.com/nvidia --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+
+      echo "📥 Creating nvidia namespace..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
+      sudo -E kubectl annotate namespace nvidia field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      # echo "📦 Creating GPU time-slicing config..."
+      # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # apiVersion: v1
+      # kind: ConfigMap
+      # metadata:
+      #   name: time-slicing-config
+      #   namespace: nvidia
+      # data:
+      #   any: |-
+      #     version: v1
+      #     flags:
+      #       migStrategy: none
+      #     sharing:
+      #       timeSlicing:
+      #         renameByDefault: true
+      #         resources:
+      #           - name: nvidia.com/gpu
+      #             replicas: 4
+      # EOF
+
+      echo "🚀 Installing GPU Operator..."
+      sudo helm upgrade -i gpu-operator --wait         nvidia/gpu-operator    --kubeconfig=/etc/rancher/rke2/rke2.yaml     \
+          -n nvidia         \
+          --version=v24.9.2         \
+          --set driver.enabled=false         \
+          --set toolkit.env[0].name=CONTAINERD_SOCKET         \
+          --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock"
+          # --set devicePlugin.config.name=time-slicing-config         \
+
+      # echo "🔧 Patching GPU Operator default config..."
+      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
+      #     -n gpu-operator --type merge        \
+      #     -p '{"spec": {"devicePlugin": {"config": {"name": "time-slicing-config", "default": "any"}}}}'
+
+  - path: /etc/systemd/system/gpu.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=GPU Operator Bootstrap
+      After=install-apisix-rancher.service
+      Requires=install-apisix-rancher.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/70-gpu.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/80-post-install.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+      echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
+
+      # adding apisix routes for linkerd and jaeger
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: apisix-ingress-controller
+      rules:
+        - apiGroups: ["apisix.apache.org"]
+          resources:
+            - apisixroutes
+            - apisixpluginconfigs
+            - apisixconsumers
+            - apisixclusterconfigs
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["services", "endpoints", "pods", "namespaces"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses", "ingressclasses"]
+          verbs: ["get", "list", "watch"] 
+      ---
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: jaeger-ui
+        annotations:
+          apisix.apache.org/timeout: "900"
+          apisix.apache.org/websocket: "true"
+          apisix.apache.org/enable-cors: "true"
+        namespace: linkerd
+      spec:
+        http:
+          - name: jaeger-auth
+            match:
+              hosts:
+                - jaeger.suncoast.systems
+              paths:
+                - "/"
+                - "/oauth2/*"
+                - "/jaeger/*"
+            backends:
+              - serviceName: oauth2-proxy-jaeger
+                servicePort: 80
+
+          - name: jaeger-websocket
+            websocket: true
+            match:
+              hosts:
+                - jaeger.suncoast.systems
+              paths:
+                - "/api/*"
+                - "/metrics/*"
+            backends:
+              - serviceName: jaeger
+                servicePort: 16686
       ---
       apiVersion: apisix.apache.org/v2
       kind: ApisixRoute
@@ -1767,28 +1793,7 @@ write_files:
               - serviceName: web
                 servicePort: 8084
       EOF
-      # end linkerd and jaeger install
-
-      echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
-      for i in {1..60}; do
-        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd | grep -v 'Running\|Completed'; then
-          sleep 5
-        else
-          echo "✅ Linkerd is fully running!"
-          break
-        fi
-      done
-
-      curl -sL https://run.linkerd.io/install | sh
-      export PATH=$PATH:$HOME/.linkerd2/bin
-      sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
-      sudo linkerd version
-
-      sudo linkerd install --crds --ignore-cluster --kubeconfig=/etc/rancher/rke2/rke2.yaml | \
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-
-      echo "🔍 Verifying identity and proxy injection..."
-      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd || echo "❌ linkerd check failed"
+      # end apisix routes for linkerd and jaeger
 
       # Installing NFS system
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
