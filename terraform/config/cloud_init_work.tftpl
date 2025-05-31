@@ -265,6 +265,51 @@ write_files:
       nvidia-ctk runtime configure --runtime=containerd --set-as-default
       nvidia-ctk runtime configure --runtime=docker --set-as-default
       sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
+
+      CONTAINERD_CONFIG="/etc/containerd/config.toml"
+      BACKUP_PATH="/etc/containerd/config.toml.bak"
+
+      echo "📦 Patching containerd config to set file limits for NVIDIA runtime..."
+
+      # Backup original config
+      cp "$CONTAINERD_CONFIG" "$BACKUP_PATH"
+
+      # Ensure config.toml exists and is writable
+      if [ ! -w "$CONTAINERD_CONFIG" ]; then
+        echo "❌ Cannot write to $CONTAINERD_CONFIG"
+        exit 1
+      fi
+
+      # Check if NVIDIA runtime section already exists
+      if grep -q '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia\]' "$CONTAINERD_CONFIG"; then
+        echo "🔧 NVIDIA runtime section already exists — patching..."
+        # Patch SystemdCgroup and rlimits
+        sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/,/^\[/ s/^.*SystemdCgroup.*/    SystemdCgroup = true/' "$CONTAINERD_CONFIG" || true
+
+        if ! grep -q 'runc_options' "$CONTAINERD_CONFIG"; then
+          sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/a\    runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }' "$CONTAINERD_CONFIG"
+        else
+          echo "⚠️  'runc_options' already present — please verify its contents manually."
+        fi
+      else
+        echo "➕ Adding NVIDIA runtime config section..."
+        cat <<EOF >> "$CONTAINERD_CONFIG"
+
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
+        runtime_type = "io.containerd.runc.v2"
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
+          SystemdCgroup = true
+          runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }
+      EOF
+      fi
+
+      echo "🔁 Reloading containerd to apply changes..."
+      systemctl daemon-reexec
+      systemctl daemon-reload
+      systemctl restart containerd
+
+      echo "✅ Patch complete. Backup saved at $BACKUP_PATH"
+
       systemctl restart docker
       systemctl restart containerd
 
