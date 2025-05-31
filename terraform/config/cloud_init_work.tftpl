@@ -272,22 +272,12 @@ write_files:
 
       echo "📦 Patching containerd config to set file limits for NVIDIA runtime..."
 
-      # Backup original config
+      # Backup the config
       sudo cp "$CONTAINERD_CONFIG" "$BACKUP_PATH"
 
-      # Check if NVIDIA runtime section already exists
-      if sudo grep -q '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia\]' "$CONTAINERD_CONFIG"; then
-        echo "🔧 NVIDIA runtime section already exists — patching..."
-        # Patch SystemdCgroup and rlimits
-        sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/,/^\[/ s/^.*SystemdCgroup.*/    SystemdCgroup = true/' "$CONTAINERD_CONFIG" || true
-
-        if ! grep -q 'runc_options' "$CONTAINERD_CONFIG"; then
-          sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/a\    runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }' "$CONTAINERD_CONFIG"
-        else
-          echo "⚠️  'runc_options' already present — please verify its contents manually."
-        fi
-      else
-        echo "➕ Adding NVIDIA runtime config section..."
+      # Check for runtime section
+      if ! sudo grep -q '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia\]' "$CONTAINERD_CONFIG"; then
+        echo "➕ NVIDIA runtime section not found — adding explicitly..."
         sudo tee -a "$CONTAINERD_CONFIG" > /dev/null <<EOF
 
       [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
@@ -296,9 +286,16 @@ write_files:
           SystemdCgroup = true
           runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }
       EOF
+      else
+        echo "🔧 NVIDIA runtime already exists — checking for runc_options..."
+        if ! sudo grep -q 'runc_options' "$CONTAINERD_CONFIG"; then
+          sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/a\    runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }' "$CONTAINERD_CONFIG"
+        else
+          echo "⚠️  'runc_options' already present — please verify it includes correct values."
+        fi
       fi
 
-      echo "🔁 Reloading containerd to apply changes..."
+      echo "🔁 Reloading containerd..."
       sudo systemctl daemon-reexec
       sudo systemctl daemon-reload
       sudo systemctl restart containerd
