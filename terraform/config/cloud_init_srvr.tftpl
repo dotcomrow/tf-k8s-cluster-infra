@@ -1212,6 +1212,10 @@ write_files:
             enforcedHostRegexp: ".*"
           grafana:
             enabled: false
+          jaeger:
+            enabled: true
+            collector:
+              addr: collector.linkerd-jaeger.linkerd.svc.cluster.local:55678
       ---
       apiVersion: apps/v1
       kind: Deployment
