@@ -1380,24 +1380,6 @@ write_files:
                       meta.helm.sh/release-namespace=linkerd \
                       --overwrite -n linkerd
       ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd-jaeger
-        namespace: linkerd
-      spec:
-        chart: linkerd-jaeger
-        repo: https://helm.linkerd.io/stable
-        version: 30.12.11
-        targetNamespace: linkerd
-        valuesContent: |-
-          installNamespace: false
-          skipNamespaceCheck: true
-          jaeger:
-            enabled: true
-          namespaceMetadata:
-            enabled: false
-      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
