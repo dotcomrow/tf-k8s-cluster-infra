@@ -922,7 +922,7 @@ write_files:
         chart: linkerd-crds
         repo: https://helm.linkerd.io/stable
         version: 1.8.0
-        targetnamespace: linkerd-jaeger
+        targetNamespace: linkerd-jaeger
       EOF
       # end setup project
 
@@ -1241,7 +1241,7 @@ write_files:
         chart: linkerd-control-plane
         repo: https://helm.linkerd.io/stable
         version: 1.16.11
-        targetnamespace: linkerd-jaeger
+        targetNamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
@@ -1266,7 +1266,7 @@ write_files:
         chart: linkerd-viz
         repo: https://helm.linkerd.io/stable
         version: 30.12.11
-        targetnamespace: linkerd-jaeger
+        targetNamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
@@ -1294,7 +1294,7 @@ write_files:
         chart: linkerd-jaeger
         repo: https://helm.linkerd.io/stable
         version: 30.12.11
-        targetnamespace: linkerd-jaeger
+        targetNamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
