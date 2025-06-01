@@ -1283,7 +1283,21 @@ write_files:
           jaeger:
             enabled: true
             collector:
-              addr: collector.linkerd-jaeger.linkerd.svc.cluster.local:55678
+              addr: collector.linkerd.svc.cluster.local:55678
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: linkerd-jaeger
+        namespace: linkerd
+      spec:
+        chart: linkerd-jaeger
+        repo: https://helm.linkerd.io/stable
+        version: 30.12.11
+        targetNamespace: linkerd
+        valuesContent: |-
+          installNamespace: false
+          skipNamespaceCheck: true
       ---
       apiVersion: apps/v1
       kind: Deployment
