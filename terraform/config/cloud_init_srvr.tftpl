@@ -1444,7 +1444,7 @@ write_files:
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
-      sudo linkerd version
+      sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo linkerd install --crds --ignore-cluster --kubeconfig=/etc/rancher/rke2/rke2.yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
