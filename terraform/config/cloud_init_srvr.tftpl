@@ -1431,12 +1431,14 @@ write_files:
       # end linkerd and jaeger install
 
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
-      for i in {1..600}; do
-        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd | grep -v 'Running\|Completed'; then
-          sleep 5
-        else
+      while true; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd \
+          | awk 'NR>1 && $3 != "Running" && $3 != "Completed" { exit 1 }'; then
           echo "✅ Linkerd is fully running!"
           break
+        else
+          echo "⏳ Waiting for Linkerd pods to be ready..."
+          sleep 5
         fi
       done
 
