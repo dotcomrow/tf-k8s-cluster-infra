@@ -1567,29 +1567,6 @@ write_files:
                   - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
 
-      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-      NAMESPACE="apisix"
-      CONFIGMAP_NAME="apisix-dashboard"
-      TMP_FILE="$(mktemp)"
-
-      echo "📥 Fetching current apisix-dashboard ConfigMap..."
-      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" -o jsonpath='{.data.conf\.yaml}' > "$TMP_FILE"
-
-      echo "🧹 Removing authentication block from conf.yaml..."
-      sudo yq -i -y 'del(.authentication)' "$TMP_FILE"
-
-      echo "📦 Rebuilding updated ConfigMap..."
-      sudo kubectl create configmap "$CONFIGMAP_NAME" \
-        -n "$NAMESPACE" \
-        --from-file=conf.yaml="$TMP_FILE" \
-        --dry-run=client -o yaml | \
-        kubectl --kubeconfig="$KUBECONFIG" apply -f -
-
-      echo "♻️ Restarting apisix-dashboard pod..."
-      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix-dashboard
-
-      echo "✅ APISIX Dashboard authentication disabled."
-
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Service
