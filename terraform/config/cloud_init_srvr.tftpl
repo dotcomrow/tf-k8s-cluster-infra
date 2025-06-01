@@ -822,6 +822,74 @@ write_files:
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
 
+      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: management.cattle.io/v3
+      kind: GlobalRoleBinding
+      metadata:
+        name: github-k8s-cluster-admins
+        labels:
+          auth-provider: github
+      globalRoleName: admin
+      groupPrincipalName: 'github_team:${GITHUB_AUTH_VAL}'
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: github-team-cluster-admins
+      subjects:
+        - kind: Group
+          name: 'github_team:${GITHUB_AUTH_VAL}'  # Replace with your team
+          apiGroup: rbac.authorization.k8s.io
+      roleRef:
+        kind: ClusterRole
+        name: cluster-admin
+        apiGroup: rbac.authorization.k8s.io
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: ClusterRoleTemplateBinding
+      metadata:
+        name: github-team-cluster-owner
+        namespace: local            # Adjust if your cluster name is different
+      clusterName: local            # Adjust if your cluster name is different
+      groupName: 'github_team:${GITHUB_AUTH_VAL}'
+      roleTemplateName: cluster-owner
+      ---
+      accessMode: required
+      apiVersion: management.cattle.io/v3
+      kind: AuthConfig
+      metadata:
+        name: github
+        namespace: cattle-system
+      enabled: true
+      displayName: GitHub Authentication
+      clientId: '${GITHUB_CLIENT_ID}'
+      clientSecret: '${GITHUB_CLIENT_SECRET}'
+      hostname: 'github.com'
+      tls: true
+      type: githubConfig
+      logoutAllSupported: false
+      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
+      allowedPrincipalIds:
+        - 'github_team:${GITHUB_AUTH_VAL}'
+      scopes:
+        - 'read:user'
+        - 'user:email'
+        - 'read:org'
+      ---
+      apiVersion: management.cattle.io/v3
+      kind: Setting
+      metadata:
+        name: auth-provider
+      value: github
+      EOF
+
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
+      xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        delete users.management.cattle.io {}
+
+      bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
+
       # setup project
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
@@ -1381,7 +1449,7 @@ write_files:
       # end linkerd and jaeger install
 
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
-      for i in {1..60}; do
+      for i in {1..600}; do
         if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd | grep -v 'Running\|Completed'; then
           sleep 5
         else
@@ -1391,7 +1459,7 @@ write_files:
       done
 
       curl -sL https://run.linkerd.io/install | sh
-      export PATH=$PATH:$HOME/.linkerd2/bin
+      export PATH=$PATH:~/.linkerd2/bin
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
       sudo linkerd version
 
@@ -1540,74 +1608,6 @@ write_files:
         selector:
           app: oauth2-proxy
       EOF
-
-      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: management.cattle.io/v3
-      kind: GlobalRoleBinding
-      metadata:
-        name: github-k8s-cluster-admins
-        labels:
-          auth-provider: github
-      globalRoleName: admin
-      groupPrincipalName: 'github_team:${GITHUB_AUTH_VAL}'
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: github-team-cluster-admins
-      subjects:
-        - kind: Group
-          name: 'github_team:${GITHUB_AUTH_VAL}'  # Replace with your team
-          apiGroup: rbac.authorization.k8s.io
-      roleRef:
-        kind: ClusterRole
-        name: cluster-admin
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: management.cattle.io/v3
-      kind: ClusterRoleTemplateBinding
-      metadata:
-        name: github-team-cluster-owner
-        namespace: local            # Adjust if your cluster name is different
-      clusterName: local            # Adjust if your cluster name is different
-      groupName: 'github_team:${GITHUB_AUTH_VAL}'
-      roleTemplateName: cluster-owner
-      ---
-      accessMode: required
-      apiVersion: management.cattle.io/v3
-      kind: AuthConfig
-      metadata:
-        name: github
-        namespace: cattle-system
-      enabled: true
-      displayName: GitHub Authentication
-      clientId: '${GITHUB_CLIENT_ID}'
-      clientSecret: '${GITHUB_CLIENT_SECRET}'
-      hostname: 'github.com'
-      tls: true
-      type: githubConfig
-      logoutAllSupported: false
-      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
-      allowedPrincipalIds:
-        - 'github_team:${GITHUB_AUTH_VAL}'
-      scopes:
-        - 'read:user'
-        - 'user:email'
-        - 'read:org'
-      ---
-      apiVersion: management.cattle.io/v3
-      kind: Setting
-      metadata:
-        name: auth-provider
-      value: github
-      EOF
-
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
-      xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        delete users.management.cattle.io {}
-
-      bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
 
   - path: /etc/systemd/system/install-apisix-rancher.service
     permissions: '0644'
