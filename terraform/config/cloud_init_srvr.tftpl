@@ -1562,7 +1562,7 @@ write_files:
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" -o jsonpath='{.data.conf\.yaml}' > "$TMP_FILE"
 
       echo "🧹 Removing authentication block from conf.yaml..."
-      yq -i 'del(.authentication)' "$TMP_FILE"
+      sudo yq -i -y 'del(.authentication)' "$TMP_FILE"
 
       echo "📦 Rebuilding updated ConfigMap..."
       sudo kubectl create configmap "$CONFIGMAP_NAME" \
