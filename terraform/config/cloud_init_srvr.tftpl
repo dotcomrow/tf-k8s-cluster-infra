@@ -1450,7 +1450,7 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       echo "🔍 Verifying identity and proxy injection..."
-      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd --wait 10m || echo "❌ linkerd check failed"
+      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd --wait 2m || echo "❌ linkerd check failed"
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
