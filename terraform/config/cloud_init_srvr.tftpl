@@ -907,7 +907,7 @@ write_files:
       apiVersion: v1
       kind: Namespace
       metadata:
-        name: linkerd
+        name: linkerd-jaeger
         labels:
           linkerd.io/is-control-plane: "true"
         annotations:
@@ -917,12 +917,12 @@ write_files:
       kind: HelmChart
       metadata:
         name: linkerd    
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         chart: linkerd-crds
         repo: https://helm.linkerd.io/stable
         version: 1.8.0
-        targetNamespace: linkerd
+        targetnamespace: linkerd-jaeger
       EOF
       # end setup project
 
@@ -939,7 +939,7 @@ write_files:
       kind: ServerAuthorization
       metadata:
         name: allow-jaeger-unmeshed
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         server:
           name: jaeger-ui
@@ -996,7 +996,7 @@ write_files:
       subjects:
         - kind: ServiceAccount
           name: default
-          namespace: linkerd
+          namespace: linkerd-jaeger
       roleRef:
         kind: ClusterRole
         name: linkerd-create-trust-roots
@@ -1006,7 +1006,7 @@ write_files:
       kind: Role
       metadata:
         name: linkerd-configmap-editor
-        namespace: linkerd
+        namespace: linkerd-jaeger
       rules:
         - apiGroups: [""]
           resources: ["configmaps"]
@@ -1016,11 +1016,11 @@ write_files:
       kind: RoleBinding
       metadata:
         name: linkerd-configmap-editor-binding
-        namespace: linkerd
+        namespace: linkerd-jaeger
       subjects:
         - kind: ServiceAccount
           name: default
-          namespace: linkerd
+          namespace: linkerd-jaeger
       roleRef:
         kind: Role
         name: linkerd-configmap-editor
@@ -1030,7 +1030,7 @@ write_files:
       kind: Job
       metadata:
         name: linkerd-create-trust-roots
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         backoffLimit: 1
         template:
@@ -1083,7 +1083,7 @@ write_files:
       kind: Certificate
       metadata:
         name: linkerd-trust-anchor
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         isCA: true
         commonName: identity.linkerd.cluster.local
@@ -1096,7 +1096,7 @@ write_files:
       kind: Issuer
       metadata:
         name: linkerd-identity-issuer
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         ca:
           secretName: linkerd-trust-anchor
@@ -1105,7 +1105,7 @@ write_files:
       kind: Certificate
       metadata:
         name: linkerd-identity-issuer
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         secretName: linkerd-identity-issuer
         duration: 2160h
@@ -1153,7 +1153,7 @@ write_files:
       subjects:
         - kind: ServiceAccount
           name: default
-          namespace: linkerd
+          namespace: linkerd-jaeger
       roleRef:
         kind: ClusterRole
         name: helm-controller-namespace-patch
@@ -1236,12 +1236,12 @@ write_files:
       kind: HelmChart
       metadata:
         name: linkerd-control-plane
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         chart: linkerd-control-plane
         repo: https://helm.linkerd.io/stable
         version: 1.16.11
-        targetNamespace: linkerd
+        targetnamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
@@ -1261,12 +1261,12 @@ write_files:
       kind: HelmChart
       metadata:
         name: linkerd-viz
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         chart: linkerd-viz
         repo: https://helm.linkerd.io/stable
         version: 30.12.11
-        targetNamespace: linkerd
+        targetnamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
@@ -1289,12 +1289,12 @@ write_files:
       kind: HelmChart
       metadata:
         name: linkerd-jaeger
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         chart: linkerd-jaeger
         repo: https://helm.linkerd.io/stable
         version: 30.12.11
-        targetNamespace: linkerd
+        targetnamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
@@ -1303,7 +1303,7 @@ write_files:
       kind: Deployment
       metadata:
         name: oauth2-proxy-jaeger
-        namespace: linkerd
+        namespace: linkerd-jaeger
         labels:
           app: oauth2-proxy-jaeger
       spec:
@@ -1340,7 +1340,7 @@ write_files:
       kind: Service
       metadata:
         name: oauth2-proxy-jaeger
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         selector:
           app: oauth2-proxy-jaeger
@@ -1365,7 +1365,7 @@ write_files:
       subjects:
         - kind: ServiceAccount
           name: default
-          namespace: linkerd
+          namespace: linkerd-jaeger
       roleRef:
         kind: ClusterRole
         name: patch-linkerd-networkauth
@@ -1375,7 +1375,7 @@ write_files:
       kind: Job
       metadata:
         name: patch-kube-api-server-ownership
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         backoffLimit: 3
         template:
@@ -1398,7 +1398,7 @@ write_files:
       kind: Deployment
       metadata:
         name: oauth2-proxy
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         replicas: 1
         selector:
@@ -1433,7 +1433,7 @@ write_files:
       kind: Service
       metadata:
         name: oauth2-proxy
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         selector:
           app: oauth2-proxy
@@ -1706,7 +1706,7 @@ write_files:
           apisix.apache.org/timeout: "900"
           apisix.apache.org/websocket: "true"
           apisix.apache.org/enable-cors: "true"
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         http:
           - name: jaeger-auth
@@ -1741,7 +1741,7 @@ write_files:
           apisix.apache.org/timeout: "900"
           apisix.apache.org/websocket: "true"
           apisix.apache.org/enable-cors: "true"
-        namespace: linkerd
+        namespace: linkerd-jaeger
       spec:
         http:
           # Route protected UI paths via oauth2-proxy
