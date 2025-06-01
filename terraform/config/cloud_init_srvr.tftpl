@@ -1441,7 +1441,7 @@ write_files:
           sleep 5
         fi
       done
-      HOME=/home/ubuntu
+      export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
       sudo linkerd version
