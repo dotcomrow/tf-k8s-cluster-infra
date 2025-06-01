@@ -1283,7 +1283,7 @@ write_files:
           jaeger:
             enabled: true
             collector:
-              addr: collector.linkerd.svc.cluster.local:55678
+              addr: collector.linkerd-jaeger.svc.cluster.local:55678
       ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
