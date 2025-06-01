@@ -1455,6 +1455,9 @@ write_files:
           sleep 5
         fi
       done
+
+      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
