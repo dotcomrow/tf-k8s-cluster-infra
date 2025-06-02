@@ -898,7 +898,7 @@ write_files:
         name: infrastructure
         namespace: local
         labels:
-          field.cattle.io/projectId: infrastructure-project
+          field.cattle.io/projectId: infrastructure
       spec:
         displayName: "Infrastructure"
         description: "Infrastructure Project for Rancher and Application Resources"
@@ -968,19 +968,6 @@ write_files:
           verbs: ["get", "update", "patch"]
       ---
       apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: patch-linkerd-rolebinding
-      subjects:
-        - kind: ServiceAccount
-          name: patch-linkerd
-          namespace: cattle-system
-      roleRef:
-        kind: ClusterRole
-        name: patch-linkerd-role
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
       metadata:
         name: linkerd-create-trust-roots
@@ -1046,18 +1033,18 @@ write_files:
                   - |
                     echo "⏳ Waiting for linkerd-trust-anchor secret to exist..."
                     for i in {1..60}; do
-                      if kubectl get secret linkerd-trust-anchor -n linkerd &>/dev/null; then break; fi
+                      if kubectl get secret linkerd-trust-anchor -n linkerd-jaeger &>/dev/null; then break; fi
                       sleep 2
                     done
 
                     echo "📄 Creating linkerd-identity-trust-roots configmap..."
-                    kubectl get secret linkerd-trust-anchor -n linkerd -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/ca.crt
+                    kubectl get secret linkerd-trust-anchor -n linkerd-jaeger -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/ca.crt
                     
                     echo "📄 Creating linkerd-identity-trust-roots ConfigMap..."
-                    kubectl delete configmap linkerd-identity-trust-roots -n linkerd --ignore-not-found
+                    kubectl delete configmap linkerd-identity-trust-roots -n linkerd-jaeger --ignore-not-found
                     kubectl create configmap linkerd-identity-trust-roots \
                       --from-file=ca-bundle.crt=/tmp/ca.crt \
-                      -n linkerd
+                      -n linkerd-jaeger
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
@@ -1113,9 +1100,9 @@ write_files:
         subject:
           organizations:
             - linkerd.io
-        commonName: identity.linkerd.cluster.local
+        commonName: identity.linkerd-jaeger.cluster.local
         dnsNames:
-          - identity.linkerd.cluster.local
+          - identity.linkerd-jaeger.cluster.local
         isCA: true
         privateKey:
           algorithm: ECDSA        
@@ -1207,18 +1194,18 @@ write_files:
                     echo "🔧 Patching Gateway API CRD: httproutes.gateway.networking.k8s.io"
                     kubectl label crd httproutes.gateway.networking.k8s.io app.kubernetes.io/managed-by=Helm --overwrite || true
                     kubectl annotate crd httproutes.gateway.networking.k8s.io \
-                      meta.helm.sh/release-name=linkerd \
-                      meta.helm.sh/release-namespace=linkerd --overwrite || true
+                      meta.helm.sh/release-name=linkerd-jaeger \
+                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
 
                     echo "🔧 Patching Linkerd CRD: meshtlsauthentications.policy.linkerd.io"
                     kubectl annotate crd meshtlsauthentications.policy.linkerd.io \
-                      meta.helm.sh/release-name=linkerd \
-                      meta.helm.sh/release-namespace=linkerd --overwrite || true
+                      meta.helm.sh/release-name=linkerd-jaeger \
+                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
 
                     echo "🔧 Patching Linkerd CRD: networkauthentications.policy.linkerd.io"
                     kubectl annotate crd networkauthentications.policy.linkerd.io \
-                      meta.helm.sh/release-name=linkerd \
-                      meta.helm.sh/release-namespace=linkerd --overwrite || true
+                      meta.helm.sh/release-name=linkerd-jaeger \
+                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
 
                     echo "🔧 Patching remaining Linkerd CRDs"
                     for crd in \
@@ -1228,8 +1215,8 @@ write_files:
                       servers.policy.linkerd.io; do
                       echo "🔧 Patching $crd"
                       kubectl annotate crd $crd \
-                        meta.helm.sh/release-name=linkerd \
-                        meta.helm.sh/release-namespace=linkerd --overwrite || true
+                        meta.helm.sh/release-name=linkerd-jaeger \
+                        meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
                     done
       ---
       apiVersion: helm.cattle.io/v1
@@ -1251,11 +1238,11 @@ write_files:
               scheme: kubernetes.io/tls
               tls:
                 crtPEM: |
-                  {{ (lookup "v1" "Secret" "linkerd" "linkerd-identity-issuer").data."tls.crt" | b64dec }}
+                  {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-identity-issuer").data."tls.crt" | b64dec }}
                 keyPEM: |
-                  {{ (lookup "v1" "Secret" "linkerd" "linkerd-identity-issuer").data."tls.key" | b64dec }}
+                  {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-identity-issuer").data."tls.key" | b64dec }}
           trustAnchorsPEM: |
-            {{ (lookup "v1" "Secret" "linkerd" "linkerd-trust-anchor").data."ca.crt" | b64dec }}
+            {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-trust-anchor").data."ca.crt" | b64dec }}
       ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
@@ -1322,7 +1309,7 @@ write_files:
                 args:
                   - --provider=github
                   - --http-address=0.0.0.0:4180
-                  - --upstream=http://jaeger.linkerd.svc.cluster.local:16686
+                  - --upstream=http://jaeger.linkerd-jaeger.svc.cluster.local:16686
                   - --email-domain=*
                   - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
                   - --client-id=${JAEGER_CLIENT_ID}
@@ -1391,8 +1378,8 @@ write_files:
                   - |
                     kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
                       meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd \
-                      --overwrite -n linkerd
+                      meta.helm.sh/release-namespace=linkerd-jaeger \
+                      --overwrite -n linkerd-jaeger
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -1417,7 +1404,7 @@ write_files:
                 args:
                   - --provider=github
                   - --http-address=0.0.0.0:4180
-                  - --upstream=http://web.linkerd.svc.cluster.local:8084
+                  - --upstream=http://web.linkerd-jaeger.svc.cluster.local:8084
                   - --email-domain=*
                   - --cookie-secret=${LINKERD_OAUTH2_PROXY_COOKIE_SECRET}
                   - --client-id=${LINKERD_CLIENT_ID}
@@ -1446,7 +1433,7 @@ write_files:
 
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
       while true; do
-        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd \
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd-jaeger \
           | awk 'NR>1 && $3 != "Running" && $3 != "Completed" { exit 1 }'; then
           echo "✅ Linkerd is fully running!"
           break
@@ -1456,7 +1443,7 @@ write_files:
         fi
       done
 
-      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd-jaeger --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
@@ -1467,7 +1454,7 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       echo "🔍 Verifying identity and proxy injection..."
-      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd --wait 2m || echo "❌ linkerd check failed"
+      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd-jaeger --wait 2m || echo "❌ linkerd check failed"
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
