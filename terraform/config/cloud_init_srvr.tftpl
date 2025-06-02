@@ -1453,7 +1453,7 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
-      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd-jaeger --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd-jaeger --kubeconfig=/etc/rancher/rke2/rke2.yaml --ignore-not-found
 
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
       while true; do
