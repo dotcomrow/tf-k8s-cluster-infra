@@ -129,8 +129,6 @@ write_files:
       cat <<EOF > /etc/td-agent-bit/conf.d/cloudinit.conf
       [INPUT]
           Name               tail
-          Buffer_Chunk_Size 512KB
-          Buffer_Max_Size   5MB
           Mem_Buf_Limit     10MB
           Path               /var/log/cloud-init*.log
           Tag                cloudinit
@@ -178,8 +176,6 @@ write_files:
       [INPUT]
           Name    systemd
           Tag     journal.*
-          Buffer_Chunk_Size 512KB
-          Buffer_Max_Size   5MB
           Mem_Buf_Limit     10MB
           DB      /var/log/flb_journal.db
           Systemd_Filter  _SYSTEMD_UNIT=bootstrap-rke2.service
@@ -230,8 +226,6 @@ write_files:
       cat <<EOF > /etc/td-agent-bit/conf.d/syslog.conf
       [INPUT]
           Name              tail
-          Buffer_Chunk_Size 512KB
-          Buffer_Max_Size   5MB
           Mem_Buf_Limit     10MB
           Path              /var/log/syslog
           Tag               syslog
