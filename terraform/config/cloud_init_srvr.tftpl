@@ -933,6 +933,31 @@ write_files:
         sleep 2
       done
 
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: patch-kube-api-server-ownership
+        namespace: linkerd-jaeger
+      spec:
+        backoffLimit: 3
+        template:
+          spec:
+            restartPolicy: OnFailure
+            serviceAccountName: default
+            containers:
+              - name: create-configmap
+                image: bitnami/kubectl:latest
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
+                      meta.helm.sh/release-name=linkerd-jaeger \
+                      meta.helm.sh/release-namespace=linkerd-jaeger \
+                      --overwrite -n linkerd-jaeger
+      EOF
+
       echo "Installing Linkerd ServerAuthorization for Jaeger UI..."
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: policy.linkerd.io/v1beta1
@@ -1257,6 +1282,8 @@ write_files:
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
+          namespace: linkerd-jaeger
+          linkerdNamespace: linkerd-jaeger
           prometheus:
             enabled: true
           tap:
@@ -1357,29 +1384,6 @@ write_files:
         kind: ClusterRole
         name: patch-linkerd-networkauth
         apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: batch/v1
-      kind: Job
-      metadata:
-        name: patch-kube-api-server-ownership
-        namespace: linkerd-jaeger
-      spec:
-        backoffLimit: 3
-        template:
-          spec:
-            restartPolicy: OnFailure
-            serviceAccountName: default
-            containers:
-              - name: create-configmap
-                image: bitnami/kubectl:latest
-                command:
-                  - /bin/sh
-                  - -c
-                  - |
-                    kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
-                      meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd-jaeger \
-                      --overwrite -n linkerd-jaeger
       ---
       apiVersion: apps/v1
       kind: Deployment
