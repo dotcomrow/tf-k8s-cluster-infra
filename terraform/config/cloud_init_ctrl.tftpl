@@ -272,12 +272,14 @@ write_files:
 
       [INPUT]
           Name               tail
+          Buffer_Chunk_Size 512KB
+          Buffer_Max_Size   5MB
+          Mem_Buf_Limit     10MB
           Path               /var/log/cloud-init*.log
           Tag                cloudinit
           Read_from_Head     Off
           DB                 /var/log/flb_cloudinit.db
           DB.Sync            normal
-          Mem_Buf_Limit      5MB
           Skip_Long_Lines    On
 
       [FILTER]
@@ -321,12 +323,14 @@ write_files:
       cat <<EOF > /etc/td-agent-bit/conf.d/cloudinit.conf
       [INPUT]
           Name               tail
+          Buffer_Chunk_Size 512KB
+          Buffer_Max_Size   5MB
+          Mem_Buf_Limit     10MB
           Path               /var/log/cloud-init*.log
           Tag                cloudinit
           Read_from_Head     Off
           DB                 /var/log/flb_cloudinit.db
           DB.Sync            normal
-          Mem_Buf_Limit      5MB
           Skip_Long_Lines    On
 
       [FILTER]
@@ -336,6 +340,11 @@ write_files:
           Parser    cloudinit_parser
           Reserve_Data true
           Preserve_Key true
+
+      [FILTER]
+          Name modify
+          Match cloudinit
+          Add logName cloudinit
 
       [FILTER]
           Name   modify
@@ -371,6 +380,9 @@ write_files:
       [INPUT]
           Name    systemd
           Tag     journal.*
+          Buffer_Chunk_Size 512KB
+          Buffer_Max_Size   5MB
+          Mem_Buf_Limit     10MB
           DB      /var/log/flb_journal.db
           Systemd_Filter  _SYSTEMD_UNIT=bootstrap-rke2.service
           Systemd_Filter  _SYSTEMD_UNIT=rke2-server.service
@@ -389,6 +401,11 @@ write_files:
           Name   modify
           Match  journal.*
           Rename message textPayload
+
+      [FILTER]
+          Name modify
+          Match journal.*
+          Add logName systemd-journal
 
       [FILTER]
           Name    nest
@@ -415,11 +432,13 @@ write_files:
       cat <<EOF > /etc/td-agent-bit/conf.d/syslog.conf
       [INPUT]
           Name              tail
+          Buffer_Chunk_Size 512KB
+          Buffer_Max_Size   5MB
+          Mem_Buf_Limit     10MB
           Path              /var/log/syslog
           Tag               syslog
           Read_from_Head    Off
           DB                /var/log/flb_syslog.db
-          Mem_Buf_Limit     5MB
           Skip_Long_Lines   On
 
       [FILTER]
@@ -434,6 +453,11 @@ write_files:
           Name   modify
           Match  syslog
           Rename message textPayload
+
+      [FILTER]
+          Name modify
+          Match syslog
+          Add logName syslog
 
       [FILTER]
           Name    nest
