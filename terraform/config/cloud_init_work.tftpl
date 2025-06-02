@@ -420,6 +420,7 @@ write_files:
       [OUTPUT]
           Name  stackdriver
           Match cloudinit
+          request_timeout 30s
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
           location ${MONITORED_RESOURCE_LOCATION}
@@ -468,6 +469,7 @@ write_files:
       [OUTPUT]
           Name  stackdriver
           Match cloudinit
+          request_timeout 30s
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
           location ${MONITORED_RESOURCE_LOCATION}
@@ -512,6 +514,7 @@ write_files:
       [OUTPUT]
           Name  stackdriver
           Match journal.*
+          request_timeout 30s
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
           location ${MONITORED_RESOURCE_LOCATION}
@@ -556,6 +559,7 @@ write_files:
       [OUTPUT]
           Name  stackdriver
           Match syslog
+          request_timeout 30s
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
           location ${MONITORED_RESOURCE_LOCATION}

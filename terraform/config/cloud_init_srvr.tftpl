@@ -165,6 +165,7 @@ write_files:
       [OUTPUT]
           Name  stackdriver
           Match cloudinit
+          request_timeout 30s
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
           location ${MONITORED_RESOURCE_LOCATION}
@@ -178,6 +179,7 @@ write_files:
       [INPUT]
           Name    systemd
           Tag     journal.*
+          request_timeout 30s
           DB      /var/log/flb_journal.db
           Systemd_Filter  _SYSTEMD_UNIT=bootstrap-rke2.service
           Systemd_Filter  _SYSTEMD_UNIT=rke2-server.service
@@ -208,6 +210,7 @@ write_files:
 
       [OUTPUT]
           Name  stackdriver
+          request_timeout 30s
           Match journal.*
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
@@ -252,6 +255,7 @@ write_files:
 
       [OUTPUT]
           Name  stackdriver
+          request_timeout 30s
           Match syslog
           google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
           resource ${MONITORED_RESOURCE_TYPE}
