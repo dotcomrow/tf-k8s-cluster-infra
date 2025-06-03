@@ -1486,12 +1486,6 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
-      sudo kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
-        meta.helm.sh/release-name=linkerd-viz \
-        meta.helm.sh/release-namespace=linkerd-jaeger \
-        --overwrite -n linkerd-jaeger \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml 
-
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
       while true; do
         if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd-jaeger \
@@ -1499,6 +1493,25 @@ write_files:
           echo "✅ Linkerd is fully running!"
           break
         else
+          
+          RESOURCE_NAME="kube-api-server"
+          NAMESPACE="linkerd-jaeger"
+          RELEASE_NAME="linkerd-viz"
+          KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+
+          echo "🔍 Checking if NetworkAuthentication '$RESOURCE_NAME' exists in namespace '$NAMESPACE'..."
+
+          if sudo kubectl get networkauthentication.policy.linkerd.io "$RESOURCE_NAME" -n "$NAMESPACE" --kubeconfig="$KUBECONFIG" &>/dev/null; then
+            echo "✅ Resource exists. Patching Helm annotations..."
+            sudo kubectl annotate networkauthentication.policy.linkerd.io "$RESOURCE_NAME" \
+              meta.helm.sh/release-name="$RELEASE_NAME" \
+              meta.helm.sh/release-namespace="$NAMESPACE" \
+              --overwrite -n "$NAMESPACE" \
+              --kubeconfig="$KUBECONFIG"
+          else
+            echo "⚠️ Resource '$RESOURCE_NAME' not found in namespace '$NAMESPACE'. Skipping annotation."
+          fi
+
           echo "⏳ Waiting for Linkerd pods to be ready..."
           sleep 5
         fi
