@@ -939,6 +939,12 @@ write_files:
         values: |
           namespace: linkerd-jaeger
       ---
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: linkerd-heartbeat
+        namespace: linkerd-jaeger
+      ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
       metadata:
