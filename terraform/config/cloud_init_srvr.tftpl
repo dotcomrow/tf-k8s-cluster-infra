@@ -1372,7 +1372,7 @@ write_files:
           jaeger:
             enabled: true
             collector:
-              addr: collector.linkerd-jaeger.svc.cluster.local:14250
+              addr: collector.linkerd-jaeger.svc.cluster.local:55678
       ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
@@ -1387,6 +1387,20 @@ write_files:
         valuesContent: |-
           installNamespace: false
           skipNamespaceCheck: true
+          collector:
+            enabled: true
+            extraArgs:
+              - "--collector.otlp.enabled=false"
+              - "--collector.zipkin.host-port=:9411"
+              - "--reporter.grpc.host-port=jaeger-collector-headless.linkerd-jaeger:55678"
+              - "--collector.grpc-port=55678"
+              - "--collector.opencensus.enabled=true"
+              - "--collector.opencensus.port=55678"
+            service:
+              ports:
+                - name: grpc
+                  port: 55678
+                  targetPort: 55678
       ---
       apiVersion: apps/v1
       kind: Deployment
