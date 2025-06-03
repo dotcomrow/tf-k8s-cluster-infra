@@ -1389,13 +1389,10 @@ write_files:
           skipNamespaceCheck: true
           collector:
             enabled: true
+            grpc:
+              enabled: true
             extraArgs:
-              - "--collector.otlp.enabled=false"
-              - "--collector.zipkin.host-port=:9411"
-              - "--reporter.grpc.host-port=jaeger-collector-headless.linkerd-jaeger:55678"
-              - "--collector.grpc-port=55678"
-              - "--collector.opencensus.enabled=true"
-              - "--collector.opencensus.port=55678"
+              - "--collector.grpc-server.host-port=:55678"
             service:
               ports:
                 - name: grpc
