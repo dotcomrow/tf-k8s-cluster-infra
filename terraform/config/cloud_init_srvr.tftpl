@@ -928,6 +928,17 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
       ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: linkerd-config
+        namespace: linkerd
+        labels:
+          linkerd.io/control-plane-ns: linkerd-jaeger
+      data:
+        values: |
+          namespace: linkerd-jaeger
+      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
