@@ -1547,6 +1547,7 @@ write_files:
       sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace apisix config.linkerd.io/proxy-opencensus-endpoint=collector.linkerd-jaeger.svc.cluster.local:14250 --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
     
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
@@ -1852,6 +1853,7 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
           linkerd.io/inject: enabled
+          config.linkerd.io/proxy-opencensus-endpoint: collector.linkerd-jaeger.svc.cluster.local:14250
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2076,6 +2078,7 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
           linkerd.io/inject: enabled
+          config.linkerd.io/proxy-opencensus-endpoint: collector.linkerd-jaeger.svc.cluster.local:14250
       ---
       apiVersion: v1
       kind: Secret
