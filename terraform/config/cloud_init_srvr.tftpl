@@ -1621,7 +1621,7 @@ write_files:
                   - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
                   - --client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}
                   - --client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}
-                  - --redirect-url=https://gateway-manager.suncoast.systems/oauth2/callback
+                  - --redirect-url=https://gateway-manager.${RANCHER_DOMAIN}/oauth2/callback
                   - --scope=user:email,read:org
                   - --cookie-secure=true
                   - --set-authorization-header=true
@@ -1771,7 +1771,7 @@ write_files:
           - name: jaeger-auth
             match:
               hosts:
-                - jaeger.suncoast.systems
+                - jaeger.${RANCHER_DOMAIN}
               paths:
                 - "/"
                 - "/oauth2/*"
@@ -1784,7 +1784,7 @@ write_files:
             websocket: true
             match:
               hosts:
-                - jaeger.suncoast.systems
+                - jaeger.${RANCHER_DOMAIN}
               paths:
                 - "/api/*"
                 - "/metrics/*"
@@ -1807,7 +1807,7 @@ write_files:
           - name: protected-ui
             match:
               hosts:
-                - linkerd.suncoast.systems
+                - linkerd.${RANCHER_DOMAIN}
               paths:
                 - "/"
                 - "/oauth2/*"
@@ -1821,7 +1821,7 @@ write_files:
             websocket: true
             match:
               hosts:
-                - linkerd.suncoast.systems
+                - linkerd.${RANCHER_DOMAIN}
               paths:
                 - "/api/*"
                 - "/metrics/*"
