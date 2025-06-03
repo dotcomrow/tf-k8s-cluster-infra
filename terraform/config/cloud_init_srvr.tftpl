@@ -944,12 +944,22 @@ write_files:
       metadata:
         name: linkerd-heartbeat
         namespace: linkerd-jaeger
-      ---
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: linkerd-heartbeat
-        namespace: linkerd
+        annotations:
+          meta.helm.sh/release-name: "linkerd-control-plane"
+          meta.helm.sh/release-namespace: "linkerd-jaeger"
+        labels:
+          app.kubernetes.io/managed-by: "Helm" 
+      --- 
+      apiVersion: v1 
+      kind: ServiceAccount 
+      metadata:   
+        name: linkerd-heartbeat   
+        namespace: linkerd   
+        annotations:     
+          meta.helm.sh/release-name: "linkerd-control-plane"     
+          meta.helm.sh/release-namespace: "linkerd-jaeger"
+        labels:
+          app.kubernetes.io/managed-by: "Helm"
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
