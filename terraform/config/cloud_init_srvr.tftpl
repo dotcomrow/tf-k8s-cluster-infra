@@ -939,6 +939,31 @@ write_files:
         values: |
           namespace: linkerd-jaeger
       ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: ext-namespace-metadata-linkerd-config
+        namespace: linkerd
+      rules:
+        - apiGroups: [""]
+          resources: ["configmaps"]
+          resourceNames: ["linkerd-config"]
+          verbs: ["get"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: ext-namespace-metadata-linkerd-config
+        namespace: linkerd
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: ext-namespace-metadata-linkerd-config
+      subjects:
+        - kind: ServiceAccount
+          name: namespace-metadata
+          namespace: linkerd-jaeger
+      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
@@ -1461,7 +1486,11 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
-      sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd-jaeger --kubeconfig=/etc/rancher/rke2/rke2.yaml --ignore-not-found
+      sudo kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
+        meta.helm.sh/release-name=linkerd-viz \
+        meta.helm.sh/release-namespace=linkerd-jaeger \
+        --overwrite -n linkerd-jaeger \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml 
 
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
       while true; do
