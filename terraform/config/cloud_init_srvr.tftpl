@@ -1571,7 +1571,7 @@ write_files:
           in_oc && /port:/ { sub(/port:.*/, "port: 55678"); print; next }
           in_oc && !found++ { print "    port: 55678" }
           { print }
-        ' "$TEMP_FILE" > "${TEMP_FILE}.patched"
+        ' "$TEMP_FILE" > "$TEMP_FILE.patched"
       else
         # Inject new opencensus block
         awk '
@@ -1582,12 +1582,12 @@ write_files:
             next
           }
           { print }
-        ' "$TEMP_FILE" > "${TEMP_FILE}.patched"
+        ' "$TEMP_FILE" > "$TEMP_FILE.patched"
       fi
 
       echo "📤 Updating ConfigMap with new configuration..."
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
-        --from-file=collector-config.yaml="${TEMP_FILE}.patched" \
+        --from-file=collector-config.yaml="$TEMP_FILE.patched" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f -
 
       echo "♻️ Restarting collector deployment..."
@@ -1596,7 +1596,7 @@ write_files:
       echo "✅ OpenCensus receiver updated to port 55678 and collector restarted."
 
       # Cleanup
-      rm -f "$TEMP_FILE" "${TEMP_FILE}.patched"
+      rm -f "$TEMP_FILE" "$TEMP_FILE.patched"
 
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
