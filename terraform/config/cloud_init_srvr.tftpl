@@ -1389,10 +1389,8 @@ write_files:
           skipNamespaceCheck: true
           collector:
             enabled: true
-            grpc:
-              enabled: true
-            extraArgs:
-              - "--collector.grpc-server.host-port=:55678"
+            config:
+              existingConfigMap: collector-config
             service:
               ports:
                 - name: grpc
@@ -1554,6 +1552,52 @@ write_files:
         fi
       done
 
+      NAMESPACE="linkerd-jaeger"
+      CONFIGMAP_NAME="collector-config"
+      KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
+      TEMP_FILE=$(mktemp)
+
+      echo "📥 Fetching current ConfigMap $CONFIGMAP_NAME in namespace $NAMESPACE..."
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" -o json | \
+        jq '.data["collector-config.yaml"]' -r > "$TEMP_FILE"
+
+      echo "🔧 Patching OpenCensus receiver to set port 55678..."
+      # Check if receivers.opencensus exists
+      if grep -q "^ *opencensus:" "$TEMP_FILE"; then
+        # Replace or add the port line under opencensus
+        awk '
+          /^ *opencensus:/ { print; in_oc=1; next }
+          in_oc && /^[^ ]/ { in_oc=0 }
+          in_oc && /port:/ { sub(/port:.*/, "port: 55678"); print; next }
+          in_oc && !found++ { print "    port: 55678" }
+          { print }
+        ' "$TEMP_FILE" > "${TEMP_FILE}.patched"
+      else
+        # Inject new opencensus block
+        awk '
+          /^receivers:/ {
+            print
+            print "  opencensus:"
+            print "    port: 55678"
+            next
+          }
+          { print }
+        ' "$TEMP_FILE" > "${TEMP_FILE}.patched"
+      fi
+
+      echo "📤 Updating ConfigMap with new configuration..."
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
+        --from-file=collector-config.yaml="${TEMP_FILE}.patched" \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f -
+
+      echo "♻️ Restarting collector deployment..."
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n "$NAMESPACE" rollout restart deployment collector
+
+      echo "✅ OpenCensus receiver updated to port 55678 and collector restarted."
+
+      # Cleanup
+      rm -f "$TEMP_FILE" "${TEMP_FILE}.patched"
+
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
@@ -1576,7 +1620,6 @@ write_files:
       sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo -E kubectl annotate namespace apisix config.linkerd.io/proxy-opencensus-endpoint=collector.linkerd-jaeger.svc.cluster.local:14250 --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
     
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
@@ -1882,7 +1925,6 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
           linkerd.io/inject: enabled
-          config.linkerd.io/proxy-opencensus-endpoint: collector.linkerd-jaeger.svc.cluster.local:14250
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2107,7 +2149,6 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
           linkerd.io/inject: enabled
-          config.linkerd.io/proxy-opencensus-endpoint: collector.linkerd-jaeger.svc.cluster.local:14250
       ---
       apiVersion: v1
       kind: Secret
