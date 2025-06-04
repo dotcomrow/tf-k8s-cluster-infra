@@ -1521,6 +1521,7 @@ write_files:
       EOF
       # end linkerd and jaeger install
 
+      REMOVED=0
       echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
       while true; do
         if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd-jaeger \
@@ -1533,7 +1534,7 @@ write_files:
           NAMESPACE="linkerd-jaeger"
           RELEASE_NAME="linkerd-jaeger"
           KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-          REMOVED=0
+          
 
           echo "🔍 Checking if NetworkAuthentication '$RESOURCE_NAME' exists in namespace '$NAMESPACE'..."
           if [ "$REMOVED" -eq 1 ]; then
