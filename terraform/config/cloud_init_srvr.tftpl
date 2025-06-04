@@ -1379,6 +1379,11 @@ write_files:
       metadata:
         name: collector-config
         namespace: linkerd-jaeger
+        labels:
+          app.kubernetes.io/managed-by: Helm
+        annotations:
+          meta.helm.sh/release-name: linkerd-jaeger
+          meta.helm.sh/release-namespace: linkerd-jaeger
       data:
         collector.yaml: |
           receivers:
@@ -1388,7 +1393,7 @@ write_files:
             batch:
           exporters:
             jaeger:
-              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
+              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:55678
               tls:
                 insecure: true
           service:
