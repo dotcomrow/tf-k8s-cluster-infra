@@ -1374,35 +1374,6 @@ write_files:
             collector:
               addr: collector.linkerd-jaeger.svc.cluster.local:55678
       ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: collector-config
-        namespace: linkerd-jaeger
-        labels:
-          app.kubernetes.io/managed-by: Helm
-        annotations:
-          meta.helm.sh/release-name: linkerd-jaeger
-          meta.helm.sh/release-namespace: linkerd-jaeger
-      data:
-        collector.yaml: |
-          receivers:
-            opencensus:
-              port: 55678
-          processors:
-            batch:
-          exporters:
-            jaeger:
-              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:55678
-              tls:
-                insecure: true
-          service:
-            pipelines:
-              traces:
-                receivers: [opencensus]
-                processors: [batch]
-                exporters: [jaeger]
-      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
@@ -1418,12 +1389,12 @@ write_files:
           skipNamespaceCheck: true
           collector:
             enabled: true
-            config:
+            config: |
               receivers:
                 opencensus:
                   port: 55678
               processors:
-                batch: {}
+                batch:
               exporters:
                 jaeger:
                   endpoint: jaeger.linkerd-jaeger.svc.cluster.local:55678
