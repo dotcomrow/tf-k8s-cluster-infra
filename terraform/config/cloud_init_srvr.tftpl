@@ -1392,14 +1392,12 @@ write_files:
             config: |
               receivers:
                 opencensus:
-                  protocols:
-                    grpc:
-                      endpoint: 0.0.0.0:55678
+                  address: ":55678"
               processors:
                 batch:
               exporters:
                 jaeger:
-                  endpoint: jaeger.linkerd-jaeger.svc.cluster.local:55678
+                  endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
                   tls:
                     insecure: true
               service:
