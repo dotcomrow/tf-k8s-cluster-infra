@@ -1043,6 +1043,17 @@ write_files:
           name: jaeger-ui
         client:
           unauthenticated: true
+      ---
+      apiVersion: policy.linkerd.io/v1beta1
+      kind: ServerAuthorization
+      metadata:
+        name: allow-jaeger-unmeshed
+        namespace: linkerd
+      spec:
+        server:
+          name: jaeger-ui
+        client:
+          unauthenticated: true
       EOF
 
       # install linkerd and jaeger
