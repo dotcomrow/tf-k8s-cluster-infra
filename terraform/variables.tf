@@ -1,8 +1,3 @@
-variable "proxmox_api_endpoint" {
-  description = "The Proxmox API endpoint"
-  type        = string
-}
-
 variable "proxmox_api_username" {
   description = "The Proxmox API username"
   type        = string

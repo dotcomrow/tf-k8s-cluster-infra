@@ -13,7 +13,7 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = var.proxmox_api_endpoint
+  endpoint  = "https://${var.PROXMOX_HOSTNAME}.${var.RANCHER_DOMAIN}:8006/api2/json"
   username = var.proxmox_api_username
   password = var.proxmox_api_password
   insecure  = true
