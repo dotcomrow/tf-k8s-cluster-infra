@@ -1392,7 +1392,9 @@ write_files:
             config: |
               receivers:
                 opencensus:
-                  port: 55678
+                  protocols:
+                    grpc:
+                      endpoint: 0.0.0.0:55678
               processors:
                 batch:
               exporters:
