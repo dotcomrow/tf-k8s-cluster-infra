@@ -1805,9 +1805,7 @@ write_files:
         --set toolkit.env[0].name=CONTAINERD_SOCKET \
         --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock" \
         --set devicePlugin.env[0].name=HOST_ULIMIT \
-        --set-string devicePlugin.env[0].value="1048576" \
-        --set devicePlugin.args[0]="--no-health-check" \
-        --set devicePlugin.args[1]="--fail-on-init-error=false"
+        --set-string devicePlugin.env[0].value="1048576" 
 
       # echo "🔧 Patching GPU Operator default config..."
       # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch clusterpolicies.nvidia.com/cluster-policy         \
