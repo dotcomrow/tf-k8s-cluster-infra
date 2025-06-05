@@ -1418,8 +1418,23 @@ write_files:
           skipNamespaceCheck: true
           collector:
             enabled: true
-            configMap: ""  # disables Helm’s internal one
-            existingConfigMap: collector-config
+            config:
+              receivers:
+                opencensus:
+                  port: 55678
+              processors:
+                batch: {}
+              exporters:
+                jaeger:
+                  endpoint: jaeger.linkerd-jaeger.svc.cluster.local:55678
+                  tls:
+                    insecure: true
+              service:
+                pipelines:
+                  traces:
+                    receivers: [opencensus]
+                    processors: [batch]
+                    exporters: [jaeger]
             service:
               ports:
                 - name: grpc
