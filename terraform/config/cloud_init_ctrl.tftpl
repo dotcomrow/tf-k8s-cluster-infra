@@ -199,6 +199,47 @@ write_files:
 
       sudo update-initramfs -u
 
+      # -------------------------------
+      # 🧠 Setup dnsmasq for split DNS (svc.cluster.local + internal.lan)
+      # -------------------------------
+      echo "🛠 Installing and configuring dnsmasq for split DNS..."
+      sudo apt-get update
+      sudo apt-get install -y dnsmasq
+
+      # Configure split DNS forwarding
+      sudo tee /etc/dnsmasq.d/k8s-split-dns.conf > /dev/null <<EOF
+      # Forward Kubernetes service lookups to CoreDNS
+      server=/svc.cluster.local/10.43.0.10
+
+      # Forward internal LAN lookups to your LAN DNS
+      server=/internal.lan/10.0.0.10
+
+      # Forward everything else to LAN DNS as well
+      server=10.0.0.10
+
+      # Listen locally
+      listen-address=127.0.0.1
+
+      # Don't use /etc/resolv.conf
+      no-resolv
+      EOF
+
+      # Ensure dnsmasq is listening on localhost
+      sudo sed -i 's/^#\?listen-address=.*/listen-address=127.0.0.1/' /etc/dnsmasq.conf || echo 'listen-address=127.0.0.1' | sudo tee -a /etc/dnsmasq.conf
+
+      # Restart dnsmasq
+      sudo systemctl enable dnsmasq
+      sudo systemctl restart dnsmasq
+
+      # Update resolv.conf to use dnsmasq
+      sudo rm -f /etc/resolv.conf
+      echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf > /dev/null
+
+      echo "✅ dnsmasq is now resolving:"
+      echo "  - *.svc.cluster.local → 10.43.0.10"
+      echo "  - *.internal.lan      → 10.0.0.10"
+      echo "  - all others          → 10.0.0.10"
+
   - path: /etc/systemd/system/setup-hosts-dns.service
     permissions: '0644'
     content: |
