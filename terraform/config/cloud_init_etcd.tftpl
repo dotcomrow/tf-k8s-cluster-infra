@@ -189,6 +189,14 @@ write_files:
       # 🧠 Setup dnsmasq for split DNS (svc.cluster.local + internal.lan)
       # -------------------------------
       echo "🛠 Installing and configuring dnsmasq for split DNS..."
+      for i in {1..30}; do
+        if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+          echo "Waiting for apt lock to be released..."
+          sleep 2
+        else
+          break
+        fi
+      done
       sudo apt-get update
       sudo apt-get install -y dnsmasq
 
