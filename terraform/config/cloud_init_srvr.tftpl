@@ -816,10 +816,38 @@ write_files:
       EOF
 
       # 2. Render the chart locally to YAML
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml template ingress-nginx ingress-nginx \
-        --repo https://kubernetes.github.io/ingress-nginx \
-        --namespace ingress-nginx \
-        --values /tmp/ingress-values.yaml > /tmp/ingress-rendered.yaml
+      # ─── Tunables ────────────────────────────────────────────────────────────
+      MAX_ATTEMPTS=0          # 0 = retry forever ─ change to e.g. 30 to give up eventually
+      SLEEP_SECONDS=10
+      VALUES_FILE=/tmp/ingress-values.yaml
+      RENDER_FILE=/tmp/ingress-rendered.yaml
+      KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+      # ─────────────────────────────────────────────────────────────────────────
+
+      attempt=0
+      while :; do
+        attempt=$(( attempt + 1 ))
+        echo "▶️  [$attempt] Rendering ingress-nginx chart …"
+
+        if sudo helm --kubeconfig "$KUBECONFIG" \
+              template ingress-nginx ingress-nginx \
+              --repo https://kubernetes.github.io/ingress-nginx \
+              --namespace ingress-nginx \
+              --values "$VALUES_FILE" > "${RENDER_FILE}.tmp"; then
+          mv "${RENDER_FILE}.tmp" "$RENDER_FILE"
+          echo "✅  Render succeeded on attempt #$attempt"
+          break
+        fi
+
+        # Give up if we hit the hard limit (unless MAX_ATTEMPTS=0 → infinite)
+        if [[ $MAX_ATTEMPTS -ne 0 && $attempt -ge $MAX_ATTEMPTS ]]; then
+          echo "❌  Helm template failed after $attempt attempts"
+          exit 1
+        fi
+
+        echo "🔄  Helm template failed — retrying in ${SLEEP_SECONDS}s…"
+        sleep "$SLEEP_SECONDS"
+      done
 
       # 3. Fix invalid `progressDeadlineSeconds: 0` manually:
       sed -i 's/progressDeadlineSeconds: 0/progressDeadlineSeconds: 600/' /tmp/ingress-rendered.yaml
