@@ -28,6 +28,7 @@ packages:
   - linux-firmware
   - alsa-utils
   - ubuntu-drivers-common
+  - dnsmasq
 
 growpart:
   mode: auto
@@ -135,42 +136,50 @@ write_files:
       HOSTNAME=$(hostname)
       grep -q "127.0.1.1 $HOSTNAME" /etc/hosts || echo "127.0.1.1 $HOSTNAME" >> /etc/hosts
 
-      cat <<EOF | sudo tee /etc/systemd/resolved.conf > /dev/null
-      [Resolve]
-      DNS=10.43.0.10 10.0.0.10
-      FallbackDNS=1.1.1.1 8.8.8.8
-      Domains=~svc.cluster.local ~internal.lan
-      MulticastDNS=no
-      LLMNR=no
-      DNSSEC=no
-      Cache=yes
-      EOF
-
-      sudo systemctl enable systemd-resolved
-      sudo systemctl restart systemd-resolved
-
-      # Ensure systemd-resolved uses proper nameservers
+      # ---------------------------------------------
+      # 🧹 Disable systemd-resolved to free port 53
+      # ---------------------------------------------
+      echo "🧹 Disabling systemd-resolved..."
+      sudo systemctl stop systemd-resolved || true
+      sudo systemctl disable systemd-resolved || true
       sudo rm -f /etc/resolv.conf
-      sudo ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf
+      echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf > /dev/null
 
-      sudo tee /etc/systemd/system/sysctl-ensure.service > /dev/null <<EOF
-      [Unit]
-      Description=Force re-apply sysctl settings
-      After=network.target
-      Wants=network.target
+      # ---------------------------------------------
+      # ⚙️ Configure dnsmasq split-DNS
+      # ---------------------------------------------
+      sudo tee /etc/dnsmasq.d/k8s-split-dns.conf > /dev/null <<EOF
+      # Forward Kubernetes service lookups to CoreDNS
+      server=/svc.cluster.local/10.43.0.10
 
-      [Service]
-      Type=oneshot
-      ExecStart=/sbin/sysctl --system
+      # Forward internal LAN lookups to LAN DNS
+      server=/internal.lan/10.0.0.10
 
-      [Install]
-      WantedBy=multi-user.target
+      # Forward everything else to LAN DNS
+      server=10.0.0.10
+
+      # Listen locally
+      listen-address=127.0.0.1
+
+      # Don't use /etc/resolv.conf
+      no-resolv
       EOF
 
-      sudo systemctl daemon-reexec
-      sudo systemctl enable sysctl-ensure.service
+      # Ensure dnsmasq global config allows localhost
+      sudo sed -i 's/^#\?listen-address=.*/listen-address=127.0.0.1/' /etc/dnsmasq.conf || echo 'listen-address=127.0.0.1' | sudo tee -a /etc/dnsmasq.conf
 
-      # Disable IPv6
+      sudo systemctl enable dnsmasq
+      sudo systemctl restart dnsmasq
+
+      # Confirm DNS server
+      echo "✅ dnsmasq is resolving:"
+      echo "  - *.svc.cluster.local → 10.43.0.10"
+      echo "  - *.internal.lan      → 10.0.0.10"
+      echo "  - all others          → 10.0.0.10"
+
+      # ---------------------------------------------
+      # 🛡 IPv6 Hard Disable (Optional)
+      # ---------------------------------------------
       sudo modprobe -r ip6_tables || true
       sudo modprobe -r nf_defrag_ipv6 || true
       sudo modprobe -r nf_conntrack_ipv6 || true
@@ -192,54 +201,25 @@ write_files:
 
       sudo update-initramfs -u
 
-      # -------------------------------
-      # 🧠 Setup dnsmasq for split DNS (svc.cluster.local + internal.lan)
-      # -------------------------------
-      echo "🛠 Installing and configuring dnsmasq for split DNS..."
-      for i in {1..30}; do
-        if sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
-          echo "Waiting for apt lock to be released..."
-          sleep 2
-        else
-          break
-        fi
-      done
-      sudo apt-get update
-      sudo apt-get install -y dnsmasq
+      # ---------------------------------------------
+      # 🔁 Force sysctl re-apply on boot
+      # ---------------------------------------------
+      sudo tee /etc/systemd/system/sysctl-ensure.service > /dev/null <<EOF
+      [Unit]
+      Description=Force re-apply sysctl settings
+      After=network.target
+      Wants=network.target
 
-      # Configure split DNS forwarding
-      sudo tee /etc/dnsmasq.d/k8s-split-dns.conf > /dev/null <<EOF
-      # Forward Kubernetes service lookups to CoreDNS
-      server=/svc.cluster.local/10.43.0.10
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/sysctl --system
 
-      # Forward internal LAN lookups to your LAN DNS
-      server=/internal.lan/10.0.0.10
-
-      # Forward everything else to LAN DNS as well
-      server=10.0.0.10
-
-      # Listen locally
-      listen-address=127.0.0.1
-
-      # Don't use /etc/resolv.conf
-      no-resolv
+      [Install]
+      WantedBy=multi-user.target
       EOF
 
-      # Ensure dnsmasq is listening on localhost
-      sudo sed -i 's/^#\?listen-address=.*/listen-address=127.0.0.1/' /etc/dnsmasq.conf || echo 'listen-address=127.0.0.1' | sudo tee -a /etc/dnsmasq.conf
-
-      # Restart dnsmasq
-      sudo systemctl enable dnsmasq
-      sudo systemctl restart dnsmasq
-
-      # Update resolv.conf to use dnsmasq
-      sudo rm -f /etc/resolv.conf
-      echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf > /dev/null
-
-      echo "✅ dnsmasq is now resolving:"
-      echo "  - *.svc.cluster.local → 10.43.0.10"
-      echo "  - *.internal.lan      → 10.0.0.10"
-      echo "  - all others          → 10.0.0.10"
+      sudo systemctl daemon-reexec
+      sudo systemctl enable sysctl-ensure.service
 
   - path: /etc/systemd/system/setup-hosts-dns.service
     permissions: '0644'
