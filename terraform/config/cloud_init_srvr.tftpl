@@ -738,7 +738,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-webhook -n cert-manager
 
       echo "📥 Installing MetalLB..."
-      kubectl apply -f - <<EOF
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
       kind: Project
       metadata:
@@ -759,7 +759,6 @@ write_files:
           field.cattle.io/projectId: local:infrastructure
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          # MetalLB manifest adds these two; include them so `kubectl apply` sees no diff
           app.kubernetes.io/name: metallb
           pod-security.kubernetes.io/enforce: privileged
       EOF
