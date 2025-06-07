@@ -1414,7 +1414,7 @@ write_files:
       spec:
         chart: linkerd-control-plane
         repo: https://helm.linkerd.io/stable
-        version: 1.16.11
+        version: 1.17.1
         targetNamespace: linkerd-jaeger
         valuesContent: |-
           installNamespace: false
@@ -1432,8 +1432,8 @@ write_files:
             {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-trust-anchor").data."ca.crt" | b64dec }}
           global:
             proxyInit:
-              ignoreInboundPorts: "55678"
-              ignoreOutboundPorts: "55678"
+              ignoreInboundPorts: "4190,4191,4567,4568,55678"
+              ignoreOutboundPorts: "4567,4568,55678"
       ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
@@ -1500,13 +1500,18 @@ write_files:
                     processors: [batch]
                     exporters: [jaeger]
             service:
+              type: ClusterIP
               ports:
-                - name: grpc
+                - name: opencensus
                   port: 55678
                   targetPort: 55678
-          proxyInit:
-            ignoreInboundPorts: "4190,4191,4567,4568,55678"
-            ignoreOutboundPorts: "4567,4568,55678"
+                  protocol: TCP
+          jaeger:
+            enabled: true
+          # These settings ensure the collector itself isn't meshed for the trace collection port
+          podAnnotations:
+            config.linkerd.io/skip-inbound-ports: "55678"
+            config.linkerd.io/skip-outbound-ports: "55678"
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -1664,7 +1669,7 @@ write_files:
       done
 
       export HOME=/home/ubuntu
-      curl -sL https://run.linkerd.io/install | sh
+      curl -sL https://run.linkerd.io/install | sh -s -- --version stable-2.16.1
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
@@ -1672,7 +1677,7 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       echo "🔍 Verifying identity and proxy injection..."
-      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd-jaeger --wait 2m || echo "❌ linkerd check failed"
+      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd-jaeger --linkerd-namespace linkerd-jaeger --wait 2m || echo "❌ linkerd check failed"
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
