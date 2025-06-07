@@ -833,8 +833,8 @@ write_files:
               template ingress-nginx ingress-nginx \
               --repo https://kubernetes.github.io/ingress-nginx \
               --namespace ingress-nginx \
-              --values "$VALUES_FILE" > "${RENDER_FILE}.tmp"; then
-          mv "${RENDER_FILE}.tmp" "$RENDER_FILE"
+              --values "$VALUES_FILE" > "$RENDER_FILE.tmp"; then
+          mv "$RENDER_FILE.tmp" "$RENDER_FILE"
           echo "✅  Render succeeded on attempt #$attempt"
           break
         fi
@@ -845,7 +845,7 @@ write_files:
           exit 1
         fi
 
-        echo "🔄  Helm template failed — retrying in ${SLEEP_SECONDS}s…"
+        echo "🔄  Helm template failed — retrying in $SLEEP_SECONDS …"
         sleep "$SLEEP_SECONDS"
       done
 
