@@ -738,41 +738,6 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-webhook -n cert-manager
 
       echo "📥 Installing MetalLB..."
-      
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo add rancher-stable https://releases.rancher.com/server-charts/stable
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo update
-
-      # 1 – Install just the CRDs (recommended—no race conditions)
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml upgrade -i rancher-crd rancher-stable/rancher-crd \
-        --namespace cattle-system --create-namespace
-
-      # 2 – Wait for the main CRDs you care about
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=Established --timeout=600s \
-        crd/projects.management.cattle.io
-
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: management.cattle.io/v3
-      kind: Project
-      metadata:
-        name: infrastructure
-        namespace: local
-        labels:
-          field.cattle.io/projectId: infrastructure
-      spec:
-        displayName: "Infrastructure"
-        description: "Infrastructure Project for Rancher and Application Resources"
-        clusterName: local 
-      ---
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: metallb-system
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-          app.kubernetes.io/name: metallb
-          pod-security.kubernetes.io/enforce: privileged
-      EOF
-
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
 
@@ -791,15 +756,6 @@ write_files:
       metadata:
         name: default
         namespace: metallb-system
-      EOF
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: longhorn-system
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
       EOF
 
       echo "📥 Installing Longhorn..."
@@ -926,6 +882,18 @@ write_files:
 
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
+      kind: Project
+      metadata:
+        name: infrastructure
+        namespace: local
+        labels:
+          field.cattle.io/projectId: infrastructure
+      spec:
+        displayName: "Infrastructure"
+        description: "Infrastructure Project for Rancher and Application Resources"
+        clusterName: local
+      ---
+      apiVersion: management.cattle.io/v3
       kind: GlobalRoleBinding
       metadata:
         name: github-k8s-cluster-admins
@@ -984,6 +952,9 @@ write_files:
         name: auth-provider
       value: github
       EOF
+
+      sudo -E kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace longhorn-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
       xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
