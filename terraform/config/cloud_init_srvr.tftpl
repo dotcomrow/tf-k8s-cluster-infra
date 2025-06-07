@@ -744,7 +744,6 @@ write_files:
 
       # 1 – Install just the CRDs (recommended—no race conditions)
       sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml upgrade -i rancher-crd rancher-stable/rancher-crd \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml \
         --namespace cattle-system --create-namespace
 
       # 2 – Wait for the main CRDs you care about
