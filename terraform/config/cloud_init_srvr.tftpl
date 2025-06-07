@@ -738,6 +738,19 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-webhook -n cert-manager
 
       echo "📥 Installing MetalLB..."
+      
+      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo add rancher-stable https://releases.rancher.com/server-charts/stable
+      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo update
+
+      # 1 – Install just the CRDs (recommended—no race conditions)
+      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml upgrade -i rancher-crd rancher-stable/rancher-crd \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --namespace cattle-system --create-namespace
+
+      # 2 – Wait for the main CRDs you care about
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=Established --timeout=600s \
+        crd/projects.management.cattle.io
+
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
       kind: Project
@@ -763,17 +776,6 @@ write_files:
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
-
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo add rancher-latest https://releases.rancher.com/server-charts/latest
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml repo update
-
-      # 1 – Install just the CRDs (recommended—no race conditions)
-      sudo helm --kubeconfig /etc/rancher/rke2/rke2.yaml upgrade -i rancher-crd rancher-latest/rancher-crd \
-        --namespace cattle-system --create-namespace
-
-      # 2 – Wait for the main CRDs you care about
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml wait --for=condition=Established --timeout=600s \
-        crd/projects.management.cattle.io
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: metallb.io/v1beta1
