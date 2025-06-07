@@ -755,8 +755,6 @@ write_files:
       kind: Namespace
       metadata:
         name: metallb-system
-        labels:
-          field.cattle.io/projectId: local:infrastructure
         annotations:
           field.cattle.io/projectId: local:infrastructure
           app.kubernetes.io/name: metallb
@@ -789,8 +787,6 @@ write_files:
       metadata:
         name: longhorn-system
         annotations:
-          field.cattle.io/projectId: local:infrastructure
-        labels:
           field.cattle.io/projectId: local:infrastructure
       EOF
 
@@ -992,7 +988,6 @@ write_files:
         name: linkerd-jaeger
         labels:
           linkerd.io/is-control-plane: "true"
-          field.cattle.io/projectId: local:infrastructure
         annotations:
           field.cattle.io/projectId: local:infrastructure
       ---
@@ -1001,8 +996,6 @@ write_files:
       metadata:
         name: linkerd
         annotations:
-          field.cattle.io/projectId: local:infrastructure
-        labels:
           field.cattle.io/projectId: local:infrastructure
       ---
       apiVersion: v1
@@ -1996,8 +1989,6 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-        labels:
-          field.cattle.io/projectId: local:infrastructure
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2220,8 +2211,6 @@ write_files:
       metadata:
         name: argocd
         annotations:
-          field.cattle.io/projectId: local:infrastructure
-        labels:
           field.cattle.io/projectId: local:infrastructure
       ---
       apiVersion: v1
