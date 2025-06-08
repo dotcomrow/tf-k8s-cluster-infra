@@ -970,696 +970,10 @@ write_files:
       bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
 
-      # setup project
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: linkerd-jaeger
-        labels:
-          linkerd.io/is-control-plane: "true"
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-      ---
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: linkerd
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-      ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: linkerd-config
-        namespace: linkerd
-        labels:
-          linkerd.io/control-plane-ns: linkerd-jaeger
-      data:
-        values: |
-          namespace: linkerd-jaeger
-      ---
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: linkerd-heartbeat
-        namespace: linkerd-jaeger
-        annotations:
-          meta.helm.sh/release-name: "linkerd-control-plane"
-          meta.helm.sh/release-namespace: "linkerd-jaeger"
-        labels:
-          app.kubernetes.io/managed-by: "Helm" 
-      --- 
-      apiVersion: v1 
-      kind: ServiceAccount 
-      metadata:   
-        name: linkerd-heartbeat   
-        namespace: linkerd   
-        annotations:     
-          meta.helm.sh/release-name: "linkerd-control-plane"     
-          meta.helm.sh/release-namespace: "linkerd-jaeger"
-        labels:
-          app.kubernetes.io/managed-by: "Helm"
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        name: ext-namespace-metadata-linkerd-config
-        namespace: linkerd
-      rules:
-        - apiGroups: [""]
-          resources: ["configmaps"]
-          resourceNames: ["linkerd-config"]
-          verbs: ["get"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: RoleBinding
-      metadata:
-        name: ext-namespace-metadata-linkerd-config
-        namespace: linkerd
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: Role
-        name: ext-namespace-metadata-linkerd-config
-      subjects:
-        - kind: ServiceAccount
-          name: namespace-metadata
-          namespace: linkerd-jaeger
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd    
-        namespace: linkerd-jaeger
-      spec:
-        chart: linkerd-crds
-        repo: https://helm.linkerd.io/stable
-        version: 1.8.0
-        targetNamespace: linkerd-jaeger
-      EOF
-      # end setup project
-
-      # Wait for CRDs to be installed
-      for i in {1..600}; do
-        kubectl get crd serverauthorizations.policy.linkerd.io &>/dev/null && break
-        echo "⏳ Waiting for Linkerd CRDs..."
-        sleep 2
-      done
-
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: batch/v1
-      kind: Job
-      metadata:
-        name: patch-kube-api-server-ownership
-        namespace: linkerd-jaeger
-      spec:
-        backoffLimit: 3
-        template:
-          spec:
-            restartPolicy: OnFailure
-            serviceAccountName: default
-            containers:
-              - name: create-configmap
-                image: bitnami/kubectl:latest
-                command:
-                  - /bin/sh
-                  - -c
-                  - |
-                    kubectl annotate networkauthentication.policy.linkerd.io kube-api-server \
-                      meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd-jaeger \
-                      --overwrite -n linkerd-jaeger
-      EOF
-
-      echo "Installing Linkerd ServerAuthorization for Jaeger UI..."
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-jaeger-unmeshed
-        namespace: linkerd-jaeger
-      spec:
-        server:
-          name: jaeger-ui
-        client:
-          unauthenticated: true
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-jaeger-unmeshed
-        namespace: linkerd
-      spec:
-        server:
-          name: jaeger-ui
-        client:
-          unauthenticated: true
-      EOF
-
-      # install linkerd and jaeger
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: patch-linkerd
-        namespace: cattle-system
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: patch-linkerd-role
-      rules:
-        - apiGroups: ["management.cattle.io"]
-          resources: ["projects"]
-          verbs: ["list"]
-        - apiGroups: [""]
-          resources: ["namespaces"]
-          verbs: ["get", "update", "patch"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: linkerd-create-trust-roots
-      rules:
-        - apiGroups: [""]
-          resources: ["secrets", "configmaps"]
-          verbs: ["get", "create", "patch", "apply"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: linkerd-create-trust-roots-binding
-      subjects:
-        - kind: ServiceAccount
-          name: default
-          namespace: linkerd-jaeger
-      roleRef:
-        kind: ClusterRole
-        name: linkerd-create-trust-roots
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        name: linkerd-configmap-editor
-        namespace: linkerd-jaeger
-      rules:
-        - apiGroups: [""]
-          resources: ["configmaps"]
-          verbs: ["get", "create", "delete", "patch", "update"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: RoleBinding
-      metadata:
-        name: linkerd-configmap-editor-binding
-        namespace: linkerd-jaeger
-      subjects:
-        - kind: ServiceAccount
-          name: default
-          namespace: linkerd-jaeger
-      roleRef:
-        kind: Role
-        name: linkerd-configmap-editor
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: batch/v1
-      kind: Job
-      metadata:
-        name: linkerd-create-trust-roots
-        namespace: linkerd-jaeger
-      spec:
-        backoffLimit: 1
-        template:
-          spec:
-            restartPolicy: OnFailure
-            serviceAccountName: default
-            containers:
-              - name: create-configmap
-                image: bitnami/kubectl:latest
-                command:
-                  - /bin/sh
-                  - -c
-                  - |
-                    echo "⏳ Waiting for linkerd-trust-anchor secret to exist..."
-                    for i in {1..60}; do
-                      if kubectl get secret linkerd-trust-anchor -n linkerd-jaeger &>/dev/null; then break; fi
-                      sleep 2
-                    done
-
-                    echo "📄 Creating linkerd-identity-trust-roots configmap..."
-                    kubectl get secret linkerd-trust-anchor -n linkerd-jaeger -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/ca.crt
-                    
-                    echo "📄 Creating linkerd-identity-trust-roots ConfigMap..."
-                    kubectl delete configmap linkerd-identity-trust-roots -n linkerd-jaeger --ignore-not-found
-                    kubectl create configmap linkerd-identity-trust-roots \
-                      --from-file=ca-bundle.crt=/tmp/ca.crt \
-                      -n linkerd-jaeger
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: patch-linkerd-rolebinding
-      roleRef:
-        kind: ClusterRole
-        name: patch-linkerd-role
-        apiGroup: rbac.authorization.k8s.io
-      subjects:
-        - kind: ServiceAccount
-          name: patch-linkerd
-          namespace: cattle-system
-      ---
-      apiVersion: cert-manager.io/v1
-      kind: ClusterIssuer
-      metadata:
-        name: linkerd-selfsigned
-      spec:
-        selfSigned: {}
-      ---
-      apiVersion: cert-manager.io/v1
-      kind: Certificate
-      metadata:
-        name: linkerd-trust-anchor
-        namespace: linkerd-jaeger
-      spec:
-        isCA: true
-        commonName: identity.linkerd.cluster.local
-        secretName: linkerd-trust-anchor
-        issuerRef:
-          name: linkerd-selfsigned
-          kind: ClusterIssuer
-      ---
-      apiVersion: cert-manager.io/v1
-      kind: Issuer
-      metadata:
-        name: linkerd-identity-issuer
-        namespace: linkerd-jaeger
-      spec:
-        ca:
-          secretName: linkerd-trust-anchor
-      ---
-      apiVersion: cert-manager.io/v1
-      kind: Certificate
-      metadata:
-        name: linkerd-identity-issuer
-        namespace: linkerd-jaeger
-      spec:
-        secretName: linkerd-identity-issuer
-        duration: 2160h
-        renewBefore: 360h
-        subject:
-          organizations:
-            - linkerd.io
-        commonName: identity.linkerd-jaeger.cluster.local
-        dnsNames:
-          - identity.linkerd-jaeger.cluster.local
-        isCA: true
-        privateKey:
-          algorithm: ECDSA        
-          size: 256    
-        issuerRef:
-          name: linkerd-identity-issuer
-          kind: Issuer
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: helm-controller-namespace-patch
-      rules:
-        - apiGroups: [""]
-          resources: ["namespaces"]
-          verbs: ["get", "patch"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: helm-controller-namespace-patch
-      subjects:
-        - kind: ServiceAccount
-          name: helm-controller
-          namespace: cattle-system
-      roleRef:
-        kind: ClusterRole
-        name: helm-controller-namespace-patch
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: allow-linkerd-ns-patch
-      subjects:
-        - kind: ServiceAccount
-          name: default
-          namespace: linkerd-jaeger
-      roleRef:
-        kind: ClusterRole
-        name: helm-controller-namespace-patch
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: crd-patch
-        namespace: kube-system
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: crd-patch-role
-      rules:
-        - apiGroups: ["apiextensions.k8s.io"]
-          resources: ["customresourcedefinitions"]
-          verbs: ["get", "patch"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: crd-patch-rolebinding
-      subjects:
-        - kind: ServiceAccount
-          name: crd-patch
-          namespace: kube-system
-      roleRef:
-        kind: ClusterRole
-        name: crd-patch-role
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: batch/v1
-      kind: Job
-      metadata:
-        name: patch-linkerd-crd-ownership
-        namespace: kube-system
-      spec:
-        template:
-          spec:
-            restartPolicy: OnFailure
-            serviceAccountName: crd-patch
-            containers:
-              - name: patch
-                image: bitnami/kubectl:latest
-                command:
-                  - /bin/sh
-                  - -c
-                  - |
-                    echo "🔧 Patching Gateway API CRD: httproutes.gateway.networking.k8s.io"
-                    kubectl label crd httproutes.gateway.networking.k8s.io app.kubernetes.io/managed-by=Helm --overwrite || true
-                    kubectl annotate crd httproutes.gateway.networking.k8s.io \
-                      meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
-
-                    echo "🔧 Patching Linkerd CRD: meshtlsauthentications.policy.linkerd.io"
-                    kubectl annotate crd meshtlsauthentications.policy.linkerd.io \
-                      meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
-
-                    echo "🔧 Patching Linkerd CRD: networkauthentications.policy.linkerd.io"
-                    kubectl annotate crd networkauthentications.policy.linkerd.io \
-                      meta.helm.sh/release-name=linkerd-jaeger \
-                      meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
-
-                    echo "🔧 Patching remaining Linkerd CRDs"
-                    for crd in \
-                      authorizationpolicies.policy.linkerd.io \
-                      httproutes.policy.linkerd.io \
-                      serverauthorizations.policy.linkerd.io \
-                      servers.policy.linkerd.io; do
-                      echo "🔧 Patching $crd"
-                      kubectl annotate crd $crd \
-                        meta.helm.sh/release-name=linkerd-jaeger \
-                        meta.helm.sh/release-namespace=linkerd-jaeger --overwrite || true
-                    done
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd-control-plane
-        namespace: linkerd-jaeger
-      spec:
-        chart: linkerd-control-plane
-        repo: https://helm.linkerd.io/stable
-        version: 1.16.11
-        targetNamespace: linkerd-jaeger
-        valuesContent: |-
-          installNamespace: false
-          skipNamespaceCheck: true
-          identity:
-            externalCA: true
-            issuer:
-              scheme: kubernetes.io/tls
-              tls:
-                crtPEM: |
-                  {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-identity-issuer").data."tls.crt" | b64dec }}
-                keyPEM: |
-                  {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-identity-issuer").data."tls.key" | b64dec }}
-          trustAnchorsPEM: |
-            {{ (lookup "v1" "Secret" "linkerd-jaeger" "linkerd-trust-anchor").data."ca.crt" | b64dec }}
-          global:
-            proxyInit:
-              ignoreInboundPorts: "4190,4191,4567,4568,55678"
-              ignoreOutboundPorts: "4567,4568,55678"
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd-viz
-        namespace: linkerd-jaeger
-      spec:
-        chart: linkerd-viz
-        repo: https://helm.linkerd.io/stable
-        version: 30.12.11
-        targetNamespace: linkerd-jaeger
-        valuesContent: |-
-          installNamespace: false
-          skipNamespaceCheck: true
-          namespace: linkerd-jaeger
-          linkerdNamespace: linkerd-jaeger
-          prometheus:
-            enabled: true
-          tap:
-            enabled: true
-          metricsAPI:
-            enabled: true
-          dashboard:
-            enforcedHostRegexp: ".*"
-          grafana:
-            enabled: false
-          heartbeat:
-            enabled: true
-          jaeger:
-            enabled: true
-            collector:
-              addr: collector.linkerd-jaeger.svc.cluster.local:55678
-      ---
-      apiVersion: helm.cattle.io/v1
-      kind: HelmChart
-      metadata:
-        name: linkerd-jaeger
-        namespace: linkerd-jaeger
-      spec:
-        chart: linkerd-jaeger
-        repo: https://helm.linkerd.io/stable
-        version: 30.12.11
-        targetNamespace: linkerd-jaeger
-        valuesContent: |-
-          installNamespace: false
-          skipNamespaceCheck: true
-          collector:
-            enabled: true
-            config: |
-              receivers:
-                opencensus:
-                  endpoint: 0.0.0.0:55678
-              processors:
-                batch:
-              exporters:
-                jaeger:
-                  endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
-                  tls:
-                    insecure: true
-              service:
-                pipelines:
-                  traces:
-                    receivers: [opencensus]
-                    processors: [batch]
-                    exporters: [jaeger]
-            service:
-              type: ClusterIP
-              ports:
-                - name: opencensus
-                  port: 55678
-                  targetPort: 55678
-                  protocol: TCP
-          jaeger:
-            enabled: true
-          # These settings ensure the collector itself isn't meshed for the trace collection port
-          podAnnotations:
-            config.linkerd.io/skip-inbound-ports: "55678"
-            config.linkerd.io/skip-outbound-ports: "55678"
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy-jaeger
-        namespace: linkerd-jaeger
-        labels:
-          app: oauth2-proxy-jaeger
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy-jaeger
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy-jaeger
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-                args:
-                  - --provider=github
-                  - --http-address=0.0.0.0:4180
-                  - --upstream=http://jaeger.linkerd-jaeger.svc.cluster.local:16686
-                  - --email-domain=*
-                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - --client-id=${JAEGER_CLIENT_ID}
-                  - --client-secret=${JAEGER_CLIENT_SECRET}
-                  - --redirect-url=https://jaeger.suncoast.systems/oauth2/callback
-                  - --scope=user:email,read:org
-                  - --cookie-secure=true
-                  - --set-authorization-header=true
-                  - --pass-authorization-header=true
-                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
-                ports:
-                  - containerPort: 4180
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: oauth2-proxy-jaeger
-        namespace: linkerd-jaeger
-      spec:
-        selector:
-          app: oauth2-proxy-jaeger
-        ports:
-          - name: http
-            port: 80
-            targetPort: 4180
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: patch-linkerd-networkauth
-      rules:
-        - apiGroups: ["policy.linkerd.io"]
-          resources: ["networkauthentications"]
-          verbs: ["get", "patch", "delete"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: patch-linkerd-networkauth-binding
-      subjects:
-        - kind: ServiceAccount
-          name: default
-          namespace: linkerd-jaeger
-      roleRef:
-        kind: ClusterRole
-        name: patch-linkerd-networkauth
-        apiGroup: rbac.authorization.k8s.io
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy
-        namespace: linkerd-jaeger
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
-                ports:
-                  - containerPort: 4180
-                args:
-                  - --provider=github
-                  - --http-address=0.0.0.0:4180
-                  - --upstream=http://web.linkerd-jaeger.svc.cluster.local:8084
-                  - --email-domain=*
-                  - --cookie-secret=${LINKERD_OAUTH2_PROXY_COOKIE_SECRET}
-                  - --client-id=${LINKERD_CLIENT_ID}
-                  - --client-secret=${LINKERD_CLIENT_SECRET}
-                  - --redirect-url=https://linkerd.suncoast.systems/oauth2/callback
-                  - --scope=user:email,read:org
-                  - --cookie-secure=true
-                  - --set-authorization-header=true
-                  - --pass-authorization-header=true
-                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: oauth2-proxy
-        namespace: linkerd-jaeger
-      spec:
-        selector:
-          app: oauth2-proxy
-        ports:
-          - name: http
-            port: 80
-            targetPort: 4180
-      EOF
-      # end linkerd and jaeger install
-
-      REMOVED=0
-      echo "⏳ Waiting for Linkerd control plane pods to be Ready..."
-      while true; do
-        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get pods -n linkerd-jaeger \
-          | awk 'NR>1 && $3 != "Running" && $3 != "Completed" { exit 1 }'; then
-          echo "✅ Linkerd is fully running!"
-          break
-        else
-          
-          RESOURCE_NAME="kube-api-server"
-          NAMESPACE="linkerd-jaeger"
-          RELEASE_NAME="linkerd-jaeger"
-          KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-          
-
-          echo "🔍 Checking if NetworkAuthentication '$RESOURCE_NAME' exists in namespace '$NAMESPACE'..."
-          if [ "$REMOVED" -eq 1 ]; then
-            continue;
-          fi
-
-          if sudo kubectl get networkauthentication.policy.linkerd.io "$RESOURCE_NAME" -n "$NAMESPACE" --kubeconfig="$KUBECONFIG" &>/dev/null; then
-            echo "✅ Resource exists. Patching Helm annotations..."
-            sudo kubectl delete networkauthentication.policy.linkerd.io kube-api-server -n linkerd-jaeger --kubeconfig=/etc/rancher/rke2/rke2.yaml --ignore-not-found
-            REMOVED=1
-          else
-            echo "⚠️ Resource '$RESOURCE_NAME' not found in namespace '$NAMESPACE'. Skipping annotation."
-          fi
-
-          echo "⏳ Waiting for Linkerd pods to be ready..."
-          sleep 60
-        fi
-      done
-
       export HOME=/home/ubuntu
       curl -sL https://run.linkerd.io/install | sh -s -- --version stable-2.16.1
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo linkerd install --crds --ignore-cluster --kubeconfig=/etc/rancher/rke2/rke2.yaml | \
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-
-      echo "🔍 Verifying identity and proxy injection..."
-      sudo linkerd check --kubeconfig=/etc/rancher/rke2/rke2.yaml --namespace linkerd-jaeger --linkerd-namespace linkerd-jaeger --wait 2m || echo "❌ linkerd check failed"
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
@@ -1671,7 +985,7 @@ write_files:
 
       sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      # sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
     
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
@@ -1873,102 +1187,102 @@ write_files:
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
       # adding apisix routes for linkerd and jaeger
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRole
-      metadata:
-        name: apisix-ingress-controller
-      rules:
-        - apiGroups: ["apisix.apache.org"]
-          resources:
-            - apisixroutes
-            - apisixpluginconfigs
-            - apisixconsumers
-            - apisixclusterconfigs
-          verbs: ["get", "list", "watch"]
-        - apiGroups: [""]
-          resources: ["services", "endpoints", "pods", "namespaces"]
-          verbs: ["get", "list", "watch"]
-        - apiGroups: ["networking.k8s.io"]
-          resources: ["ingresses", "ingressclasses"]
-          verbs: ["get", "list", "watch"] 
-      ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: jaeger-ui
-        annotations:
-          apisix.apache.org/timeout: "900"
-          apisix.apache.org/websocket: "true"
-          apisix.apache.org/enable-cors: "true"
-        namespace: linkerd-jaeger
-      spec:
-        http:
-          - name: jaeger-auth
-            match:
-              hosts:
-                - jaeger.${RANCHER_DOMAIN}
-              paths:
-                - "/"
-                - "/oauth2/*"
-                - "/jaeger/*"
-            backends:
-              - serviceName: oauth2-proxy-jaeger
-                servicePort: 80
+      # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # apiVersion: rbac.authorization.k8s.io/v1
+      # kind: ClusterRole
+      # metadata:
+      #   name: apisix-ingress-controller
+      # rules:
+      #   - apiGroups: ["apisix.apache.org"]
+      #     resources:
+      #       - apisixroutes
+      #       - apisixpluginconfigs
+      #       - apisixconsumers
+      #       - apisixclusterconfigs
+      #     verbs: ["get", "list", "watch"]
+      #   - apiGroups: [""]
+      #     resources: ["services", "endpoints", "pods", "namespaces"]
+      #     verbs: ["get", "list", "watch"]
+      #   - apiGroups: ["networking.k8s.io"]
+      #     resources: ["ingresses", "ingressclasses"]
+      #     verbs: ["get", "list", "watch"] 
+      # ---
+      # apiVersion: apisix.apache.org/v2
+      # kind: ApisixRoute
+      # metadata:
+      #   name: jaeger-ui
+      #   annotations:
+      #     apisix.apache.org/timeout: "900"
+      #     apisix.apache.org/websocket: "true"
+      #     apisix.apache.org/enable-cors: "true"
+      #   namespace: linkerd-jaeger
+      # spec:
+      #   http:
+      #     - name: jaeger-auth
+      #       match:
+      #         hosts:
+      #           - jaeger.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/"
+      #           - "/oauth2/*"
+      #           - "/jaeger/*"
+      #       backends:
+      #         - serviceName: oauth2-proxy-jaeger
+      #           servicePort: 80
 
-          - name: jaeger-websocket
-            websocket: true
-            match:
-              hosts:
-                - jaeger.${RANCHER_DOMAIN}
-              paths:
-                - "/api/*"
-                - "/metrics/*"
-            backends:
-              - serviceName: jaeger
-                servicePort: 16686
-      ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: linkerd-dashboard
-        annotations:
-          apisix.apache.org/timeout: "900"
-          apisix.apache.org/websocket: "true"
-          apisix.apache.org/enable-cors: "true"
-        namespace: linkerd-jaeger
-      spec:
-        http:
-          # Route protected UI paths via oauth2-proxy
-          - name: protected-ui
-            match:
-              hosts:
-                - linkerd.${RANCHER_DOMAIN}
-              paths:
-                - "/"
-                - "/oauth2/*"
-                - "/dist/*"
-            backends:
-              - serviceName: oauth2-proxy
-                servicePort: 80
+      #     - name: jaeger-websocket
+      #       websocket: true
+      #       match:
+      #         hosts:
+      #           - jaeger.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/api/*"
+      #           - "/metrics/*"
+      #       backends:
+      #         - serviceName: jaeger
+      #           servicePort: 16686
+      # ---
+      # apiVersion: apisix.apache.org/v2
+      # kind: ApisixRoute
+      # metadata:
+      #   name: linkerd-dashboard
+      #   annotations:
+      #     apisix.apache.org/timeout: "900"
+      #     apisix.apache.org/websocket: "true"
+      #     apisix.apache.org/enable-cors: "true"
+      #   namespace: linkerd-jaeger
+      # spec:
+      #   http:
+      #     # Route protected UI paths via oauth2-proxy
+      #     - name: protected-ui
+      #       match:
+      #         hosts:
+      #           - linkerd.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/"
+      #           - "/oauth2/*"
+      #           - "/dist/*"
+      #       backends:
+      #         - serviceName: oauth2-proxy
+      #           servicePort: 80
 
-          # Route raw WebSocket / telemetry paths directly to Linkerd
-          - name: direct-linkerd
-            websocket: true
-            match:
-              hosts:
-                - linkerd.${RANCHER_DOMAIN}
-              paths:
-                - "/api/*"
-                - "/metrics/*"
-                - "/ws/*"
-                - "/tap/*"             
-                - "/profiles/*"        
-                - "/routes/*"          
-            backends:
-              - serviceName: web
-                servicePort: 8084
-      EOF
+      #     # Route raw WebSocket / telemetry paths directly to Linkerd
+      #     - name: direct-linkerd
+      #       websocket: true
+      #       match:
+      #         hosts:
+      #           - linkerd.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/api/*"
+      #           - "/metrics/*"
+      #           - "/ws/*"
+      #           - "/tap/*"             
+      #           - "/profiles/*"        
+      #           - "/routes/*"          
+      #       backends:
+      #         - serviceName: web
+      #           servicePort: 8084
+      # EOF
       # end apisix routes for linkerd and jaeger
 
       # Installing NFS system
