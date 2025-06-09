@@ -982,36 +982,55 @@ write_files:
             
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 
-      sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml --crds \
-        | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      # 1) Create the Linkerd control-plane namespace
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace linkerd-jaeger
 
-      # 4) Install the Linkerd control-plane into that namespace
-      
-      sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml \
+      # 2) Install the CRDs
+      sudo linkerd install --crds \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
-      # 5) Wait for the control-plane to come up
+      # 3) Install the control-plane (with mTLS left on)
+      sudo linkerd install \
+        --linkerd-namespace linkerd-jaeger \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
+      | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      # 4) Wait for Linkerd to come up
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
+      # 5) Install the Jaeger extension, disabling *only* its UI TLS + auth
       sudo linkerd jaeger install \
+        --linkerd-namespace linkerd-jaeger \
+        --set ui.tls.enabled=false \
+        --set ui.auth.enabled=false \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
-      | sudo kubectl apply -f - \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml
-
-      # 6) Verify the Jaeger extension
-      sudo linkerd jaeger check \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml
-
-      # 6) Install the viz extension (dashboard + embedded Jaeger UI + optional Jaeger collector/query)
-      sudo linkerd viz install \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        --set jaeger.enabled=true \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label namespace linkerd-viz linkerd.io/extension=viz --overwrite
+      sudo linkerd jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-      # 7) Verify the viz extension
+      # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
+      #    disabling *only* the dashboard’s TLS + auth
+      sudo linkerd viz install \
+        --linkerd-namespace linkerd-jaeger \
+        --set dashboard.tls.enabled=false \
+        --set dashboard.auth.enabled=false \
+        --set jaeger.enabled=true \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
+      | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      # 7) Tell Linkerd this namespace hosts the viz extension
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        label ns linkerd-jaeger linkerd.io/extension=viz --overwrite
+
+      # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
+
+      # 9) (Optional) Launch the dashboard
+      sudo linkerd viz dashboard \
+        --linkerd-namespace linkerd-jaeger \
+        --viz-namespace linkerd-jaeger \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
