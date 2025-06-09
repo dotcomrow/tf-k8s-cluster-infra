@@ -977,6 +977,8 @@ write_files:
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
 
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+
       sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml --crds \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
