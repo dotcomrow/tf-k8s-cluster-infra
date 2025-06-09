@@ -1023,10 +1023,6 @@ write_files:
       # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-      # 9) (Optional) Launch the dashboard
-      sudo linkerd viz dashboard \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml
-
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
       sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
