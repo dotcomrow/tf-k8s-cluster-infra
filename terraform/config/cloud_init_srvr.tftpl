@@ -992,7 +992,6 @@ write_files:
 
       # 3) Install the control-plane (with mTLS left on)
       sudo linkerd install \
-        --linkerd-namespace linkerd-jaeger \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
@@ -1001,7 +1000,6 @@ write_files:
 
       # 5) Install the Jaeger extension, disabling *only* its UI TLS + auth
       sudo linkerd jaeger install \
-        --linkerd-namespace linkerd-jaeger \
         --set ui.tls.enabled=false \
         --set ui.auth.enabled=false \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
@@ -1012,7 +1010,6 @@ write_files:
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
       #    disabling *only* the dashboard’s TLS + auth
       sudo linkerd viz install \
-        --linkerd-namespace linkerd-jaeger \
         --set dashboard.tls.enabled=false \
         --set dashboard.auth.enabled=false \
         --set jaeger.enabled=true \
@@ -1028,7 +1025,6 @@ write_files:
 
       # 9) (Optional) Launch the dashboard
       sudo linkerd viz dashboard \
-        --linkerd-namespace linkerd-jaeger \
         --viz-namespace linkerd-jaeger \
         --kubeconfig /etc/rancher/rke2/rke2.yaml
 
