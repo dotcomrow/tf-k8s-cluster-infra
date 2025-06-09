@@ -975,6 +975,39 @@ write_files:
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
+
+      sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml --crds \
+        | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      # 4) Install the Linkerd control-plane into that namespace
+      
+      sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml \
+      | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      # 5) Wait for the control-plane to come up
+      sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
+
+      sudo linkerd jaeger install \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
+      | sudo kubectl apply -f - \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml
+
+      # 6) Verify the Jaeger extension
+      sudo linkerd jaeger check \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml
+
+      # 6) Install the viz extension (dashboard + embedded Jaeger UI + optional Jaeger collector/query)
+      sudo linkerd viz install \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --set jaeger.enabled=true \
+      | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label namespace linkerd-viz linkerd.io/extension=viz --overwrite
+
+      # 7) Verify the viz extension
+      sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
+
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
       sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
@@ -985,7 +1018,7 @@ write_files:
 
       sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      # sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo -E kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
     
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
@@ -1187,102 +1220,102 @@ write_files:
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
       # adding apisix routes for linkerd and jaeger
-      # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      # apiVersion: rbac.authorization.k8s.io/v1
-      # kind: ClusterRole
-      # metadata:
-      #   name: apisix-ingress-controller
-      # rules:
-      #   - apiGroups: ["apisix.apache.org"]
-      #     resources:
-      #       - apisixroutes
-      #       - apisixpluginconfigs
-      #       - apisixconsumers
-      #       - apisixclusterconfigs
-      #     verbs: ["get", "list", "watch"]
-      #   - apiGroups: [""]
-      #     resources: ["services", "endpoints", "pods", "namespaces"]
-      #     verbs: ["get", "list", "watch"]
-      #   - apiGroups: ["networking.k8s.io"]
-      #     resources: ["ingresses", "ingressclasses"]
-      #     verbs: ["get", "list", "watch"] 
-      # ---
-      # apiVersion: apisix.apache.org/v2
-      # kind: ApisixRoute
-      # metadata:
-      #   name: jaeger-ui
-      #   annotations:
-      #     apisix.apache.org/timeout: "900"
-      #     apisix.apache.org/websocket: "true"
-      #     apisix.apache.org/enable-cors: "true"
-      #   namespace: linkerd-jaeger
-      # spec:
-      #   http:
-      #     - name: jaeger-auth
-      #       match:
-      #         hosts:
-      #           - jaeger.${RANCHER_DOMAIN}
-      #         paths:
-      #           - "/"
-      #           - "/oauth2/*"
-      #           - "/jaeger/*"
-      #       backends:
-      #         - serviceName: oauth2-proxy-jaeger
-      #           servicePort: 80
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: apisix-ingress-controller
+      rules:
+        - apiGroups: ["apisix.apache.org"]
+          resources:
+            - apisixroutes
+            - apisixpluginconfigs
+            - apisixconsumers
+            - apisixclusterconfigs
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["services", "endpoints", "pods", "namespaces"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses", "ingressclasses"]
+          verbs: ["get", "list", "watch"] 
+      ---
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: jaeger-ui
+        annotations:
+          apisix.apache.org/timeout: "900"
+          apisix.apache.org/websocket: "true"
+          apisix.apache.org/enable-cors: "true"
+        namespace: linkerd-viz
+      spec:
+        http:
+          - name: jaeger-auth
+            match:
+              hosts:
+                - jaeger.${RANCHER_DOMAIN}
+              paths:
+                - "/"
+                - "/oauth2/*"
+                - "/jaeger/*"
+            backends:
+              - serviceName: oauth2-proxy-jaeger
+                servicePort: 80
 
-      #     - name: jaeger-websocket
-      #       websocket: true
-      #       match:
-      #         hosts:
-      #           - jaeger.${RANCHER_DOMAIN}
-      #         paths:
-      #           - "/api/*"
-      #           - "/metrics/*"
-      #       backends:
-      #         - serviceName: jaeger
-      #           servicePort: 16686
-      # ---
-      # apiVersion: apisix.apache.org/v2
-      # kind: ApisixRoute
-      # metadata:
-      #   name: linkerd-dashboard
-      #   annotations:
-      #     apisix.apache.org/timeout: "900"
-      #     apisix.apache.org/websocket: "true"
-      #     apisix.apache.org/enable-cors: "true"
-      #   namespace: linkerd-jaeger
-      # spec:
-      #   http:
-      #     # Route protected UI paths via oauth2-proxy
-      #     - name: protected-ui
-      #       match:
-      #         hosts:
-      #           - linkerd.${RANCHER_DOMAIN}
-      #         paths:
-      #           - "/"
-      #           - "/oauth2/*"
-      #           - "/dist/*"
-      #       backends:
-      #         - serviceName: oauth2-proxy
-      #           servicePort: 80
+          - name: jaeger-websocket
+            websocket: true
+            match:
+              hosts:
+                - jaeger.${RANCHER_DOMAIN}
+              paths:
+                - "/api/*"
+                - "/metrics/*"
+            backends:
+              - serviceName: jaeger
+                servicePort: 16686
+      ---
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: linkerd-dashboard
+        annotations:
+          apisix.apache.org/timeout: "900"
+          apisix.apache.org/websocket: "true"
+          apisix.apache.org/enable-cors: "true"
+        namespace: linkerd-viz
+      spec:
+        http:
+          # Route protected UI paths via oauth2-proxy
+          - name: protected-ui
+            match:
+              hosts:
+                - linkerd.${RANCHER_DOMAIN}
+              paths:
+                - "/"
+                - "/oauth2/*"
+                - "/dist/*"
+            backends:
+              - serviceName: oauth2-proxy
+                servicePort: 80
 
-      #     # Route raw WebSocket / telemetry paths directly to Linkerd
-      #     - name: direct-linkerd
-      #       websocket: true
-      #       match:
-      #         hosts:
-      #           - linkerd.${RANCHER_DOMAIN}
-      #         paths:
-      #           - "/api/*"
-      #           - "/metrics/*"
-      #           - "/ws/*"
-      #           - "/tap/*"             
-      #           - "/profiles/*"        
-      #           - "/routes/*"          
-      #       backends:
-      #         - serviceName: web
-      #           servicePort: 8084
-      # EOF
+          # Route raw WebSocket / telemetry paths directly to Linkerd
+          - name: direct-linkerd
+            websocket: true
+            match:
+              hosts:
+                - linkerd.${RANCHER_DOMAIN}
+              paths:
+                - "/api/*"
+                - "/metrics/*"
+                - "/ws/*"
+                - "/tap/*"             
+                - "/profiles/*"        
+                - "/routes/*"          
+            backends:
+              - serviceName: web
+                servicePort: 8084
+      EOF
       # end apisix routes for linkerd and jaeger
 
       # Installing NFS system
