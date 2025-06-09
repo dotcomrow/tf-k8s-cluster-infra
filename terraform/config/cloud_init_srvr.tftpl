@@ -1116,7 +1116,6 @@ write_files:
                   - --redirect-url=https://gateway-manager.${RANCHER_DOMAIN}/oauth2/callback
                   - --scope=user:email,read:org
                   - --cookie-secure=true
-                  - --pass-authorization-header=true
                   - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
 
