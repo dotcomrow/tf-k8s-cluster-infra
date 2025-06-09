@@ -1018,7 +1018,7 @@ write_files:
 
       # 7) Tell Linkerd this namespace hosts the viz extension
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        label ns linkerd-jaeger linkerd.io/extension=viz --overwrite
+        label ns linkerd-viz linkerd.io/extension=viz --overwrite
 
       # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
