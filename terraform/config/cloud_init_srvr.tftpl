@@ -977,7 +977,10 @@ write_files:
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
 
+      echo "📥 Installing Gateway API CRDs..."
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+            
+      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
 
       sudo linkerd install --kubeconfig /etc/rancher/rke2/rke2.yaml --crds \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
@@ -1014,9 +1017,6 @@ write_files:
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
       sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
       sudo helm repo update
-
-      echo "📥 Installing Gateway API CRDs..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/experimental-install.yaml
 
       sudo -E kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo -E kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
@@ -1106,7 +1106,6 @@ write_files:
                   - --redirect-url=https://gateway-manager.${RANCHER_DOMAIN}/oauth2/callback
                   - --scope=user:email,read:org
                   - --cookie-secure=true
-                  - --set-authorization-header=false
                   - --pass-authorization-header=true
                   - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
@@ -1242,6 +1241,104 @@ write_files:
           resources: ["ingresses", "ingressclasses"]
           verbs: ["get", "list", "watch"] 
       ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy-jaeger
+        namespace: linkerd-jaeger
+        labels:
+          app: oauth2-proxy-jaeger
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy-jaeger
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy-jaeger
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                args:
+                  - --provider=github
+                  - --http-address=0.0.0.0:4180
+                  - --upstream=http://jaeger.linkerd-jaeger.svc.cluster.local:16686
+                  - --email-domain=*
+                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+                  - --client-id=${JAEGER_CLIENT_ID}
+                  - --client-secret=${JAEGER_CLIENT_SECRET}
+                  - --redirect-url=https://jaeger.suncoast.systems/oauth2/callback
+                  - --scope=user:email,read:org
+                  - --cookie-secure=true
+                  - --set-authorization-header=true
+                  - --pass-authorization-header=true
+                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
+                ports:
+                  - containerPort: 4180
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy-jaeger
+        namespace: linkerd-jaeger
+      spec:
+        selector:
+          app: oauth2-proxy-jaeger
+        ports:
+          - name: http
+            port: 80
+            targetPort: 4180
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy
+        namespace: linkerd-viz
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                ports:
+                  - containerPort: 4180
+                args:
+                  - --provider=github
+                  - --http-address=0.0.0.0:4180
+                  - --upstream=http://web.linkerd-viz.svc.cluster.local:8084
+                  - --email-domain=*
+                  - --cookie-secret=${LINKERD_OAUTH2_PROXY_COOKIE_SECRET}
+                  - --client-id=${LINKERD_CLIENT_ID}
+                  - --client-secret=${LINKERD_CLIENT_SECRET}
+                  - --redirect-url=https://linkerd.suncoast.systems/oauth2/callback
+                  - --scope=user:email,read:org
+                  - --cookie-secure=true
+                  - --set-authorization-header=true
+                  - --pass-authorization-header=true
+                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy
+        namespace: linkerd-viz
+      spec:
+        selector:
+          app: oauth2-proxy
+        ports:
+          - name: http
+            port: 80
+            targetPort: 4180
+      ---
       apiVersion: apisix.apache.org/v2
       kind: ApisixRoute
       metadata:
@@ -1250,7 +1347,7 @@ write_files:
           apisix.apache.org/timeout: "900"
           apisix.apache.org/websocket: "true"
           apisix.apache.org/enable-cors: "true"
-        namespace: linkerd-viz
+        namespace: linkerd-jaeger
       spec:
         http:
           - name: jaeger-auth
@@ -1264,7 +1361,6 @@ write_files:
             backends:
               - serviceName: oauth2-proxy-jaeger
                 servicePort: 80
-
           - name: jaeger-websocket
             websocket: true
             match:
@@ -1300,8 +1396,6 @@ write_files:
             backends:
               - serviceName: oauth2-proxy
                 servicePort: 80
-
-          # Route raw WebSocket / telemetry paths directly to Linkerd
           - name: direct-linkerd
             websocket: true
             match:
