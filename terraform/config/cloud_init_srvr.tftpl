@@ -1784,7 +1784,7 @@ write_files:
           echo "❌ Timeout waiting for deployment '$DEPLOYMENT_NAME' to appear."
           exit 1
         fi
-        sleep 5
+        sleep 90
         (( SECONDS_WAITED += 5 ))
       done
 
