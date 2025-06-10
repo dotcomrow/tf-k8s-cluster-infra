@@ -1041,6 +1041,10 @@ write_files:
       # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
+
+      sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
+
       sudo kubectl annotate namespace linkerd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace linkerd-viz field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace linkerd-jaeger field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
@@ -1445,14 +1449,106 @@ write_files:
                 - "/profiles/*"        
                 - "/routes/*"          
             backends:
-              - serviceName: web
-                servicePort: 8084
+              - serviceName: linkerd-web-proxy
+                servicePort: 80
             plugins:
               - name: proxy-rewrite
                 enable: true
                 config:
-                  # rewrite to the internal web service
                   host: web.linkerd-viz.svc.cluster.local
+                  headers:
+                    set: '{"Origin": "http://localhost"}'
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: linkerd-web-proxy
+        namespace: linkerd-viz
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: linkerd-web-proxy
+        template:
+          metadata:
+            labels:
+              app: linkerd-web-proxy
+          spec:
+            containers:
+              - name: nginx
+                image: nginx:stable
+                ports:
+                  - containerPort: 80
+                volumeMounts:
+                  - name: nginx-config
+                    mountPath: /etc/nginx/nginx.conf
+                    subPath: nginx.conf
+            volumes:
+              - name: nginx-config
+                configMap:
+                  name: linkerd-web-proxy-config
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: linkerd-web-proxy-config
+        namespace: linkerd-viz
+      data:
+        nginx.conf: |
+          events {}
+
+          http {
+            map $http_upgrade $origin_override {
+              default     "";
+              websocket   "http://localhost";
+            }
+
+            server {
+              listen 80;
+
+              access_log /var/log/nginx/access.log;
+              error_log  /var/log/nginx/error.log debug;
+
+              location / {
+                proxy_pass http://web.linkerd-viz.svc.cluster.local:8084;
+
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+
+                proxy_set_header Origin $origin_override;
+
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+              }
+
+              location /api/tap {
+                proxy_pass http://web.linkerd-viz.svc.cluster.local:8084;
+
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+
+                # 🔥 Remove Origin entirely to bypass CheckOrigin() on /api/tap
+                proxy_set_header Origin "";
+              }
+            }
+          }
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: linkerd-web-proxy
+        namespace: linkerd-viz
+      spec:
+        selector:
+          app: linkerd-web-proxy
+        ports:
+          - port: 80
+            targetPort: 80
+            name: http
       EOF
       # end apisix routes for linkerd and jaeger
 
