@@ -995,11 +995,7 @@ write_files:
       clusterNetworks: "10.42.0.0/16,10.43.0.0/16"
       global:
         proxyInit:
-          ignoreOutboundPorts:
-            - 4567
-            - 4568
-            - 55678
-            - 2379
+          ignoreOutboundPorts: "4567,4568,55678,2379"
       EOF
 
       sudo linkerd install \
