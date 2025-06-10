@@ -993,6 +993,9 @@ write_files:
       # 3) Install the control-plane (with mTLS left on)
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --set clusterNetworks[0].cidr=10.42.0.0/16 \
+        --set clusterNetworks[1].cidr=10.43.0.0/16 \
+        --set global.proxyInit.ignoreOutboundPorts="4567,4568,55678,2379" \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 4) Wait for Linkerd to come up
