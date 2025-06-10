@@ -1025,7 +1025,7 @@ write_files:
         --set dashboard.tls.enabled=false \
         --set dashboard.auth.enabled=false \
         --set jaeger.enabled=true \
-        --set dashboard.enforcedHostRegexp="" \
+        --set dashboard.enforcedHostRegexp=".*" \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
@@ -1421,6 +1421,12 @@ write_files:
             backends:
               - serviceName: oauth2-proxy
                 servicePort: 80
+            plugins:
+              - name: proxy-rewrite
+                enable: true
+                config:
+                  # rewrite to the internal web service
+                  host: web.linkerd-viz.svc.cluster.local
           - name: direct-linkerd
             websocket: true
             match:
@@ -1436,6 +1442,12 @@ write_files:
             backends:
               - serviceName: web
                 servicePort: 8084
+            plugins:
+              - name: proxy-rewrite
+                enable: true
+                config:
+                  # rewrite to the internal web service
+                  host: web.linkerd-viz.svc.cluster.local
       EOF
       # end apisix routes for linkerd and jaeger
 
