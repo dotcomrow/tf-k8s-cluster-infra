@@ -694,20 +694,20 @@ write_files:
       TMP_FILE="/tmp/coredns-patch.yaml"
 
       echo "🔍 Fetching current CoreDNS config..."
-      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" get configmap "$CM_NAME" -o yaml > "$TMP_FILE"
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" get configmap "$CM_NAME" -o yaml > "$TMP_FILE"
 
       echo "🛠 Patching CoreDNS ConfigMap to prioritize internal.lan..."
       # Replace the line with the kubernetes plugin configuration
       sudo sed -i 's/kubernetes .*cluster.local/kubernetes internal.lan cluster.local/' "$TMP_FILE"
 
       echo "📦 Applying patched ConfigMap..."
-      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" apply -f "$TMP_FILE"
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" apply -f "$TMP_FILE"
 
       echo "🚀 Restarting CoreDNS deployment..."
-      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout restart deployment "$DEPLOYMENT_NAME"
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout restart deployment "$DEPLOYMENT_NAME"
 
       echo "⏳ Waiting for CoreDNS to be ready..."
-      sudo -E kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout status deployment "$DEPLOYMENT_NAME" --timeout=60s
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout status deployment "$DEPLOYMENT_NAME" --timeout=60s
 
       echo "✅ CoreDNS patch complete and ready."
 
@@ -960,8 +960,8 @@ write_files:
       value: github
       EOF
 
-      sudo -E kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo -E kubectl annotate namespace longhorn-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace longhorn-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
       xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
@@ -1048,6 +1048,23 @@ write_files:
       sudo kubectl annotate namespace linkerd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace linkerd-viz field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace linkerd-jaeger field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      echo "Installing Kyverno..."
+      sudo helm repo add kyverno https://kyverno.github.io/kyverno/ --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+      sudo helm install kyverno kyverno/kyverno -n kyverno --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      echo "Installing policy reporter..."
+      sudo helm repo add policy-reporter https://kyverno.github.io/policy-reporter --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo helm repo update
+
+      sudo helm install policy-reporter policy-reporter/policy-reporter \
+        -n policy-reporter --create-namespace \
+        --set ui.enabled=true \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace kyverno field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace policy-reporter field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
@@ -1193,7 +1210,7 @@ write_files:
 
       echo "📥 Creating nvidia namespace..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace nvidia || true
-      sudo -E kubectl annotate namespace nvidia field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace nvidia field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # echo "📦 Creating GPU time-slicing config..."
       # cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1549,6 +1566,24 @@ write_files:
           - port: 80
             targetPort: 80
             name: http
+      ---
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: kyverno-ui
+        namespace: policy-reporter
+      spec:
+        http:
+          - name: ui
+            match:
+              hosts:
+                - policy-reporter.suncoast.systems
+              paths:
+                - /*
+            backends:
+              - serviceName: policy-reporter-ui
+                servicePort: 8080
       EOF
       # end apisix routes for linkerd and jaeger
 
