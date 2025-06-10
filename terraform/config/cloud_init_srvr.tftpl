@@ -991,7 +991,7 @@ write_files:
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 3) Install the control-plane (with mTLS left on)
-      cat <<EOF | sudo kubectl --kubeconfig linkerd-values.yaml apply -f -
+      sudo tee /tmp/linkerd-values.yaml << 'EOF'
       clusterNetworks: "10.42.0.0/16,10.43.0.0/16"
       global:
         proxyInit:
@@ -1004,7 +1004,7 @@ write_files:
 
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        -f linkerd-values.yaml \
+        -f /tmp/linkerd-values.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 4) Wait for Linkerd to come up
