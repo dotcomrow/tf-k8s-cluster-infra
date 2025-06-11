@@ -348,11 +348,11 @@ write_files:
       sed -i '/^server:/d' /etc/rancher/rke2/config.yaml
       echo "server: https://srvr-node.internal.lan:9345" >> /etc/rancher/rke2/config.yaml
 
-  - path: /etc/systemd/system/rke2-agent.service.d/override.conf
+  - path: /etc/security/limits.d/99-nofile.conf
     permissions: '0644'
     content: |
-      [Service]
-      LimitNOFILE=1048576
+      * soft nofile 1048576
+      * hard nofile 1048576
 
   - path: /etc/systemd/system/containerd.service.d/override.conf
     permissions: '0644'
@@ -360,20 +360,11 @@ write_files:
       [Service]
       LimitNOFILE=1048576
 
-  - path: /usr/local/bin/tune-system.sh
-    permissions: '0755'
+  - path: /etc/systemd/system/rke2-agent.service.d/override.conf
+    permissions: '0644'
     content: |
-      #!/bin/bash
-      echo "* soft nofile 1048576
-      * hard nofile 1048576
-      root soft nofile 1048576
-      root hard nofile 1048576" > /etc/security/limits.d/99-nofile.conf
-
-      mkdir -p /etc/systemd/system.conf.d /etc/systemd/user.conf.d
-      echo "[Manager]
-      DefaultLimitNOFILE=1048576" | tee /etc/systemd/system.conf.d/99-default-ulimits.conf /etc/systemd/user.conf.d/99-default-ulimits.conf
-
-      systemctl daemon-reload
+      [Service]
+      LimitNOFILE=1048576
 
   - path: /usr/local/bin/setup-fluentbit.sh
     permissions: '0755'
@@ -646,7 +637,6 @@ runcmd:
   - systemctl enable rke2-preload-images.service
   - systemctl start rke2-preload-images.service
 
-  - /usr/local/bin/tune-system.sh
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
   - systemctl daemon-reload
