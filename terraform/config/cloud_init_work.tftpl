@@ -360,6 +360,12 @@ write_files:
       [Service]
       LimitNOFILE=1048576
 
+  - path: /etc/systemd/system/rke2-server.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+
   - path: /etc/systemd/system/rke2-agent.service.d/override.conf
     permissions: '0644'
     content: |
