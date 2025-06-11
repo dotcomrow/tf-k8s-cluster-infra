@@ -13,20 +13,22 @@ terraform {
 }
 
 provider "proxmox" {
-  endpoint  = "https://${var.PROXMOX_HOSTNAME}.${var.RANCHER_DOMAIN}:8006/api2/json"
+  # run on the agent host itself, so talk to 127.0.0.1
+  endpoint = "https://127.0.0.1:8006/api2/json"
   username = var.proxmox_api_username
   password = var.proxmox_api_password
-  insecure  = true
+  insecure = true
+
   ssh {
-    agent = false
+    agent       = false
     private_key = var.proxmox_ssh_private_key
-    username= "root"
+    username    = "root"
     dynamic "node" {
       for_each = [var.node_name]
       content {
         name    = var.node_name
-        address = "${var.PROXMOX_HOSTNAME}.${var.RANCHER_DOMAIN}"
-        port    = var.PROXMOX_SSH_PORT
+        address = "127.0.0.1"        # point SSH at localhost
+        port    = 22
       }
     }
   }

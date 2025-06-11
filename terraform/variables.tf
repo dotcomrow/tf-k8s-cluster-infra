@@ -108,20 +108,12 @@ variable "UBUNTU_RELEASE_CODE_NAME" {
   default = "noble"
 }
 
-variable "PROXMOX_HOSTNAME" {
-  default = "proxmox"
-}
-
 variable "NVIDIA_DRIVER" {
   default = "570"
 }
 
 variable "ARGOCD_REPO_POST_INSTALL_KEY" {
   default = "argocd"
-}
-
-variable "PROXMOX_SSH_PORT" {
-  default = "22"
 }
 
 variable "ARGOCD_GITHUB_CLIENT_ID" {
