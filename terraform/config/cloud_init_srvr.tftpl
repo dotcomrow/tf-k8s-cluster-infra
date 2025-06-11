@@ -1092,7 +1092,7 @@ write_files:
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite}"
+        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
 
       sudo apt install yq jq -y
       NAMESPACE="apisix"
@@ -1176,6 +1176,24 @@ write_files:
         loadBalancerIP: 10.0.0.111
         selector:
           app: oauth2-proxy
+      EOF
+
+      # --- Enable real client IP extraction everywhere ---------------------------
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixGlobalRule
+      metadata:
+        name: real-ip-global
+      spec:
+        plugins:
+          - name: real-ip
+            enable: true
+            config:
+              # read the address that HAProxy appends
+              source: http_x_forwarded_for
+              recursive: true                
+              trusted_addresses:
+                - "10.0.0.0/24"              
       EOF
 
   - path: /etc/systemd/system/install-apisix-rancher.service
