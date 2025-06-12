@@ -199,3 +199,9 @@ variable "JAEGER_GITHUB_AUTH_TEAM" {
 variable "NFS_DRIVE_STORAGE" {
   default = "200Gi"
 }
+
+variable "LINODE_TOKEN" {
+  description = "The Linode API token for managing Linode resources"
+  type        = string
+  default     = "your-linode-api-token"  
+}
