@@ -205,3 +205,9 @@ variable "LINODE_TOKEN" {
   type        = string
   default     = "your-linode-api-token"  
 }
+
+variable "LINODE_DRIVER_URL" {
+  description = "The URL for the Linode driver"
+  type        = string
+  default     = "https://github.com/dotcomrow/linode-machine-driver-builds/releases/download/v0.1.9/docker-machine-driver-linode"
+}
