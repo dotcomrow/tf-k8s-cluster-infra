@@ -1032,8 +1032,6 @@ write_files:
         | jq -r .token
       )" > .token
 
-      # 3. Add Linode cloud credential
-      echo "🔐 Adding Linode token for dynamic cluster provisioning..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
         -H "Authorization: Bearer $( \
             curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
@@ -1049,8 +1047,10 @@ write_files:
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         -d "{
           \"name\": \"suncoast-systems-dotcomrow-credential\",
-          \"linodecredentialConfig\": {\"token\": \"${LINODE_TOKEN}\"},
-          \"type\": \"cloudCredential\"
+          \"type\": \"cloudCredential\",
+          \"linodecredentialConfig\": {
+            \"token\": \"${LINODE_TOKEN}\"
+          }
         }"
 
       echo "✔️ Cloud credential created"
