@@ -1018,20 +1018,7 @@ write_files:
         --type=merge \
         -p '{"spec":{"active":false}}'
 
-      echo "$(
-        curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
-          -H 'Content-Type: application/json' \
-          -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-          -d "{\"username\":\"admin\",\"password\":\"$(
-                sudo kubectl \
-                  --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-                  -n cattle-system get secret bootstrap-secret \
-                  -o jsonpath='{.data.bootstrapPassword}' \
-                | base64 -d | tr -d '\n'
-              )\"}" \
-        | jq -r .token
-      )" > .token
-
+      echo "📥 Installing Linode node driver..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
         -H "Authorization: Bearer $( \
             curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
@@ -1186,7 +1173,22 @@ write_files:
       fi
       
       sudo helm repo update
-      sudo helm install kyverno kyverno/kyverno -n kyverno --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      echo "Installing Kyverno..."
+      RETRIES=5
+      DELAY=5
+
+      for i in $(seq 1 $RETRIES); do
+        echo "Attempt $i to install Policy Reporter..."
+        sudo helm install kyverno kyverno/kyverno -n kyverno --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+
+        echo "Helm install failed. Retrying in $DELAY seconds..."
+        sleep $DELAY
+      done
+
+      if [[ $i -eq $RETRIES ]]; then
+        echo "❌ Failed to install Policy Reporter after $RETRIES attempts." >&2
+        exit 1
+      fi
 
       echo "Installing policy reporter..."
       for i in $(seq 1 $RETRIES); do
@@ -1204,13 +1206,30 @@ write_files:
       
       sudo helm repo update
 
-      sudo helm install policy-reporter policy-reporter/policy-reporter \
-        -n policy-reporter --create-namespace \
-        --set ui.enabled=true \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      RETRIES=5
+      DELAY=5
+
+      for i in $(seq 1 $RETRIES); do
+        echo "Attempt $i to install Policy Reporter..."
+        sudo helm install policy-reporter policy-reporter/policy-reporter \
+          -n policy-reporter --create-namespace \
+          --set ui.enabled=true \
+          --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+
+        echo "Helm install failed. Retrying in $DELAY seconds..."
+        sleep $DELAY
+      done
+
+      if [[ $i -eq $RETRIES ]]; then
+        echo "❌ Failed to install Policy Reporter after $RETRIES attempts." >&2
+        exit 1
+      fi
 
       sudo kubectl annotate namespace kyverno field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace policy-reporter field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       RETRIES=5
@@ -1292,7 +1311,21 @@ write_files:
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
 
-      sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      RETRIES=5
+      DELAY=5
+
+      for i in $(seq 1 $RETRIES); do
+        echo "Attempt $i to install APISIX Dashboard..."
+        sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+
+        echo "Helm install failed. Retrying in $DELAY seconds..."
+        sleep $DELAY
+      done
+
+      if [[ $i -eq $RETRIES ]]; then
+        echo "❌ Failed to install APISIX Dashboard after $RETRIES attempts." >&2
+        exit 1
+      fi     
 
       echo "⏳ Waiting for APISIX components..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix-ingress-controller -n apisix
