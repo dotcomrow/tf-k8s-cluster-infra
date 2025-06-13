@@ -995,14 +995,28 @@ write_files:
       sudo kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace longhorn-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      sudo -E kubectl -n cattle-system patch nodedriver linode \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system patch nodedriver linode \
         --type=merge \
         -p '{"spec":{"active":false}}'
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace <namespace> \
+          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"<namespace>"'"}'
+
+      echo "$(
+        curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+          -H 'Content-Type: application/json' \
+          -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+              -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
+        | jq -r .token
+      )" > .token
 
       # 3. Add Linode cloud credential
       echo "🔐 Adding Linode token for dynamic cluster provisioning..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
-        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" -H 'Content-Type: application/json' -d "{\"username\":\"admin\",\"password\":\"$(sudo -E kubectl -n cattle-system get secret bootstrap-secret -o jsonpath="{.data.bootstrapPassword}" | base64 -d)\"}" | jq -r .token)" \
+        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
+            | jq -r .token)" \
         -H 'Content-Type: application/json' \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         -d "{
@@ -1018,18 +1032,21 @@ write_files:
       # 4. Add Linode node driver
       echo "⚙️ Installing Linode node driver..."
       curl -sk -X POST "https://10.0.0.110/v3/nodeDrivers" \
-        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" -H 'Content-Type: application/json' -d "{\"username\":\"admin\",\"password\":\"$(sudo -E kubectl -n cattle-system get secret bootstrap-secret -o jsonpath="{.data.bootstrapPassword}" | base64 -d)\"}" | jq -r .token)" \
+        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
+            | jq -r .token)" \
         -H "Content-Type: application/json" \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-        -d '{
-          "active": true,
-          "builtin": false,
-          "url": "${LINODE_DRIVER_URL}",
-          "checksum": "",
-          "displayName": "Linode",
-          "name": "linode",
-          "uiUrl": "https://unpkg.com/rancher-ui-driver-none@0.2.0/component.js"
-        }'
+        -d "{
+          \"active\": true,
+          \"builtin\": false,
+          \"url\": \"${LINODE_DRIVER_URL}\",
+          \"checksum\": \"\",
+          \"displayName\": \"Linode\",
+          \"name\": \"linode\",
+          \"uiUrl\": \"https://unpkg.com/rancher-ui-driver-none@0.2.0/component.js\"
+        }"
 
       echo "✔️ Node driver added"
 
