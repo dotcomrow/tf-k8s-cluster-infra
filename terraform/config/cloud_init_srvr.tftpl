@@ -1716,6 +1716,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
+          scheduler.alpha.kubernetes.io/default-node-selector: '{"dedicated":"srvr-node"}'
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -1930,10 +1931,6 @@ write_files:
       reclaimPolicy: Retain
       volumeBindingMode: Immediate
       EOF
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace nfs-system \
-          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}'
-
       # End NFS install
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1943,6 +1940,7 @@ write_files:
         name: argocd
         annotations:
           field.cattle.io/projectId: local:infrastructure
+          scheduler.alpha.kubernetes.io/default-node-selector: '{"dedicated":"srvr-node"}'
       ---
       apiVersion: v1
       kind: Secret
@@ -2025,9 +2023,6 @@ write_files:
               - serviceName: argocd-server
                 servicePort: 80
       EOF
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace argocd \
-          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}'
 
       KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
       ARGOCD_NAMESPACE="argocd"
