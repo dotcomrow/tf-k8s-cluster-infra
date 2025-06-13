@@ -1002,25 +1002,35 @@ write_files:
       echo "$(
         curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
           -H 'Content-Type: application/json' \
-          -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
-              -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
+          -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+          -d "{\"username\":\"admin\",\"password\":\"$(
+                sudo kubectl \
+                  --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+                  -n cattle-system get secret bootstrap-secret \
+                  -o jsonpath='{.data.bootstrapPassword}' \
+                | base64 -d | tr -d '\n'
+              )\"}" \
         | jq -r .token
       )" > .token
 
       # 3. Add Linode cloud credential
       echo "🔐 Adding Linode token for dynamic cluster provisioning..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
-        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
-            | jq -r .token)" \
+        -H "Authorization: Bearer $( \
+            curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+              -H 'Content-Type: application/json' \
+              -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+              -d "{\"username\":\"admin\",\"password\":\"$( \
+                    sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+                      -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
+                  )\"}" \
+            | jq -r .token \
+          )" \
         -H 'Content-Type: application/json' \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         -d "{
           \"name\": \"suncoast-systems-dotcomrow-credential\",
-          \"linodecredentialConfig\": {
-            \"token\": \"${LINODE_TOKEN}\"
-          },
+          \"linodecredentialConfig\": {\"token\": \"${LINODE_TOKEN}\"},
           \"type\": \"cloudCredential\"
         }"
 
@@ -1029,10 +1039,16 @@ write_files:
       # 4. Add Linode node driver
       echo "⚙️ Installing Linode node driver..."
       curl -sk -X POST "https://10.0.0.110/v3/nodeDrivers" \
-        -H "Authorization: Bearer $(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
-            -H 'Content-Type: application/json' \
-            -d "{\"username\":\"admin\",\"password\":\"$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret -o jsonpath='{.data.bootstrapPassword}' | base64 -d)\"}" \
-            | jq -r .token)" \
+        -H "Authorization: Bearer $( \
+            curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+              -H 'Content-Type: application/json' \
+              -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+              -d "{\"username\":\"admin\",\"password\":\"$( \
+                    sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+                      -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
+                  )\"}" \
+            | jq -r .token \
+          )" \
         -H "Content-Type: application/json" \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         -d "{
