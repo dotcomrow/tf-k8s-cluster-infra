@@ -534,6 +534,14 @@ write_files:
 
       sudo mkdir -p /etc/systemd/system/rke2-server.service.d/
 
+      sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
+      # ────────────────────────────────────────────────────────────────────────
+      # Enable the PodNodeSelector admission plugin on the kube-api-server
+      # ────────────────────────────────────────────────────────────────────────
+      kube-apiserver-arg:
+        - "enable-admission-plugins=PodNodeSelector"
+      EOF
+
       systemctl enable rke2-server
       systemctl start rke2-server
 

@@ -347,6 +347,13 @@ write_files:
       echo "token: $TOKEN" >> /etc/rancher/rke2/config.yaml
       sed -i '/^server:/d' /etc/rancher/rke2/config.yaml
       echo "server: https://srvr-node.internal.lan:9345" >> /etc/rancher/rke2/config.yaml
+      sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
+      # ────────────────────────────────────────────────────────────────────────
+      # Enable the PodNodeSelector admission plugin on the kube-api-server
+      # ────────────────────────────────────────────────────────────────────────
+      kube-apiserver-arg:
+        - "enable-admission-plugins=PodNodeSelector"
+      EOF
 
   - path: /etc/security/limits.d/99-nofile.conf
     permissions: '0644'

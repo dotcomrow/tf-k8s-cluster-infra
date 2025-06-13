@@ -629,6 +629,10 @@ write_files:
         sleep 60
       done
       echo "✅ All nodes are Ready!"
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node dedicated=srvr-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node dedicated=work-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node --overwrite
 
   - path: /etc/systemd/system/bootstrap-rke2.service
     permissions: '0644'
