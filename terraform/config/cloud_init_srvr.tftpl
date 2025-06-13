@@ -1655,7 +1655,6 @@ write_files:
             targetPort: 80
             name: http
       ---
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: apisix.apache.org/v2
       kind: ApisixRoute
       metadata:
