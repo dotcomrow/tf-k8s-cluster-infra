@@ -999,9 +999,6 @@ write_files:
         --type=merge \
         -p '{"spec":{"active":false}}'
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace <namespace> \
-          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"<namespace>"'"}'
-
       echo "$(
         curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
           -H 'Content-Type: application/json' \
@@ -1913,6 +1910,10 @@ write_files:
       reclaimPolicy: Retain
       volumeBindingMode: Immediate
       EOF
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace nfs-system \
+          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"nfs-system"'"}'
+
       # End NFS install
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -2004,6 +2005,9 @@ write_files:
               - serviceName: argocd-server
                 servicePort: 80
       EOF
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace argocd \
+          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"argocd"'"}'
 
       KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
       ARGOCD_NAMESPACE="argocd"
