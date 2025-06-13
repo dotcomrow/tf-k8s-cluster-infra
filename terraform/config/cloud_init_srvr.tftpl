@@ -1928,7 +1928,7 @@ write_files:
       EOF
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace nfs-system \
-          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"nfs-system"'"}'
+          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}'
 
       # End NFS install
 
@@ -2023,7 +2023,7 @@ write_files:
       EOF
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate namespace argocd \
-          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"'"argocd"'"}'
+          scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}'
 
       KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
       ARGOCD_NAMESPACE="argocd"
