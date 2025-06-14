@@ -241,10 +241,17 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      modprobe nfs
-      modprobe nfsd
-      echo nfs >> /etc/modules
-      echo nfsd >> /etc/modules
+      set -e
+
+      # Load immediately
+      modprobe nfs || true
+      modprobe nfsd || true
+
+      # Persist via /etc/modules if not already present
+      grep -qxF nfs /etc/modules || echo nfs >> /etc/modules
+      grep -qxF nfsd /etc/modules || echo nfsd >> /etc/modules
+
+      # Create systemd service to load modules early
       cat <<EOF > /etc/systemd/system/load-nfs-modules.service
       [Unit]
       Description=Load NFS kernel modules
@@ -253,13 +260,14 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/sbin/modprobe nfs
-      ExecStart=/sbin/modprobe nfsd
+      ExecStart=/usr/bin/modprobe nfs
+      ExecStartPost=/usr/bin/modprobe nfsd
       RemainAfterExit=true
 
       [Install]
       WantedBy=multi-user.target
       EOF
+
       systemctl daemon-reload
       systemctl enable load-nfs-modules.service
 
