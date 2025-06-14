@@ -41,7 +41,7 @@ jobs:
         run: |
           for vm in ctrl-rancher etcd-rancher work-rancher srvr-rancher; do
             echo "Force stopping $vm"
-            echo "${var.proxmox_ssh_private_key}" > tmp_key && chmod 600 tmp_key && ssh -o StrictHostKeyChecking=no -i tmp_key root@127.0.0.1 "qm stop $(qm list | grep $vm | awk '{print $1}')"
+            qm stop $(qm list | grep $vm | awk '{print $1}')
           done
 
       - name: Trigger Terraform Destroy
