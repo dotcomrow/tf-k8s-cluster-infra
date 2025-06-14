@@ -41,21 +41,19 @@ jobs:
         run: |
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
-          export PATH=$PATH:/usr/sbin:/sbin
-
           for vm in ctrl-node etcd-node work-node srvr-node; do
             echo "🔌 Stopping $vm"
-            vmid=$(sudo -E qm list | awk -v name="$vm" '$0 ~ name {print $1}')
+            vmid=$(sudo env PATH=$PATH:/usr/sbin:/sbin qm list | awk -v name="$vm" '$0 ~ name {print $1}')
             if [[ -n "$vmid" ]]; then
               echo "VM ID for $vm: $vmid"
-              sudo -E qm stop "$vmid" || true
+              sudo env PATH=$PATH:/usr/sbin:/sbin qm stop "$vmid" || true
             else
               echo "⚠️  VM $vm not found — skipping"
             fi
           done
 
           echo "🧼 Cleaning up cloud-init snippets..."
-          sudo -E rm -f /var/lib/vz/snippets/cloud_init_*.yaml || true
+          sudo env PATH=$PATH:/usr/sbin:/sbin rm -f /var/lib/vz/snippets/cloud_init_*.yaml || true
 
       - name: Trigger Terraform Destroy
         if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
