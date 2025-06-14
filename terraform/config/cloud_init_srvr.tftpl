@@ -1116,6 +1116,16 @@ write_files:
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd-viz
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd-jaeger
+
+      sudo kubectl annotate namespace linkerd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-viz field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-jaeger field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace linkerd scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-viz scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-jaeger scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📥 Installing Gateway API CRDs..."
       # sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
@@ -1184,18 +1194,6 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
 
       sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
-
-      sudo kubectl annotate namespace linkerd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace linkerd-viz field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace linkerd-jaeger field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo kubectl annotate namespace linkerd scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace linkerd-viz scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace linkerd-jaeger scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd delete pod --all
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz delete pod --all
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-jaeger delete pod --all
 
       echo "Installing Kyverno..."
       RETRIES=5
