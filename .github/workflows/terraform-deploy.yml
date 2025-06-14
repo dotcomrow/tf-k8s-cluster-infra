@@ -19,7 +19,7 @@ permissions: write-all
 jobs:
   tfc:
     name: "Terraform: ${{ github.event.inputs.mode }}"
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env:
       TF_CLOUD_ORGANIZATION: ${{ github.repository_owner }}
       TF_API_TOKEN: ${{ secrets.TFE_TOKEN }}
@@ -36,20 +36,12 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Check qm path
-        run: |
-          echo "🔍 Checking qm binary location"
-          which qm || echo "❌ qm not found in PATH"
-          sudo which qm || echo "❌ sudo cannot find qm"
-          sudo ls -l /usr/sbin/qm || echo "❌ /usr/sbin/qm not found"
-          sudo -l
-
       - name: Force stop Proxmox VMs for rebuild
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
         run: |
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
-          sudo bash -c '
+          sudo --preserve-env=PATH bash -c '
             export PATH=$PATH:/usr/sbin:/sbin:/usr/bin:/bin
 
             for vm in ctrl-node etcd-node work-node srvr-node; do
