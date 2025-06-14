@@ -41,10 +41,8 @@ jobs:
         run: |
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
-          # Add /usr/sbin to the PATH before entering the sudo shell
-          export PATH=$PATH:/usr/sbin:/sbin
-
           sudo bash -c '
+            export PATH=$PATH:/usr/sbin:/sbin
             for vm in ctrl-node etcd-node work-node srvr-node; do
               echo "🔌 Stopping $vm"
               vmid=$(qm list | awk -v name="$vm" '\''$0 ~ name {print $1}'\'')
