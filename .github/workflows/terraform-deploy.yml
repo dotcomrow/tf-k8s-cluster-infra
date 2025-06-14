@@ -36,16 +36,18 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Force stop Proxmox VMs locally (rebuild-vms only)
+      - name: Force stop Proxmox VMs for rebuild
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
         run: |
-          sudo bash -c '
-            echo "⚡ Force stopping Proxmox VMs for rebuild"
-            export PATH=$PATH:/usr/sbin:/sbin
+          echo "⚡ Force stopping Proxmox VMs for rebuild"
 
+          # Add /usr/sbin to the PATH before entering the sudo shell
+          export PATH=$PATH:/usr/sbin:/sbin
+
+          sudo bash -c '
             for vm in ctrl-node etcd-node work-node srvr-node; do
               echo "🔌 Stopping $vm"
-              vmid=$(qm list | awk -v name="$vm" "$0 ~ name {print \$1}")
+              vmid=$(qm list | awk -v name="$vm" '\''$0 ~ name {print $1}'\'')
               if [[ -n "$vmid" ]]; then
                 echo "VM ID for $vm: $vmid"
                 qm stop "$vmid" || true
