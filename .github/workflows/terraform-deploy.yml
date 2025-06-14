@@ -36,13 +36,20 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Force poweroff for Proxmox VMs (rebuild-vms only)
+      - name: Force stop Proxmox VMs locally (rebuild-vms only)
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
         run: |
-          echo "Force stopping Proxmox VMs for rebuild"
+          echo "⚡ Force stopping Proxmox VMs for rebuild"
+
           for vm in ctrl-rancher etcd-rancher work-rancher srvr-rancher; do
-            echo "Force stopping $vm"
-            sudo sudo /usr/sbin/qm stop $(sudo sudo /usr/sbin/qm list | grep $vm | awk '{print $1}')
+            echo "🔌 Stopping $vm"
+            vmid=$(/usr/bin/qm list | awk -v name="$vm" '$0 ~ name {print $1}')
+            if [[ -n "$vmid" ]]; then
+              echo "VM ID for $vm: $vmid"
+              /usr/bin/qm stop "$vmid" || true
+            else
+              echo "VM $vm not found in qm list — skipping"
+            fi
           done
 
       - name: Trigger Terraform Destroy
