@@ -1228,8 +1228,8 @@ write_files:
       sudo kubectl annotate namespace kyverno field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace policy-reporter field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/default-node-selector='{"dedicated":"srvr-node"}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       RETRIES=5
@@ -1844,7 +1844,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/default-node-selector: '{"dedicated":"srvr-node"}'
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2068,7 +2068,7 @@ write_files:
         name: argocd
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/default-node-selector: '{"dedicated":"srvr-node"}'
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
       ---
       apiVersion: v1
       kind: Secret
