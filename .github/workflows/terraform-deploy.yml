@@ -41,7 +41,7 @@ jobs:
         run: |
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
-          for vm in ctrl-rancher etcd-rancher work-rancher srvr-rancher; do
+          for vm in ctrl-node etcd-node work-node srvr-node; do
             echo "🔌 Stopping $vm"
             vmid=$(/usr/bin/qm list | awk -v name="$vm" '$0 ~ name {print $1}')
             if [[ -n "$vmid" ]]; then
