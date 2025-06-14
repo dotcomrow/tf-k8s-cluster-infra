@@ -1079,6 +1079,24 @@ write_files:
 
       echo "✔️ Node driver added"
 
+      echo "⏳ Waiting for Rancher to register 'linodecredentialConfig' schema..."
+      until curl -sk 
+        -H "Authorization: Bearer $( \
+            curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+              -H 'Content-Type: application/json' \
+              -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+              -d "{\"username\":\"admin\",\"password\":\"$( \
+                    sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+                      -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
+                  )\"}" \
+            | jq -r .token \
+          )" \
+        -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+        https://10.0.0.110/v3/schemas | grep -q linodecredentialConfig; do
+        sleep 5
+      done
+      echo "✅ 'linodecredentialConfig' schema registered."
+
       echo "📥 Installing Linode token..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
         -H "Authorization: Bearer $( \
