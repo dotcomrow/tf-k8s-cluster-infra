@@ -41,7 +41,7 @@ jobs:
         run: |
           for vm in ctrl-rancher etcd-rancher work-rancher srvr-rancher; do
             echo "Force stopping $vm"
-            qm stop $(qm list | grep $vm | awk '{print $1}')
+            sudo qm stop $(qm list | grep $vm | awk '{print $1}')
           done
 
       - name: Trigger Terraform Destroy
