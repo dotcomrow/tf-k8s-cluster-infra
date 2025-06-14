@@ -42,15 +42,14 @@ jobs:
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
           sudo bash -c '
-            PATH=$PATH:/usr/sbin:/sbin:/bin:/usr/bin
-            qm_cmd=$(command -v qm)
+            qm_cmd="/usr/sbin/qm"
 
-            if [[ -z "$qm_cmd" ]]; then
-              echo "❌ ERROR: qm command not found"
+            if [[ ! -x "$qm_cmd" ]]; then
+              echo "❌ ERROR: qm not executable at $qm_cmd"
               exit 1
             fi
 
-            echo "✅ Found qm at: $qm_cmd"
+            echo "✅ Using qm at: $qm_cmd"
 
             for vm in ctrl-node etcd-node work-node srvr-node; do
               echo "🔌 Stopping $vm"
