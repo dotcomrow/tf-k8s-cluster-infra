@@ -49,7 +49,16 @@ jobs:
             https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME | jq -r '.data.id')
 
           if [[ "$MODE" == "rebuild-vms" ]]; then
-            TARGET_JSON='["proxmox_virtual_environment_vm.ctrl_rancher_vm","proxmox_virtual_environment_vm.etcd_rancher_vm","proxmox_virtual_environment_vm.work_rancher_vm","proxmox_virtual_environment_vm.srvr_rancher_vm"]'
+            TARGET_JSON='[
+              "proxmox_virtual_environment_vm.ctrl_rancher_vm",
+              "proxmox_virtual_environment_vm.etcd_rancher_vm",
+              "proxmox_virtual_environment_vm.work_rancher_vm",
+              "proxmox_virtual_environment_vm.srvr_rancher_vm",
+              "proxmox_virtual_environment_file.ctrl_cloud_init_config",
+              "proxmox_virtual_environment_file.etcd_cloud_init_config",
+              "proxmox_virtual_environment_file.work_cloud_init_config",
+              "proxmox_virtual_environment_file.srvr_cloud_init_config"
+            ]'
           else
             TARGET_JSON='null'
           fi
