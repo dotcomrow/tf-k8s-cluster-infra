@@ -36,24 +36,36 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
+      - name: Check qm path
+        run: |
+          echo "🔍 Checking qm binary location"
+          which qm || echo "❌ qm not found in PATH"
+          sudo which qm || echo "❌ sudo cannot find qm"
+          sudo ls -l /usr/sbin/qm || echo "❌ /usr/sbin/qm not found"
+          sudo -l
+
       - name: Force stop Proxmox VMs for rebuild
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
         run: |
           echo "⚡ Force stopping Proxmox VMs for rebuild"
 
-          for vm in ctrl-node etcd-node work-node srvr-node; do
-            echo "🔌 Stopping $vm"
-            vmid=$(sudo /usr/sbin/qm list | awk -v name="$vm" '$0 ~ name {print $1}')
-            if [[ -n "$vmid" ]]; then
-              echo "VM ID for $vm: $vmid"
-              sudo /usr/sbin/qm stop "$vmid" || true
-            else
-              echo "⚠️  VM $vm not found — skipping"
-            fi
-          done
+          sudo bash -c '
+            export PATH=$PATH:/usr/sbin:/sbin:/usr/bin:/bin
 
-          echo "🧼 Cleaning up cloud-init snippets..."
-          sudo /bin/rm -f /var/lib/vz/snippets/cloud_init_*.yaml || true
+            for vm in ctrl-node etcd-node work-node srvr-node; do
+              echo "🔌 Stopping $vm"
+              vmid=$(qm list | awk -v name="$vm" '\''$0 ~ name {print $1}'\'')
+              if [[ -n "$vmid" ]]; then
+                echo "VM ID for $vm: $vmid"
+                qm stop "$vmid" || true
+              else
+                echo "⚠️  VM $vm not found — skipping"
+              fi
+            done
+
+            echo "🧼 Cleaning up cloud-init snippets..."
+            rm -f /var/lib/vz/snippets/cloud_init_*.yaml || true
+          '
 
       - name: Trigger Terraform Destroy
         if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
