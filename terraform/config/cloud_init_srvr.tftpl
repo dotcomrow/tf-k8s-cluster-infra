@@ -1093,7 +1093,7 @@ write_files:
           )" \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         https://10.0.0.110/v3/schemas | grep -q linodecredentialConfig; do
-        sleep 5
+        sleep 60
       done
       echo "✅ 'linodecredentialConfig' schema registered."
 
