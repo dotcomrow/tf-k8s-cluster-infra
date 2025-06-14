@@ -40,10 +40,9 @@ jobs:
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
         run: |
           echo "Force stopping Proxmox VMs for rebuild"
-          export PATH=$PATH:/usr/sbin:/sbin
           for vm in ctrl-rancher etcd-rancher work-rancher srvr-rancher; do
             echo "Force stopping $vm"
-            sudo qm stop $(qm list | grep $vm | awk '{print $1}')
+            sudo sudo /usr/sbin/qm stop $(sudo sudo /usr/sbin/qm list | grep $vm | awk '{print $1}')
           done
 
       - name: Trigger Terraform Destroy
