@@ -1265,6 +1265,9 @@ write_files:
       sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno delete pod --all
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n policy-reporter delete pod --all
+
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       RETRIES=5
       DELAY=3
