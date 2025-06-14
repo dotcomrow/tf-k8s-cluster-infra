@@ -49,20 +49,20 @@ jobs:
             https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME | jq -r '.data.id')
 
           if [[ "$MODE" == "rebuild-vms" ]]; then
-            TARGETS='["proxmox_virtual_environment_vm.ctrl_rancher_vm","proxmox_virtual_environment_vm.etcd_rancher_vm","proxmox_virtual_environment_vm.work_rancher_vm","proxmox_virtual_environment_vm.srvr_rancher_vm"]'
+            TARGET_JSON='["proxmox_virtual_environment_vm.ctrl_rancher_vm","proxmox_virtual_environment_vm.etcd_rancher_vm","proxmox_virtual_environment_vm.work_rancher_vm","proxmox_virtual_environment_vm.srvr_rancher_vm"]'
           else
-            TARGETS=null
+            TARGET_JSON='null'
           fi
 
           DATA=$(jq -n \
             --arg wid "$WORKSPACE_ID" \
-            --argjson targets "$TARGETS" \
+            --arg targets "$TARGET_JSON" \
             '{
               data: {
                 attributes: {
                   "is-destroy": true,
                   "message": "Destroy triggered from GitHub Actions",
-                  "target-addrs": (targets // null)
+                  "target-addrs": ($targets | fromjson)
                 },
                 type: "runs",
                 relationships: {
