@@ -121,7 +121,7 @@ jobs:
         if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
         run: |
           echo "🕐 Waiting 90 seconds to allow destroy to complete..."
-          sleep 90
+          sleep 180
 
       - name: Trigger Terraform Apply
         uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
