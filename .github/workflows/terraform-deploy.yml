@@ -43,12 +43,12 @@ jobs:
 
           for vm in ctrl-node etcd-node work-node srvr-node; do
             echo "🔌 Stopping $vm"
-            vmid=$(/usr/sbin/qm list | awk -v name="$vm" '$0 ~ name {print $1}')
+            vmid=$(sudo /usr/sbin/qm list | awk -v name="$vm" '$0 ~ name {print $1}')
             if [[ -n "$vmid" ]]; then
               echo "VM ID for $vm: $vmid"
-              /usr/sbin/qm stop "$vmid" || true
+              sudo /usr/sbin/qm stop "$vmid" || true
             else
-              echo "VM $vm not found in qm list — skipping"
+              echo "⚠️  VM $vm not found — skipping"
             fi
           done
 
