@@ -1196,6 +1196,15 @@ write_files:
       sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       echo "Installing Kyverno..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace kyverno || true
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace policy-reporter || true
+      
+      sudo kubectl annotate namespace kyverno field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace policy-reporter field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      
       RETRIES=5
       DELAY=3
 
@@ -1264,15 +1273,6 @@ write_files:
         echo "❌ Failed to install Policy Reporter after $RETRIES attempts." >&2
         exit 1
       fi
-
-      sudo kubectl annotate namespace kyverno field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace policy-reporter field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo kubectl annotate namespace kyverno scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace policy-reporter scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno delete pod --all
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n policy-reporter delete pod --all
 
       echo "📦 Adding Helm repos for APISIX and Bitnami..."
       RETRIES=5
