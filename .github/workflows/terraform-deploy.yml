@@ -1,26 +1,20 @@
-name: TFC Workflows
+name: TFC Rebuild Workflow
 
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'Action to perform'
-        required: true
-        default: 'apply'
-        type: choice
-        options:
-          - create
-          - destroy
+        description: 'Infrastructure action to perform'
 
 permissions: write-all
 
 jobs:
-  deploy:
+  rebuild:
+    name: "Tear Down and Rebuild Infra"
+    runs-on: ubuntu-latest
     env:
       TF_CLOUD_ORGANIZATION: ${{ github.repository_owner }}
       TF_API_TOKEN: ${{ secrets.TFE_TOKEN }}
-    name: "Build and Deploy"
-    runs-on: ubuntu-latest
 
     steps:
       - name: Check state of initial-deploy workflow
@@ -34,39 +28,6 @@ jobs:
         if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' }}
         uses: actions/checkout@v3
 
-      - name: Get next version
-        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' && github.event.inputs.action == 'apply' }}
-        uses: reecetech/version-increment@2023.9.3
-        id: version
-        with:
-          scheme: calver
-          increment: patch
-
-      - name: Create release
-        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' && github.event.inputs.action == 'apply' }}
-        uses: actions/github-script@v6
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        with:
-          github-token: "${{ github.token }}"
-          script: |
-            try {
-              const response = await github.rest.repos.createRelease({
-                draft: false,
-                generate_release_notes: true,
-                name: process.env.VERSION,
-                owner: context.repo.owner,
-                prerelease: false,
-                repo: context.repo.repo,
-                tag_name: process.env.VERSION,
-                target_commitish: 'prod'
-              });
-              core.exportVariable('RELEASE_ID', response.data.id);
-              core.exportVariable('RELEASE_UPLOAD_URL', response.data.upload_url);
-            } catch (error) {
-              core.setFailed(error.message);
-            }
-
       - name: Upload Configuration
         if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' }}
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.1.1
@@ -75,51 +36,53 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Create Apply/Destroy Run
-        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' && github.event.inputs.action == 'create'}}
+      - name: Trigger Destroy Run
+        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' }}
+        id: destroy-run
+        run: |
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          ORG_NAME="${{ github.repository_owner }}"
+          TOKEN="${{ secrets.TFE_TOKEN }}"
+  
+          WORKSPACE_ID=$(curl -s \
+            --header "Authorization: Bearer $TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME | jq -r '.data.id')
+  
+          echo "🧨 Triggering destroy for workspace $WORKSPACE_NAME..."
+  
+          curl -s -X POST \
+            --header "Authorization: Bearer $TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data '{
+              "data": {
+                "attributes": {
+                  "is-destroy": true,
+                  "message": "Destroy triggered from GitHub Actions (rebuild)"
+                },
+                "type": "runs",
+                "relationships": {
+                  "workspace": {
+                    "data": {
+                      "type": "workspaces",
+                      "id": "'"$WORKSPACE_ID"'"
+                    }
+                  }
+                }
+              }
+            }' \
+            https://app.terraform.io/api/v2/runs | jq
+
+      - name: Wait for destroy to complete
+        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' }}
+        run: |
+          echo "🕐 Waiting for 90s before proceeding to re-apply"
+          sleep 90
+
+      - name: Re-apply Terraform
         uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
-        id: tfc-run
+        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' }}
         with:
           workspace: ${{ github.event.repository.name }}
           configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
           plan_only: false
-      
-      - name: Trigger Terraform Destroy Run via API
-        if: ${{ steps.check_state.outputs.initial_deploy_state == 'disabled_manually' && github.event.inputs.action == 'destroy' }}
-        id: destroy-run
-        run: |
-            WORKSPACE_NAME="${{ github.event.repository.name }}"
-            ORG_NAME="${{ github.repository_owner }}"
-            TOKEN="${{ secrets.TFE_TOKEN }}"
-  
-            # Get Workspace ID
-            WORKSPACE_ID=$(curl -s \
-              --header "Authorization: Bearer $TOKEN" \
-              --header "Content-Type: application/vnd.api+json" \
-              https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME | jq -r '.data.id')
-  
-            echo "🧨 Workspace ID: $WORKSPACE_ID"
-  
-            # Trigger Destroy Run
-            curl -s -X POST \
-              --header "Authorization: Bearer $TOKEN" \
-              --header "Content-Type: application/vnd.api+json" \
-              --data '{
-                "data": {
-                  "attributes": {
-                    "is-destroy": true,
-                    "message": "Destroy triggered from GitHub Actions"
-                  },
-                  "type": "runs",
-                  "relationships": {
-                    "workspace": {
-                      "data": {
-                        "type": "workspaces",
-                        "id": "'"$WORKSPACE_ID"'"
-                      }
-                    }
-                  }
-                }
-              }' \
-              https://app.terraform.io/api/v2/runs | jq
-  
