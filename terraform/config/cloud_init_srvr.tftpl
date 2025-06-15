@@ -1150,9 +1150,6 @@ write_files:
             
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 
-      # 1) Create the Linkerd control-plane namespace
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace linkerd-jaeger
-
       # 2) Install the CRDs
       sudo linkerd install --crds \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
@@ -1168,6 +1165,8 @@ write_files:
 
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --set tracing.enabled=true \
+        --set tracing.collectorURL=http://jaeger-collector.linkerd-jaeger.svc.cluster.local:14268/api/traces \
         -f /tmp/linkerd-values.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
