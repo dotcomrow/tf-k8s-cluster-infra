@@ -1080,7 +1080,7 @@ write_files:
       echo "✔️ Node driver added"
 
       echo "⏳ Waiting for Rancher to register 'linodecredentialConfig' schema..."
-      until curl -sk 
+      until curl -sk \
         -H "Authorization: Bearer $( \
             curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
               -H 'Content-Type: application/json' \
