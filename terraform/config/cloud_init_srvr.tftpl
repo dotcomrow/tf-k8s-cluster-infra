@@ -986,6 +986,18 @@ write_files:
         clusterName: local
       ---
       apiVersion: management.cattle.io/v3
+      kind: Project
+      metadata:
+        name: applications
+        namespace: local
+        labels:
+          field.cattle.io/projectId: applications
+      spec:
+        displayName: "Applications"
+        description: "Project for Application Resources"
+        clusterName: local
+      ---
+      apiVersion: management.cattle.io/v3
       kind: GlobalRoleBinding
       metadata:
         name: github-k8s-cluster-admins
@@ -1120,6 +1132,22 @@ write_files:
         }"
 
       echo "✔️ Cloud credential created"
+
+      KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+      K="sudo kubectl --kubeconfig=$KUBECONFIG"
+
+      # 1a) Find the binding name for your user (e.g. "admin" or your GitHub login):
+      USER="admin"   # or "github:your-org:your-team" etc.
+      BINDING_NAME=$($K get clusterroletemplatebindings.management.cattle.io -n local \
+        -o jsonpath="{.items[?(@.spec.userName=='$USER')].metadata.name}")
+
+      # 1b) Delete it:
+      if [[ -n "$BINDING_NAME" ]]; then
+        echo "Removing $USER from Cluster Owner…"
+        $K delete clusterroletemplatebindings.management.cattle.io "$BINDING_NAME" -n local
+      else
+        echo "No cluster-owner binding found for $USER"
+      fi
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
       xargs -I {} sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
