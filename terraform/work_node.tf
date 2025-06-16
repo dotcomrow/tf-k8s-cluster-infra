@@ -19,6 +19,7 @@ resource "proxmox_virtual_environment_file" "work_cloud_init_config" {
         MONITORED_RESOURCE_NODE_ID = var.work_hostname
         UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
         NVIDIA_DRIVER = var.NVIDIA_DRIVER
+        WORK_NODE_MAX_PODS = var.WORK_NODE_MAX_PODS
       })
     file_name = "cloud_init_work.yaml"
   }

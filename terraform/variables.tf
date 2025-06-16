@@ -211,3 +211,9 @@ variable "LINODE_DRIVER_URL" {
   type        = string
   default     = "https://github.com/dotcomrow/linode-machine-driver-builds/releases/download/v0.1.9/docker-machine-driver-linode"
 }
+
+variable "WORK_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the work node"
+  type        = number
+  default     = 250
+}
