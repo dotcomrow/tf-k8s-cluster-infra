@@ -361,6 +361,9 @@ write_files:
       # ────────────────────────────────────────────────────────────────────────
       kube-apiserver-arg:
         - "enable-admission-plugins=PodNodeSelector"
+
+      kubelet-arg:
+        - "max-pods=250"
       EOF
 
   - path: /etc/security/limits.d/99-nofile.conf
