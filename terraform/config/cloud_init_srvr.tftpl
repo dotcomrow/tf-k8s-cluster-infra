@@ -2273,6 +2273,8 @@ write_files:
       REPO_URL_B64=$(echo -n "git@github.com:dotcomrow/argocd-post-install.git" | base64 -w0)
       INSECURE_B64=$(echo -n "true" | base64 -w0)
       PRIVATE_KEY_B64="${ARGOCD_REPO_POST_INSTALL_KEY}"
+      
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n cattle-system rollout status deploy rancher-webhook --timeout=120s
 
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
       apiVersion: v1
