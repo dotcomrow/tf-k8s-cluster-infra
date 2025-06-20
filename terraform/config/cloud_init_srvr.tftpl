@@ -1133,20 +1133,69 @@ write_files:
 
       echo "✔️ Cloud credential created"
 
+      # ---------------------------------------------
+      # Function: Delete ghost CRTBs from Rancher API
+      # ---------------------------------------------
+      delete_ghost_local_bindings() {
+        echo "🔍 Fetching all CRTBs from Rancher API for cluster 'local'..."
+
+        CRTBS=$(curl -s -k \
+          -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+          -H "Authorization: Bearer $( \
+            curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+              -H 'Content-Type: application/json' \
+              -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+              -d "{\"username\":\"admin\",\"password\":\"$( \
+                    sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+                      -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
+                  )\"}" \
+            | jq -r .token \
+          )" \
+          "https://10.0.0.110/v3/clusterroletemplatebindings?clusterId=local")
+
+        echo "$CRTBS" | jq -r '.data[] 
+          | select(.userPrincipalId? // "" | test("local://")) 
+          | select(.userId == null) 
+          | .id' | while read -r BINDING_ID; do
+            if [[ -n "$BINDING_ID" ]]; then
+              echo "⚠️  Deleting ghost binding: $BINDING_ID"
+              curl -s -k -X DELETE \
+                -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+                -H "Authorization: Bearer $( \
+                  curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
+                    -H 'Content-Type: application/json' \
+                    -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+                    -d "{\"username\":\"admin\",\"password\":\"$( \
+                          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+                            -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
+                        )\"}" \
+                  | jq -r .token \
+                )" \
+                "https://10.0.0.110/v3/clusterroletemplatebindings/$BINDING_ID"
+            fi
+          done
+
+        echo "✅ Ghost bindings cleanup complete."
+      }
+
+      delete_ghost_local_bindings
+
       KUBECONFIG=/etc/rancher/rke2/rke2.yaml
-      K="sudo kubectl --kubeconfig=$KUBECONFIG"
+      K="sudo -E kubectl --kubeconfig=$KUBECONFIG"
 
-      # 1a) Find the binding name for your user (e.g. "admin" or your GitHub login):
-      USER="admin"   # or "github:your-org:your-team" etc.
-      BINDING_NAME=$($K get clusterroletemplatebindings.management.cattle.io -n local \
-        -o jsonpath="{.items[?(@.spec.userName=='$USER')].metadata.name}")
+      echo "🔍 Locating ClusterRoleTemplateBinding for local:// user..."
 
-      # 1b) Delete it:
+      BINDING_NAME=$($K get clusterroletemplatebindings.management.cattle.io -n local -o json \
+        | jq -r '.items[] 
+          | select(.userPrincipalName? // "" | startswith("local://")) 
+          | select(.roleTemplateName == "cluster-owner") 
+          | .metadata.name')
+
       if [[ -n "$BINDING_NAME" ]]; then
-        echo "Removing $USER from Cluster Owner…"
+        echo "⚠️  Found local admin binding: $BINDING_NAME — Deleting it..."
         $K delete clusterroletemplatebindings.management.cattle.io "$BINDING_NAME" -n local
       else
-        echo "No cluster-owner binding found for $USER"
+        echo "✅ No local:// cluster-owner binding found — nothing to remove."
       fi
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get users.management.cattle.io -o jsonpath='{range .items[?(@.username=="admin")]}{.metadata.name}{"\n"}{end}' | \
@@ -2273,7 +2322,7 @@ write_files:
       REPO_URL_B64=$(echo -n "git@github.com:dotcomrow/argocd-post-install.git" | base64 -w0)
       INSECURE_B64=$(echo -n "true" | base64 -w0)
       PRIVATE_KEY_B64="${ARGOCD_REPO_POST_INSTALL_KEY}"
-      
+
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n cattle-system rollout status deploy rancher-webhook --timeout=120s
 
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
