@@ -1133,53 +1133,6 @@ write_files:
 
       echo "✔️ Cloud credential created"
 
-      # ---------------------------------------------
-      # Function: Delete ghost CRTBs from Rancher API
-      # ---------------------------------------------
-      delete_ghost_local_bindings() {
-        echo "🔍 Fetching all CRTBs from Rancher API for cluster 'local'..."
-
-        CRTBS=$(curl -s -k \
-          -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-          -H "Authorization: Bearer $( \
-            curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
-              -H 'Content-Type: application/json' \
-              -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-              -d "{\"username\":\"admin\",\"password\":\"$( \
-                    sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
-                      -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
-                  )\"}" \
-            | jq -r .token \
-          )" \
-          "https://10.0.0.110/v3/clusterroletemplatebindings?clusterId=local")
-
-        echo "$CRTBS" | jq -r '.data[] 
-          | select(.userPrincipalId? // "" | test("local://")) 
-          | select(.userId == null) 
-          | .id' | while read -r BINDING_ID; do
-            if [[ -n "$BINDING_ID" ]]; then
-              echo "⚠️  Deleting ghost binding: $BINDING_ID"
-              curl -s -k -X DELETE \
-                -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-                -H "Authorization: Bearer $( \
-                  curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
-                    -H 'Content-Type: application/json' \
-                    -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-                    -d "{\"username\":\"admin\",\"password\":\"$( \
-                          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
-                            -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n' \
-                        )\"}" \
-                  | jq -r .token \
-                )" \
-                "https://10.0.0.110/v3/clusterroletemplatebindings/$BINDING_ID"
-            fi
-          done
-
-        echo "✅ Ghost bindings cleanup complete."
-      }
-
-      delete_ghost_local_bindings
-
       KUBECONFIG=/etc/rancher/rke2/rke2.yaml
       K="sudo -E kubectl --kubeconfig=$KUBECONFIG"
 
