@@ -1191,8 +1191,8 @@ write_files:
         ignoreOutboundPorts: "4567,4568,55678,2379,4317"
       global:
         tracing:
-          enabled: "true"
-          collectorUrl: "collector.linkerd-jaeger.svc.cluster.local:4317"
+          enabled: true
+          collectorUrl: "collector.linkerd-jaeger.svc.cluster.local:14250"
       EOF
 
       sudo linkerd install \
