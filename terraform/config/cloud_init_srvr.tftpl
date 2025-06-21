@@ -1159,8 +1159,12 @@ write_files:
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
 
       export HOME=/home/ubuntu
-      curl -sL https://run.linkerd.io/install | sh -s -- --version stable-2.16.1
-      sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
+
+      # Download stable-2.16.1 explicitly
+      curl -sL https://github.com/linkerd/linkerd2/releases/download/stable-2.16.1/linkerd2-cli-stable-2.16.1-linux-amd64 -o /usr/local/bin/linkerd
+      chmod +x /usr/local/bin/linkerd
+
+      # Confirm version matches
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
