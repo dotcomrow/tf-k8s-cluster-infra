@@ -62,7 +62,6 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
 
   memory {
     dedicated = 28672       # fixed RAM allocation in MiB
-    balloon   = 28672       # same as dedicated → effectively disables
     hugepages = var.enable_hugepages ? "1" : null
   }
 
