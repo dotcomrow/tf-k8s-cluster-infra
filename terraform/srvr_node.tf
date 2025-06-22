@@ -63,7 +63,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
   numa {
     device    = "numa0"
-    cpus      = "10"
+    cpus      = "11"
     memory    = 1024
     hostnodes = "0"
     policy    = "bind"
