@@ -33,7 +33,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   on_boot = true
 
   cpu {
-    cores   = 6
+    cores   = 20
     sockets = 3
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
@@ -41,7 +41,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa0"
-    cpus   = "0-5"
+    cpus   = "0-20"
     memory = 123904  # 122 GiB in MiB
     hostnodes = "0"
     policy    = "bind"
@@ -49,7 +49,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa1"
-    cpus   = "6-11"
+    cpus   = "21-40"
     memory = 123904  # 124 GiB in MiB
     hostnodes = "1"
     policy    = "bind"
@@ -57,7 +57,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa2"
-    cpus   = "12-17"
+    cpus   = "41-60"
     memory = 123904  # 124 GiB in MiB
     hostnodes = "2"
     policy    = "bind"

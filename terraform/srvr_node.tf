@@ -54,7 +54,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   on_boot = true
 
   cpu {
-    cores   = 7
+    cores   = 8
     sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
@@ -87,7 +87,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
 
   numa {
     device = "numa3"
-    cpus   = "3-6"   # convert "7-10" to list
+    cpus   = "3-7"   # convert "7-10" to list
     memory = 28672           # in MiB, unchanged
     hostnodes = "3"
     policy    = "bind"

@@ -31,7 +31,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   on_boot = true
 
   cpu {
-    cores   = 6
+    cores   = 7
     sockets = 1
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
@@ -64,7 +64,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
 
   numa {
     device = "numa3"
-    cpus   = "3-5"
+    cpus   = "3-6"
     memory = 24576
     hostnodes = "3"
     policy = "bind"
