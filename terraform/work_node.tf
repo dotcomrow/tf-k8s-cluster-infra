@@ -33,7 +33,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   on_boot = true
 
   cpu {
-    cores   = 18
+    cores   = 6
     sockets = 3
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
