@@ -60,6 +60,31 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     numa    = true         # ✅ Enable NUMA for multi-socket configs
   }
 
+  # Dummy NUMA blocks to satisfy index order
+  numa {
+    device = "numa0"
+    cpus   = ""         # no CPUs assigned
+    memory = 0
+    hostnodes = [0]
+    policy    = "bind"
+  }
+
+  numa {
+    device = "numa1"
+    cpus   = ""
+    memory = 0
+    hostnodes = [1]
+    policy    = "bind"
+  }
+
+  numa {
+    device = "numa2"
+    cpus   = ""
+    memory = 0
+    hostnodes = [2]
+    policy    = "bind"
+  }
+
   numa {
     device = "numa3"
     cpus   = "7-10"   # convert "7-10" to list
