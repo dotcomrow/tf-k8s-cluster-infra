@@ -32,7 +32,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   cpu {
     cores   = 4
-    sockets = 1
+    sockets = 10
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
   }
@@ -40,7 +40,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
   numa {
     device    = "numa0"
-    cpus      = "0"
+    cpus      = "10"
     memory    = 1024
     hostnodes = "0"
     policy    = "bind"
@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   numa {
     device    = "numa1"
-    cpus      = "0"
+    cpus      = "20"
     memory    = 1024
     hostnodes = "1"
     policy    = "bind"
@@ -56,7 +56,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   numa {
     device    = "numa2"
-    cpus      = "0"
+    cpus      = "30"
     memory    = 1024
     hostnodes = "2"
     policy    = "bind"
