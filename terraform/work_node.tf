@@ -40,21 +40,21 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   }
 
   numa {
-    device = "numa0"  # Device ID for the first NUMA node
-    cpus   = "0-5"       # CPU core indices
-    memory = 131072                  # In MB
+    device = "numa0"
+    cpus   = "0-5"
+    memory = 124928  # 122 GiB in MiB
   }
 
   numa {
     device = "numa1"
     cpus   = "6-11"
-    memory = 131072
+    memory = 126976  # 124 GiB in MiB
   }
 
   numa {
     device = "numa2"
     cpus   = "12-17"
-    memory = 131072
+    memory = 126976  # 124 GiB in MiB
   }
 
   memory {
