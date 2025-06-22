@@ -38,14 +38,9 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   numa {
-    nodes = [
-      {
-        cpus      = "0-2"
-        memory    = 24576
-        hostnodes = [3]
-        policy    = "bind"
-      }
-    ]
+    device = 0
+    cpus   = [0, 1, 2]
+    memory = 24576
   }
 
   memory {

@@ -38,14 +38,9 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   numa {
-    nodes = [
-      {
-        cpus      = "3-6"
-        memory    = 32768
-        hostnodes = [3]
-        policy    = "bind"
-      }
-    ]
+    device = 0
+    cpus   = [3, 4, 5, 6]
+    memory = 32768
   }
 
   memory {

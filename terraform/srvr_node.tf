@@ -61,14 +61,9 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   numa {
-    nodes = [
-      {
-        cpus      = "7-10"     # Adjust per VM
-        memory    = 28672     # Match VM RAM in MiB
-        hostnodes = [3]
-        policy    = "bind"
-      }
-    ]
+    device = 0
+    cpus   = [7, 8, 9, 10]   # convert "7-10" to list
+    memory = 28672           # in MiB, unchanged
   }
 
   memory {
