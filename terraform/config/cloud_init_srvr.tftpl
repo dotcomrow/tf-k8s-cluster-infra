@@ -1198,6 +1198,11 @@ write_files:
           collector:
             otlp:
               endpoint: "collector.linkerd-jaeger.svc.cluster.local:4317"
+      proxy:
+        telemetry:
+          spans:
+            enabled: true
+            level: trace
       EOF
 
       sudo linkerd install \
