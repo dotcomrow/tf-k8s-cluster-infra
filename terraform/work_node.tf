@@ -41,19 +41,19 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = 0
-    cpus   = [0, 1, 2, 3, 4, 5]       # CPU core indices
+    cpus   = "0-5"       # CPU core indices
     memory = 131072                  # In MB
   }
 
   numa {
     device = 1
-    cpus   = [6, 7, 8, 9, 10, 11]
+    cpus   = "6-11"
     memory = 131072
   }
 
   numa {
     device = 2
-    cpus   = [12, 13, 14, 15, 16, 17]
+    cpus   = "12-17"
     memory = 131072
   }
 
