@@ -41,19 +41,19 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   numa {
     device = "numa0"
     cpus   = "18"         # no CPUs assigned
-    memory = 64
+    memory = 1024
   }
 
   numa {
     device = "numa1"
     cpus   = "19"
-    memory = 64
+    memory = 1024
   }
 
   numa {
     device = "numa2"
     cpus   = "20"
-    memory = 64
+    memory = 1024
   }
 
   numa {
