@@ -40,7 +40,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
   numa {
     device    = "numa0"
-    cpus      = ""
+    cpus      = "0"
     memory    = 1024
     hostnodes = "0"
     policy    = "bind"
@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   numa {
     device    = "numa1"
-    cpus      = ""
+    cpus      = "0"
     memory    = 1024
     hostnodes = "1"
     policy    = "bind"
@@ -56,7 +56,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   numa {
     device    = "numa2"
-    cpus      = ""
+    cpus      = "0"
     memory    = 1024
     hostnodes = "2"
     policy    = "bind"
