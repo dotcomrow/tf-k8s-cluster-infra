@@ -41,7 +41,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   memory {
     dedicated = 393216       # fixed RAM allocation in MiB
-    hugepages = var.enable_hugepages ? "1" : null
+    hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
   agent {

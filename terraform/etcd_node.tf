@@ -39,7 +39,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   memory {
     dedicated = 32768       # fixed RAM allocation in MiB
-    hugepages = var.enable_hugepages ? "1" : null
+    hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 
   agent {

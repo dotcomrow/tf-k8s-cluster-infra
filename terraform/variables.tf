@@ -223,3 +223,9 @@ variable "enable_hugepages" {
   type        = bool
   default     = true
 }
+
+variable "hugepages_value" {
+  description = "Hugepages value in MiB"
+  type        = number
+  default     = 1024
+}
