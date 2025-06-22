@@ -61,7 +61,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   numa {
-    device = 0
+    device = "numa3"
     cpus   = "7-10"   # convert "7-10" to list
     memory = 28672           # in MiB, unchanged
   }

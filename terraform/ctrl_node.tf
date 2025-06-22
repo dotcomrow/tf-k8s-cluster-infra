@@ -38,7 +38,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   numa {
-    device = 0
+    device = "numa3"
     cpus   = "0-2"
     memory = 24576
   }
