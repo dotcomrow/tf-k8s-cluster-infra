@@ -221,5 +221,5 @@ variable "WORK_NODE_MAX_PODS" {
 variable "enable_hugepages" {
   description = "Enable hugepages for VMs"
   type        = bool
-  default     = false
+  default     = true
 }
