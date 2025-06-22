@@ -41,7 +41,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa0"
-    cpus   = "0-20"
+    cpus   = "0-19"
     memory = 123904  # 122 GiB in MiB
     hostnodes = "0"
     policy    = "bind"
@@ -49,7 +49,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa1"
-    cpus   = "21-40"
+    cpus   = "20-39"
     memory = 123904  # 124 GiB in MiB
     hostnodes = "1"
     policy    = "bind"
@@ -57,7 +57,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device = "numa2"
-    cpus   = "41-60"
+    cpus   = "40-59"
     memory = 123904  # 124 GiB in MiB
     hostnodes = "2"
     policy    = "bind"
