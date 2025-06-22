@@ -33,11 +33,14 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   cpu {
     cores   = 4
     sockets = 2
-    type    = "host"
+    type    = "host"     # ✅ Full CPU instruction set
+    numa    = true       # ✅ Enable NUMA for multi-socket configs
   }
 
   memory {
-    dedicated = 32768
+    dedicated  = 32768
+    ballooning = false    # ✅ Avoid memory pressure disruption to etcd
+    hugepages  = var.enable_hugepages ? "1" : null    # ✅ Enables hugepages (1G)
   }
 
   agent {
@@ -47,23 +50,26 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   disk {
     datastore_id = var.VM_DISK_STORAGE
     file_id      = "local:iso/${basename(var.vm_img)}"
-    interface    = "virtio0"
-    iothread     = true
+    interface    = "scsi0"           # ✅ Required for iothread
+    iothread     = true              # ✅ Improves disk performance
     discard      = "on"
     size         = 500
-    file_format  = "raw"
+    file_format  = "raw"             # ✅ Faster I/O
   }
+
+  scsi_hardware = "virtio-scsi-single"  # ✅ Best for single-queue low-latency disk ops
 
   boot_order = ["scsi0"]
 
   network_device {
-    bridge = "vmbr1"
-    model  = "virtio"
+    bridge   = "vmbr1"
+    model    = "virtio"
+    firewall = false             # ✅ Reduce overhead, not needed for etcd VM
   }
 
   initialization {
     datastore_id = "local"
-    interface = "scsi1"
+    interface    = "scsi1"
     ip_config {
       ipv4 {
         address = "dhcp"

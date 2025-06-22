@@ -33,11 +33,14 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   cpu {
     cores   = 3
     sockets = 2
-    type    = "host"
+    type    = "host"     # ✅ Use host CPU model for full feature set
+    numa    = true       # ✅ Enable NUMA for better memory locality
   }
 
   memory {
-    dedicated = 28672
+    dedicated  = 28672
+    ballooning = false    # ✅ Avoid dynamic resizing that can disrupt Kubernetes
+    hugepages  = var.enable_hugepages ? "1" : null     # ✅ Enables use of 1G hugepages (requires host support)
   }
 
   agent {
@@ -47,23 +50,26 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   disk {
     datastore_id = var.VM_DISK_STORAGE
     file_id      = "local:iso/${basename(var.vm_img)}"
-    interface    = "virtio0"
-    iothread     = true
+    interface    = "scsi0"           # ✅ Required for iothread
+    iothread     = true              # ✅ Improves disk performance
     discard      = "on"
     size         = 300
-    file_format  = "raw"
+    file_format  = "raw"             # ✅ Fastest disk format
   }
+
+  scsi_hardware = "virtio-scsi-single"  # ✅ Modern, efficient I/O controller
 
   boot_order = ["scsi0"]
 
   network_device {
-    bridge = "vmbr1"
-    model  = "virtio"
+    bridge   = "vmbr1"
+    model    = "virtio"
+    firewall = false             # ✅ Reduce overhead, firewalling not needed here
   }
 
   initialization {
     datastore_id = "local"
-    interface = "scsi1"
+    interface    = "scsi1"
     ip_config {
       ipv4 {
         address = "dhcp"

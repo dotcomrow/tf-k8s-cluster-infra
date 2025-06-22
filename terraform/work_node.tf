@@ -35,11 +35,14 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   cpu {
     cores   = 18
     sockets = 3
-    type    = "host"
+    type    = "host"     # ✅ Best performance
+    numa    = true       # ✅ Enable NUMA for >1 socket
   }
 
   memory {
     dedicated = 393216
+    ballooning = false   # ✅ Disable ballooning for stable GPU usage
+    hugepages  = var.enable_hugepages ? "1" : null     # ✅ Uses host 1G hugepages if reserved
   }
 
   agent {
@@ -49,29 +52,31 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   disk {
     datastore_id = var.VM_DISK_STORAGE
     file_id      = "local:iso/${basename(var.vm_img)}"
-    interface    = "virtio0"
-    iothread     = true
-    discard      = "on"
+    interface    = "scsi0"            # ✅ More efficient than virtio0
+    iothread     = true               # ✅ Enable I/O thread for this disk
+    discard      = "on"              # ✅ TRIM support
     size         = 1275
-    file_format  = "raw"
+    file_format  = "raw"              # ✅ Raw for speed
   }
+
+  scsi_hardware = "virtio-scsi-single" # ✅ Optimal SCSI controller
 
   boot_order = ["scsi0"]
 
   network_device {
     bridge = "vmbr1"
-    model  = "virtio"
+    model  = "virtio"                # ✅ Fastest virtual NIC
+    firewall = false                 # ✅ Optional: skip Proxmox firewall overhead
   }
 
-  # Attach GPU using PCI passthrough
   hostpci {
-    device = "hostpci0"
-    mapping = "nvidia"
+    device  = "hostpci0"
+    mapping = "nvidia"               # ✅ GPU passthrough
   }
 
   initialization {
     datastore_id = "local"
-    interface = "scsi1"
+    interface    = "scsi1"
     ip_config {
       ipv4 {
         address = "dhcp"
