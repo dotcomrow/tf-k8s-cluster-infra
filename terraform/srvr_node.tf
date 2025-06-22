@@ -60,11 +60,9 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     numa    = true         # ✅ Enable NUMA for multi-socket configs
   }
 
-  memory {
-    dedicated  = 28672
-    ballooning = false      # ✅ Prevent dynamic memory resizing
-    hugepages  = var.enable_hugepages ? "1" : null     # ✅ Enable hugepages (1GB)
-  }
+  memory = 28672
+  balloon = 28672
+  hugepages  = var.enable_hugepages ? "1" : null # ✅ Enable hugepages if configured
 
   agent {
     enabled = true

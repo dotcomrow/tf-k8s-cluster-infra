@@ -37,11 +37,9 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for multi-socket configs
   }
 
-  memory {
-    dedicated  = 32768
-    ballooning = false    # ✅ Avoid memory pressure disruption to etcd
-    hugepages  = var.enable_hugepages ? "1" : null    # ✅ Enables hugepages (1G)
-  }
+  memory = 32768
+  balloon = 32768
+  hugepages  = var.enable_hugepages ? "1" : null # ✅ Enable hugepages if configured
 
   agent {
     enabled = true
