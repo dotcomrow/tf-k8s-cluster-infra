@@ -40,7 +40,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   }
 
   memory {
-    dedicated = 376832
+    dedicated = 393216
     ballooning = false   # ✅ Disable ballooning for stable GPU usage
     hugepages  = var.enable_hugepages ? "1" : null     # ✅ Uses host 1G hugepages if reserved
   }
