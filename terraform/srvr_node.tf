@@ -63,20 +63,20 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   # Dummy NUMA blocks to satisfy index order
   numa {
     device = "numa0"
-    cpus   = ""         # no CPUs assigned
-    memory = 0
+    cpus   = "18"         # no CPUs assigned
+    memory = 64
   }
 
   numa {
     device = "numa1"
-    cpus   = ""
-    memory = 0
+    cpus   = "19"
+    memory = 64
   }
 
   numa {
     device = "numa2"
-    cpus   = ""
-    memory = 0
+    cpus   = "20"
+    memory = 64
   }
 
   numa {
