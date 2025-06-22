@@ -37,9 +37,11 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for better memory locality
   }
 
-  memory = 28672
-  balloon = 28672
-  hugepages  = var.enable_hugepages ? "1" : null # ✅ Enable hugepages if configured
+  memory {
+    dedicated = 28672       # fixed RAM allocation in MiB
+    balloon   = 28672       # same as dedicated → effectively disables
+    hugepages = var.enable_hugepages ? "1" : null
+  }
 
   agent {
     enabled = true

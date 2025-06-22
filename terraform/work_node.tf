@@ -39,10 +39,12 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for >1 socket
   }
 
-  memory = 393216
-  balloon = 393216
-  hugepages  = var.enable_hugepages ? "1" : null # ✅ Enable hugepages if configured
-
+  memory {
+    dedicated = 393216       # fixed RAM allocation in MiB
+    balloon   = 393216       # same as dedicated → effectively disables
+    hugepages = var.enable_hugepages ? "1" : null
+  }
+  
   agent {
     enabled = true
   }
