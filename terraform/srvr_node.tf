@@ -60,6 +60,17 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     numa    = true         # ✅ Enable NUMA for multi-socket configs
   }
 
+  numa {
+    nodes = [
+      {
+        cpus      = "7-10"     # Adjust per VM
+        memory    = 28672     # Match VM RAM in MiB
+        hostnodes = [3]
+        policy    = "bind"
+      }
+    ]
+  }
+
   memory {
     dedicated = 28672       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null

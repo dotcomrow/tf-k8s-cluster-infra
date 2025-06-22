@@ -39,6 +39,29 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for >1 socket
   }
 
+  numa {
+    nodes = [
+      {
+        cpus      = "0-5"
+        memory    = 131072
+        hostnodes = [0]
+        policy    = "bind"
+      },
+      {
+        cpus      = "6-11"
+        memory    = 131072
+        hostnodes = [1]
+        policy    = "bind"
+      },
+      {
+        cpus      = "12-17"
+        memory    = 131072
+        hostnodes = [2]
+        policy    = "bind"
+      }
+    ]
+  }
+
   memory {
     dedicated = 393216       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null

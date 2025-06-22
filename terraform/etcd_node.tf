@@ -37,6 +37,17 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for multi-socket configs
   }
 
+  numa {
+    nodes = [
+      {
+        cpus      = "3-6"
+        memory    = 32768
+        hostnodes = [3]
+        policy    = "bind"
+      }
+    ]
+  }
+
   memory {
     dedicated = 32768       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null

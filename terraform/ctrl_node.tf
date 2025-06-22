@@ -37,6 +37,17 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     numa    = true       # ✅ Enable NUMA for better memory locality
   }
 
+  numa {
+    nodes = [
+      {
+        cpus      = "0-2"
+        memory    = 24576
+        hostnodes = [3]
+        policy    = "bind"
+      }
+    ]
+  }
+
   memory {
     dedicated = 24576       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
