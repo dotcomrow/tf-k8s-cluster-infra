@@ -60,29 +60,37 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     numa    = true         # ✅ Enable NUMA for multi-socket configs
   }
 
-  # Dummy NUMA blocks to satisfy index order
+  # Dummy blocks — minimum 1GB hugepages + unique fake CPU
   numa {
-    device = "numa0"
-    cpus   = "18"         # no CPUs assigned
-    memory = 1024
+    device    = "numa0"
+    cpus      = "72"
+    memory    = 1024
+    hostnodes = "0"
+    policy    = "bind"
   }
 
   numa {
-    device = "numa1"
-    cpus   = "19"
-    memory = 1024
+    device    = "numa1"
+    cpus      = "73"
+    memory    = 1024
+    hostnodes = "1"
+    policy    = "bind"
   }
 
   numa {
-    device = "numa2"
-    cpus   = "20"
-    memory = 1024
+    device    = "numa2"
+    cpus      = "74"
+    memory    = 1024
+    hostnodes = "2"
+    policy    = "bind"
   }
 
   numa {
     device = "numa3"
     cpus   = "7-10"   # convert "7-10" to list
     memory = 28672           # in MiB, unchanged
+    hostnodes = "3"
+    policy    = "bind"
   }
 
   memory {
