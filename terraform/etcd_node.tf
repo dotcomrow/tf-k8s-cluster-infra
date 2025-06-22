@@ -32,7 +32,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   cpu {
     cores   = 4
-    sockets = 2
+    sockets = 1
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
   }

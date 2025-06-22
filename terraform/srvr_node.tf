@@ -55,7 +55,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
 
   cpu {
     cores   = 4
-    sockets = 2
+    sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
   }
