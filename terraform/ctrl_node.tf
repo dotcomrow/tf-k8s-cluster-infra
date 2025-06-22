@@ -42,7 +42,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     device    = "numa0"
     cpus      = "0"
     memory    = 1024
-    hostnodes = "0"
+    hostnodes = "3"
     policy    = "bind"
   }
 
@@ -50,7 +50,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     device    = "numa1"
     cpus      = "1"
     memory    = 1024
-    hostnodes = "1"
+    hostnodes = "3"
     policy    = "bind"
   }
 
@@ -58,7 +58,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     device    = "numa2"
     cpus      = "2"
     memory    = 1024
-    hostnodes = "2"
+    hostnodes = "3"
     policy    = "bind"
   }
 

@@ -42,7 +42,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   numa {
     device = "numa0"
     cpus   = "0-5"
-    memory = 124928  # 122 GiB in MiB
+    memory = 123904  # 122 GiB in MiB
     hostnodes = "0"
     policy    = "bind"
   }
@@ -50,7 +50,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   numa {
     device = "numa1"
     cpus   = "6-11"
-    memory = 126976  # 124 GiB in MiB
+    memory = 123904  # 124 GiB in MiB
     hostnodes = "1"
     policy    = "bind"
   }
@@ -58,13 +58,13 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   numa {
     device = "numa2"
     cpus   = "12-17"
-    memory = 126976  # 124 GiB in MiB
+    memory = 123904  # 124 GiB in MiB
     hostnodes = "2"
     policy    = "bind"
   }
 
   memory {
-    dedicated = 378880       # fixed RAM allocation in MiB
+    dedicated = 371712       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
