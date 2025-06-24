@@ -1252,6 +1252,9 @@ write_files:
       bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
 
+      sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+      sudo chmod +x /usr/local/bin/yq
+
       export HOME=/home/ubuntu
 
       curl -sL https://run.linkerd.io/install | sh -s -- --version version-2.18
@@ -1341,45 +1344,19 @@ write_files:
           enabled: false
       EOF
 
+      # After generating the Jaeger manifest
       sudo linkerd jaeger install -f /tmp/linkerd-jaeger-values.yaml \
         --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
 
-      for deploy in collector jaeger; do
-        awk -v deploy="$deploy" '
-          BEGIN {
-            in_deploy = 0;
-            in_template = 0;
-            in_metadata = 0;
-            injected = 0;
-          }
-          $0 ~ "name: " deploy {
-            in_deploy = 1;
-          }
-          in_deploy && $1 == "template:" {
-            in_template = 1;
-          }
-          in_template && $1 == "metadata:" {
-            in_metadata = 1;
-          }
-          in_metadata && $1 == "annotations:" {
-            print $0;
-            print "        linkerd.io/inject: \"disabled\"";
-            in_deploy = in_template = in_metadata = 0;
-            injected = 1;
-            next;
-          }
-          in_metadata && $1 == "name:" && !injected {
-            print "      annotations:";
-            print "        linkerd.io/inject: \"disabled\"";
-            print $0;
-            in_deploy = in_template = in_metadata = 0;
-            injected = 1;
-            next;
-          }
-          { print }
-        ' /tmp/jaeger-install.yaml > /tmp/jaeger-install-patched.yaml && \
-        mv /tmp/jaeger-install-patched.yaml /tmp/jaeger-install.yaml
-      done
+      # Patch the collector and jaeger deployments to disable injection
+      yq eval '
+        (. | select(.kind == "Deployment" and .metadata.name == "collector") |
+          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled" |
+        (. | select(.kind == "Deployment" and .metadata.name == "jaeger") |
+          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled"
+      ' /tmp/jaeger-install.yaml | sudo tee /tmp/jaeger-install.yaml >/dev/null
+
+      mv /tmp/jaeger-install-patched.yaml /tmp/jaeger-install.yaml
 
       sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
