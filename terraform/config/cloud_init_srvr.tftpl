@@ -1341,16 +1341,47 @@ write_files:
           enabled: false
       EOF
 
-      sudo linkerd jaeger install \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml \
-        -f /tmp/linkerd-jaeger-values.yaml \
-      | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      sudo linkerd jaeger install -f /tmp/linkerd-jaeger-values.yaml \
+        --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
 
-      # 🩹 Remove Linkerd proxy injection from Jaeger deployment to avoid 403 due to DNS rebinding
-      sudo kubectl -n linkerd-jaeger patch deploy jaeger \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --type=json \
-        -p '[{"op":"remove","path":"/spec/template/metadata/annotations/linkerd.io~1inject"}]'
+      for deploy in collector jaeger; do
+        awk -v deploy="$deploy" '
+          BEGIN {
+            in_deploy = 0;
+            in_template = 0;
+            in_metadata = 0;
+            injected = 0;
+          }
+          $0 ~ "name: " deploy {
+            in_deploy = 1;
+          }
+          in_deploy && $1 == "template:" {
+            in_template = 1;
+          }
+          in_template && $1 == "metadata:" {
+            in_metadata = 1;
+          }
+          in_metadata && $1 == "annotations:" {
+            print $0;
+            print "        linkerd.io/inject: \"disabled\"";
+            in_deploy = in_template = in_metadata = 0;
+            injected = 1;
+            next;
+          }
+          in_metadata && $1 == "name:" && !injected {
+            print "      annotations:";
+            print "        linkerd.io/inject: \"disabled\"";
+            print $0;
+            in_deploy = in_template = in_metadata = 0;
+            injected = 1;
+            next;
+          }
+          { print }
+        ' /tmp/jaeger-install.yaml > /tmp/jaeger-install-patched.yaml && \
+        mv /tmp/jaeger-install-patched.yaml /tmp/jaeger-install.yaml
+      done
+
+      sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Wait for rollout to complete after patch
       sudo kubectl rollout status deploy/jaeger -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
