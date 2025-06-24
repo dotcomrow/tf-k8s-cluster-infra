@@ -1272,9 +1272,9 @@ write_files:
       sudo kubectl annotate namespace linkerd-viz scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace linkerd-jaeger scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      sudo kubectl annotate ns linkerd linkerd.io/inject=disabled --overwrite
-      sudo kubectl annotate ns linkerd-viz linkerd.io/inject=disabled --overwrite
-      sudo kubectl annotate ns linkerd-jaeger linkerd.io/inject=disabled --overwrite
+      sudo kubectl annotate ns linkerd linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate ns linkerd-viz linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate ns linkerd-jaeger linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📥 Installing Gateway API CRDs..."
       # sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
