@@ -1265,7 +1265,7 @@ write_files:
         sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace $ns
         sudo kubectl annotate namespace $ns field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
         sudo kubectl annotate namespace $ns scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-        sudo kubectl annotate ns $ns linkerd.io/inject=disabled --overwrite
+        sudo kubectl annotate ns $ns linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
         # Label extensions
         if [ "$ns" = "linkerd-viz" ]; then
           sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label ns $ns linkerd.io/extension=viz --overwrite
