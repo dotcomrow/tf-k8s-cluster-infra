@@ -1260,30 +1260,32 @@ write_files:
       # Confirm version matches
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      # Create namespaces
-      for ns in linkerd linkerd-viz linkerd-jaeger; do
-        sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace $ns
-        sudo kubectl annotate namespace $ns field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-        sudo kubectl annotate namespace $ns scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-        sudo kubectl annotate ns $ns linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-        # Label extensions
-        if [ "$ns" = "linkerd-viz" ]; then
-          sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label ns $ns linkerd.io/extension=viz --overwrite
-        fi
-        if [ "$ns" = "linkerd-jaeger" ]; then
-          sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label ns $ns linkerd.io/extension=jaeger --overwrite
-        fi
-      done
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd-viz
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace linkerd-jaeger
+
+      sudo kubectl annotate namespace linkerd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-viz field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-jaeger field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace linkerd scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-viz scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace linkerd-jaeger scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate ns linkerd linkerd.io/inject=disabled --overwrite
+      sudo kubectl annotate ns linkerd-viz linkerd.io/inject=disabled --overwrite
+      sudo kubectl annotate ns linkerd-jaeger linkerd.io/inject=disabled --overwrite
 
       echo "📥 Installing Gateway API CRDs..."
+      # sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+            
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 
-      # Install CRDs
+      # 2) Install the CRDs
       sudo linkerd install --crds \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
-      # Linkerd config with Jaeger collector endpoint
       cat <<EOF | sudo tee /tmp/linkerd-values.yaml
       clusterNetworks: "10.42.0.0/16,10.43.0.0/16"
       proxyInit:
@@ -1293,7 +1295,7 @@ write_files:
           enabled: true
           collector:
             otlp:
-              endpoint: "collector.linkerd-jaeger.linkerd-jaeger.svc.cluster.local:4317"
+              endpoint: "collector.linkerd-jaeger.svc.cluster.local:4317"
       proxy:
         telemetry:
           spans:
@@ -1301,12 +1303,12 @@ write_files:
             level: trace
       EOF
 
-      # Install Linkerd with config
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
         -f /tmp/linkerd-values.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
+      # 4) Wait for Linkerd to come up
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       # Install Jaeger extension with collector config
@@ -1344,18 +1346,19 @@ write_files:
         -f /tmp/linkerd-jaeger-values.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
-              # 🩹 Remove Linkerd proxy injection from Jaeger deployment to avoid 403 due to DNS rebinding
+      # 🩹 Remove Linkerd proxy injection from Jaeger deployment to avoid 403 due to DNS rebinding
       sudo kubectl -n linkerd-jaeger patch deploy jaeger \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --type=json \
         -p '[{"op":"remove","path":"/spec/template/metadata/annotations/linkerd.io~1inject"}]'
 
-      # Wait for Jaeger rollout
+      # Wait for rollout to complete after patch
       sudo kubectl rollout status deploy/jaeger -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       sudo linkerd jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-      # Install Viz extension
+      # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
+      #    disabling *only* the dashboard’s TLS + auth
       sudo linkerd viz install \
         --set dashboard.tls.enabled=false \
         --set dashboard.auth.enabled=false \
@@ -1364,12 +1367,16 @@ write_files:
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
-      # Wait for web rollout
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
-      sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
+      # 7) Tell Linkerd this namespace hosts the viz extension
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        label ns linkerd-viz linkerd.io/extension=viz --overwrite
 
-      # Final Viz check
+      # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
+
+      sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       echo "Installing Kyverno..."
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace kyverno || true
