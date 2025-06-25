@@ -1292,13 +1292,13 @@ write_files:
       cat <<EOF | sudo tee /tmp/linkerd-values.yaml
       clusterNetworks: "10.42.0.0/16,10.43.0.0/16"
       proxyInit:
-        ignoreOutboundPorts: "4567,4568,55678,2379"
+        ignoreOutboundPorts: "4567,4568,4317,2379"
       global:
         tracing:
           enabled: true
           collector:
-            opencensus:
-              address: "collector.linkerd-jaeger.svc.cluster.local:55678"
+            otlp:
+              endpoint: "collector.linkerd-jaeger.svc.cluster.local:4317"
       proxy:
         telemetry:
           spans:
@@ -1320,10 +1320,9 @@ write_files:
         enabled: true
         config:
           receivers:
-            opencensus: {}           
             otlp:
               protocols:
-                grpc: {}             
+                grpc: {}
           processors:
             batch: {}
             k8sattributes: {}
@@ -1335,7 +1334,7 @@ write_files:
           service:
             pipelines:
               traces:
-                receivers: [opencensus, otlp]  
+                receivers: [otlp]
                 processors: [batch, k8sattributes]
                 exporters: [jaeger]
       ui:
