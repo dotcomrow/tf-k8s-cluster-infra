@@ -1317,31 +1317,32 @@ write_files:
       # Install Jaeger extension with collector config
       cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
       collector:
-        enabled: true
-        config:
-          receivers:
-            otlp:
-              protocols:
-                grpc: {}
-          processors:
-            batch: {}
-            k8sattributes: {}
-          exporters:
-            jaeger:
-              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
-              tls:
-                insecure: true
-          service:
-            pipelines:
-              traces:
-                receivers: [otlp]
-                processors: [batch, k8sattributes]
-                exporters: [jaeger]
-      ui:
-        tls:
-          enabled: false
-        auth:
-          enabled: false
+      enabled: true
+      config:
+        receivers:
+          opencensus: {}           
+          otlp:
+            protocols:
+              grpc: {}             
+        processors:
+          batch: {}
+          k8sattributes: {}
+        exporters:
+          jaeger:
+            endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
+            tls:
+              insecure: true
+        service:
+          pipelines:
+            traces:
+              receivers: [opencensus, otlp]  
+              processors: [batch, k8sattributes]
+              exporters: [jaeger]
+    ui:
+      tls:
+        enabled: false
+      auth:
+        enabled: false
       EOF
 
       # After generating the Jaeger manifest
