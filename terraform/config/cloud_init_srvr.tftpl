@@ -1318,6 +1318,7 @@ write_files:
       cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
       collector:
         enabled: true
+        useOtel: true   
         config:
           receivers:
             otlp:
@@ -1348,15 +1349,11 @@ write_files:
       sudo linkerd jaeger install -f /tmp/linkerd-jaeger-values.yaml \
         --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
 
-      # Patch deployment to prevent injection and ensure OTLP gRPC listener
       sudo yq -i '
         (. | select(.kind == "Deployment" and .metadata.name == "collector") |
           .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled" |
         (. | select(.kind == "Deployment" and .metadata.name == "jaeger") |
-          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled" |
-        (. | select(.kind == "Deployment" and .metadata.name == "collector") |
-          .spec.template.spec.containers[] | select(.name == "collector") |
-          .args) += ["--collector.otlp.grpc.host-port=0.0.0.0:4317"]
+          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled"
       ' /tmp/jaeger-install.yaml
 
       # Apply the patched manifest
