@@ -1530,7 +1530,8 @@ write_files:
         -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
 
       echo "🛠 Patching enable_ipv6: false..."
-      sudo yq -i -y '.apisix.enable_ipv6 = false' "$TMP_FILE"
+      sudo yq -i '.apisix.enable_ipv6 = false' "$TMP_FILE"
+
 
       echo "🚀 Updating ConfigMap..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
