@@ -1297,8 +1297,8 @@ write_files:
         tracing:
           enabled: true
           collector:
-            otlp:
-              endpoint: "collector.linkerd-jaeger.svc.cluster.local:4317"
+            opencensus:
+              endpoint: "collector.linkerd-jaeger.svc.cluster.local:55678"
       proxy:
         telemetry:
           spans:
