@@ -120,7 +120,7 @@ jobs:
       - name: Wait for destroy to complete
         if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
         run: |
-          echo "🕐 Waiting 90 seconds to allow destroy to complete..."
+          echo "🕐 Waiting 180 seconds to allow destroy to complete..."
           sleep 180
 
       - name: Trigger Terraform Apply
