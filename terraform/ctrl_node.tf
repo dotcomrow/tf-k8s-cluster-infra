@@ -31,40 +31,15 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   on_boot = true
 
   cpu {
-    cores   = 7
+    cores   = 4
     sockets = 1
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
   }
 
-  # Dummy blocks — minimum 1GB hugepages + unique fake CPU
   numa {
-    device    = "numa0"
-    cpus      = "0"
-    memory    = 1024
-    hostnodes = "3"
-    policy    = "bind"
-  }
-
-  numa {
-    device    = "numa1"
-    cpus      = "1"
-    memory    = 1024
-    hostnodes = "3"
-    policy    = "bind"
-  }
-
-  numa {
-    device    = "numa2"
-    cpus      = "2"
-    memory    = 1024
-    hostnodes = "3"
-    policy    = "bind"
-  }
-
-  numa {
-    device = "numa3"
-    cpus   = "3-6"
+    device = "numa0"
+    cpus   = "0-3"
     memory = 24576
     hostnodes = "3"
     policy = "bind"
