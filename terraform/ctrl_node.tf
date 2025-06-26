@@ -35,7 +35,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     sockets = 1
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
-    cputaskset = "3,7,11,15,19,23"
+    cpus = "3,7,11,15,19,23"
   }
 
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU

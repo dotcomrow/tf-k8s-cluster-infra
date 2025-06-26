@@ -58,7 +58,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
-    cputaskset = "27,31,35,39,43,47,51,55"
+    cpus = "27,31,35,39,43,47,51,55"
   }
 
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
