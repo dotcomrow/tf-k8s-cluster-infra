@@ -88,14 +88,3 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
 
   depends_on = [ proxmox_virtual_environment_vm.etcd_rancher_vm ]
 }
-
-# resource "null_resource" "pin_ctrl_node_cpu" {
-#   depends_on = [proxmox_virtual_environment_vm.ctrl_rancher_vm]
-
-#   provisioner "local-exec" {
-#     command = <<-EOT
-#       echo "🔧 Pinning ctrl-node to host CPUs for NUMA node 3..."
-#       qm set 103 --cpulist 3,7,11,15,19,23
-#     EOT
-#   }
-# }
