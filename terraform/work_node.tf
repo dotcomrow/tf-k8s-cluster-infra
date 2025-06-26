@@ -112,13 +112,13 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   depends_on = [ proxmox_virtual_environment_vm.ctrl_rancher_vm ]
 }
 
-resource "null_resource" "pin_work_node_cpu" {
-  depends_on = [proxmox_virtual_environment_vm.work_rancher_vm]
+# resource "null_resource" "pin_work_node_cpu" {
+#   depends_on = [proxmox_virtual_environment_vm.work_rancher_vm]
 
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "🔧 Pinning work-node to host CPUs for NUMA nodes 0,1,2..."
-      qm set 104 --cpulist 0,1,2,4,5,6,8,9,10,12,13,14,16,17,18,20,21,22,24,25,26,28,29,30,32,33,34,36,37,38,40,41,42,44,45,46,48,49,50,52,53,54,56,57,58,60,61,62,64,65,66,68,69,70,72,73,74,76,77,78
-    EOT
-  }
-}
+#   provisioner "local-exec" {
+#     command = <<-EOT
+#       echo "🔧 Pinning work-node to host CPUs for NUMA nodes 0,1,2..."
+#       qm set 104 --cpulist 0,1,2,4,5,6,8,9,10,12,13,14,16,17,18,20,21,22,24,25,26,28,29,30,32,33,34,36,37,38,40,41,42,44,45,46,48,49,50,52,53,54,56,57,58,60,61,62,64,65,66,68,69,70,72,73,74,76,77,78
+#     EOT
+#   }
+# }
