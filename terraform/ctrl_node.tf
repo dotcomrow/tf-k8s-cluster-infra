@@ -46,7 +46,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   memory {
-    dedicated = 27648       # fixed RAM allocation in MiB
+    dedicated = 24576       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 
