@@ -35,7 +35,6 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     sockets = 1
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
-    cpus = "59,63,67,71,75,79"
   }
 
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
@@ -113,4 +112,15 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   depends_on = [ proxmox_virtual_environment_vm.srvr_rancher_vm ]
+}
+
+resource "null_resource" "pin_etcd_node_cpu" {
+  depends_on = [proxmox_virtual_environment_vm.etcd_rancher_vm]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "🔧 Pinning etcd-node to host CPUs for NUMA node 3..."
+      qm set 102 --cpulist 59,63,67,71,75,79
+    EOT
+  }
 }

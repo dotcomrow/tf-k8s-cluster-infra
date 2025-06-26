@@ -58,7 +58,6 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
-    cpus = "27,31,35,39,43,47,51,55"
   }
 
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU
@@ -136,4 +135,15 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   depends_on = [ null_resource.download_iso ]
+}
+
+resource "null_resource" "pin_srvr_node_cpu" {
+  depends_on = [proxmox_virtual_environment_vm.srvr_rancher_vm]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "🔧 Pinning srvr-node to host CPUs for NUMA node 3..."
+      qm set 101 --cpulist 27,31,35,39,43,47,51,55
+    EOT
+  }
 }
