@@ -1260,6 +1260,10 @@ write_files:
       curl -sL https://run.linkerd.io/install | sh -s -- --version version-2.18
       sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
 
+      echo "⏳ Waiting for Rancher webhook pod to become ready..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=Available deployment/rancher-webhook -n cattle-system --timeout=120s
+      echo "✅ Rancher webhook is ready."
+
       # Confirm version matches
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
