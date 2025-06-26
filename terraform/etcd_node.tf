@@ -35,6 +35,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     sockets = 1
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
+    cputaskset = "59,63,67,71,75,79"
   }
 
   # Dummy blocks — minimum 1GB hugepages + unique fake CPU

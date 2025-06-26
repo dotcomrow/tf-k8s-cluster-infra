@@ -2463,6 +2463,10 @@ write_files:
 
       echo "✅ App of Apps applied."
 
+      echo "Cleaning up uneeded resources..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace applications
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace infrastructure
+
   - path: /etc/systemd/system/post-install.service
     permissions: '0644'
     content: |
