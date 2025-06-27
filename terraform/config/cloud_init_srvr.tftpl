@@ -1328,6 +1328,8 @@ write_files:
             otlp:
               protocols:
                 grpc: {}
+            opencensus:
+              endpoint: 0.0.0.0:55678
           processors:
             batch: {}
             k8sattributes: {}
@@ -1339,7 +1341,7 @@ write_files:
           service:
             pipelines:
               traces:
-                receivers: [otlp]
+                receivers: [otlp, opencensus]
                 processors: [batch, k8sattributes]
                 exporters: [jaeger]
       ui:
