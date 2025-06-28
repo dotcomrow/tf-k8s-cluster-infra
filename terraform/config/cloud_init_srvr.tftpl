@@ -2351,9 +2351,13 @@ write_files:
           repoServer:
             initContainers:
               - name: install-avp
-                image: quay.io/argoproj/argocd-vault-plugin:v1.15.0
+                image: alpine:3.19
                 command: ["/bin/sh", "-c"]
-                args: ["cp /usr/local/bin/argocd-vault-plugin /custom-tools/"]
+                args:
+                  - |
+                    apk add --no-cache curl;
+                    curl -L https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v1.15.0/argocd-vault-plugin_1.15.0_linux_amd64 -o /custom-tools/argocd-vault-plugin;
+                    chmod +x /custom-tools/argocd-vault-plugin
                 volumeMounts:
                   - name: custom-tools
                     mountPath: /custom-tools
