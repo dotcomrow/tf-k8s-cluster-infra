@@ -53,6 +53,9 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   stop_on_destroy = false
   on_boot = true
 
+  bios     = "ovmf"  # ✅ Required for q35
+  machine  = "q35"   # ✅ Enables PCIe support
+
   cpu {
     cores   = 5
     sockets = 1

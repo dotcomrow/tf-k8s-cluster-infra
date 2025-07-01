@@ -32,6 +32,9 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   stop_on_destroy = false
   on_boot = true
 
+  bios     = "ovmf"  # ✅ Required for q35
+  machine  = "q35"   # ✅ Enables PCIe support
+
   cpu {
     cores   = 20
     sockets = 3
@@ -95,7 +98,9 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   hostpci {
     device  = "hostpci0"
     mapping = "nvidia"               # ✅ GPU passthrough
-    rombar  = true
+    rombar    = true            # ✅ Required for full NVIDIA driver compatibility
+    pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
+    multifunction = true        # ✅ Required if the device has multiple functions
   }
 
   initialization {
