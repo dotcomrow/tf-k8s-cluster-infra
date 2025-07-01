@@ -100,7 +100,6 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     mapping = "nvidia"               # ✅ GPU passthrough
     rombar    = true            # ✅ Required for full NVIDIA driver compatibility
     pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
-    multifunction = true        # ✅ Required if the device has multiple functions
   }
 
   initialization {
