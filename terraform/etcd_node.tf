@@ -33,6 +33,11 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
 
+  efi_disk {
+    datastore_id = var.VM_DISK_STORAGE
+    file_format  = "raw"
+  }
+
   cpu {
     cores   = 5
     sockets = 1
