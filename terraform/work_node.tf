@@ -95,6 +95,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   hostpci {
     device  = "hostpci0"
     mapping = "nvidia"               # ✅ GPU passthrough
+    rombar  = true
   }
 
   initialization {
