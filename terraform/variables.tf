@@ -19,7 +19,7 @@ variable "admin_ssh_public_key" {
 }
 
 variable "RKE2_VERSION" {
-  default = "v1.31.3+rke2r1"  
+  default = "v1.31.4+rke2r1"  
 }
 
 variable "vm_img" {
