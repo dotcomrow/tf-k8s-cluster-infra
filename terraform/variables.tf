@@ -73,19 +73,21 @@ variable "GITHUB_CLIENT_SECRET" {
 }
 
 variable "MONITORED_RESOURCE_TYPE" {
-  default = "gce_instance"
+  default = "generic_node"
 }
 
-variable "MONITORED_RESOURCE_LOCATION" {
-  default = "global"
+variable "REGION" {
+  default = "us-east1"
 }
 
 variable "MONITORED_RESOURCE_NAMESPACE" {
-  default = "k8s"
+  default = "suncoast-systems-k8s"
 }
 
 variable "GITHUB_ORG" {
-  default = "suncoast-systems"
+  description = "GitHub organization for the cluster"
+  type        = string
+  default     = "suncoast-systems-k8s"
 }
 
 variable "OAUTH2_PROXY_COOKIE_SECRET" {

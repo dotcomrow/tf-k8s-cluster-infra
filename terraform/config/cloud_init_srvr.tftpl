@@ -2393,7 +2393,7 @@ write_files:
                       clientID: ${ARGOCD_GITHUB_CLIENT_ID}
                       clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
                       orgs:
-                        - name: dotcomrow
+                        - name: ${GITHUB_ORG}
               application.namespaces: |
                 - argocd
                 - logging-and-monitoring
@@ -2413,7 +2413,7 @@ write_files:
                 p, role:admin, logs, get, *, allow
                 p, role:admin, exec, create, *, allow
                 p, role:admin, projects, *, *, allow
-                g, dotcomrow:ARGOCD_ADMINS, role:admin
+                g, ${GITHUB_ORG}:ARGOCD_ADMINS, role:admin
               policy.default: role:readonly
       ---
       apiVersion: apisix.apache.org/v2
@@ -2464,7 +2464,7 @@ write_files:
       echo "✅ Argo CD is ready."
 
       echo "Adding repo key..."
-      REPO_URL_B64=$(echo -n "git@github.com:dotcomrow/argocd-post-install.git" | base64 -w0)
+      REPO_URL_B64=$(echo -n "git@github.com:${GITHUB_ORG}/argocd-post-install.git" | base64 -w0)
       INSECURE_B64=$(echo -n "true" | base64 -w0)
       PRIVATE_KEY_B64="${ARGOCD_REPO_POST_INSTALL_KEY}"
 
@@ -2495,7 +2495,7 @@ write_files:
       spec:
         project: default
         source:
-          repoURL: git@github.com:dotcomrow/argocd-post-install.git
+          repoURL: git@github.com:${GITHUB_ORG}/argocd-post-install.git
           targetRevision: prod 
           path: apps
           directory:

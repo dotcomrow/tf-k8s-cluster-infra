@@ -14,7 +14,7 @@ resource "proxmox_virtual_environment_file" "etcd_cloud_init_config" {
         proxmox_host_ip = var.proxmox_host_ip
         GCP_LOGGING_KEY = local.rancher_credentials_json
         MONITORED_RESOURCE_TYPE = var.MONITORED_RESOURCE_TYPE
-        MONITORED_RESOURCE_LOCATION = var.MONITORED_RESOURCE_LOCATION
+        MONITORED_RESOURCE_LOCATION = var.REGION
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE
         MONITORED_RESOURCE_NODE_ID = var.etcd_hostname
         UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
