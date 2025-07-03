@@ -9,17 +9,6 @@ resource "google_project_service" "enabled_apis" {
   disable_on_destroy = false
 }
 
-resource "google_project_service" "enabled_apis" {
-  for_each = toset([
-    "cloudkms.googleapis.com",
-    "logging.googleapis.com",
-    "compute.googleapis.com" # more as needed
-  ])
-  project = google_project.infra.project_id
-  service = each.key
-  disable_on_destroy = false
-}
-
 resource "google_kms_key_ring" "infra_ring" {
   name     = "shared-infra-ring"
   location = var.region
