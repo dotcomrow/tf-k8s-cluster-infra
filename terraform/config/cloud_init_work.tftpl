@@ -492,9 +492,15 @@ write_files:
       echo "${GCP_LOGGING_KEY}" | base64 -d > /etc/google-cloud-ops-agent/logging-key.json
 
       mkdir -p /usr/share/keyrings
-      until curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --no-tty --batch --dearmor -o /usr/share/keyrings/fluent-bit-archive-keyring.gpg; do
-        echo "Waiting for DNS resolution for fluentbit.key..."
+      KEYRING_PATH="/usr/share/keyrings/fluent-bit-archive-keyring.gpg"
+
+      # Clean up any broken or partial key
+      rm -f "$KEYRING_PATH"
+
+      until curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor --no-tty --batch -o "$KEYRING_PATH"; do
+        echo "Waiting for DNS resolution or valid key for fluentbit.key..."
         sleep 5
+        rm -f "$KEYRING_PATH"  # ensure no corrupted key is left behind
       done
 
       DISTRO=$(lsb_release -cs)
