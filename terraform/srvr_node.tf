@@ -41,7 +41,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         NFS_DRIVE_STORAGE = var.NFS_DRIVE_STORAGE
         LINODE_TOKEN = var.LINODE_TOKEN
         LINODE_DRIVER_URL = var.LINODE_DRIVER_URL
-        GOOGLE_CREDENTIALS = base64encode(file(var.GOOGLE_CREDENTIALS))
+        GOOGLE_CREDENTIALS = base64encode(trimspace(var.GOOGLE_CREDENTIALS))
       })
     file_name = "cloud_init_srvr.yaml"
   }

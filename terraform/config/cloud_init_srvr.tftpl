@@ -2327,7 +2327,7 @@ write_files:
         namespace: default
       type: Opaque
       data:
-        key.json: $(echo -n "${var.GOOGLE_CREDENTIALS}" | base64 -w0)
+        key.json: ${GOOGLE_CREDENTIALS}
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
