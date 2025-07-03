@@ -365,7 +365,7 @@ write_files:
       sudo mkdir -p /etc/google-cloud-ops-agent
       echo "${GCP_LOGGING_KEY}" | base64 -d | sudo tee /etc/google-cloud-ops-agent/logging-key.json > /dev/null
       mkdir -p /usr/share/keyrings
-      until curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor -o /usr/share/keyrings/fluent-bit-archive-keyring.gpg; do
+      until curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --no-tty --batch --dearmor -o /usr/share/keyrings/fluent-bit-archive-keyring.gpg; do
         echo "Waiting for DNS resolution for fluentbit.key..."
         sleep 5
       done
