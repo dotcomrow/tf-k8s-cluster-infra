@@ -231,3 +231,9 @@ variable "hugepages_value" {
   type        = number
   default     = 1024
 }
+
+variable "GOOGLE_CREDENTIALS" {
+  description = "Path to the GCP service account JSON key file"
+  type        = string
+  default     = "path/to/your/gcp-service-account.json"
+}

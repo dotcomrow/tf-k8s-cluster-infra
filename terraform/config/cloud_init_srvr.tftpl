@@ -2307,6 +2307,29 @@ write_files:
       EOF
       # End NFS install
 
+      # installing vault
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # Vault namespace
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: vault
+        labels:
+          app: "vault"
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gcp-service-account
+        namespace: default
+      type: Opaque
+      data:
+        key.json: $(echo -n "${var.GOOGLE_CREDENTIALS}" | base64 -w0)
+      EOF
+
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
