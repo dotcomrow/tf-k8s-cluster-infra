@@ -1910,6 +1910,7 @@ write_files:
           apisix.apache.org/websocket: "true"
           apisix.apache.org/enable-cors: "true"
       spec:
+        ingressClassName: apisix
         http:
           - name: jaeger-auth
             match:
@@ -1944,6 +1945,7 @@ write_files:
           apisix.apache.org/websocket: "true"
           apisix.apache.org/enable-cors: "true"
       spec:
+        ingressClassName: apisix
         http:
           - name: protected-ui
             match:
@@ -2081,6 +2083,7 @@ write_files:
         name: kyverno-ui
         namespace: policy-reporter
       spec:
+        ingressClassName: apisix
         http:
           - name: ui
             match:
@@ -2457,6 +2460,7 @@ write_files:
         name: argocd-route
         namespace: argocd
       spec:
+        ingressClassName: apisix
         http:
           - name: argocd
             match:
