@@ -1565,7 +1565,7 @@ write_files:
           value: "false"
       EOF
 
-      helm upgrade --install apisix apisix/apisix \
+      sudo helm upgrade --install apisix apisix/apisix \
         --namespace apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -f /tmp/apisix-values.yaml
