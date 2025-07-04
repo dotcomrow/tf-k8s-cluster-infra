@@ -1570,6 +1570,29 @@ write_files:
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -f /tmp/apisix-values.yaml
 
+      sudo apt install yq jq -y
+      NAMESPACE="apisix"
+      CONFIGMAP_NAME="apisix"
+      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+      TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
+
+      echo "📦 Exporting current config..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
+        -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
+
+      echo "🛠 Patching enable_ipv6: false..."
+      sudo yq -i '.apisix.enable_ipv6 = false' "$TMP_FILE"
+
+      echo "🚀 Updating ConfigMap..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
+        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
+        sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      echo "🔥 Restarting APISIX pod..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
+
+      echo "✅ IPv6 disabled and pod restarted."
+
       RETRIES=5
       DELAY=5
 
