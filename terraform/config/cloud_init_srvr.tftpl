@@ -1542,6 +1542,7 @@ write_files:
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
         --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
+        --set ingress-controller.config.apisix.baseURL=http://apisix-admin:9180/apisix/admin
 
       sudo apt install yq jq -y
       NAMESPACE="apisix"
