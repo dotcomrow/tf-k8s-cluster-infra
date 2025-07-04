@@ -1522,7 +1522,7 @@ write_files:
 
       sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      # sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       cat <<EOF | sudo tee /tmp/gateway-class.yaml
       apiVersion: gateway.networking.k8s.io/v1
@@ -1576,7 +1576,6 @@ write_files:
             enableGatewayAPI: true
         args:
           - ingress-apisix
-          - --enable-gateway-api=false
           - --namespace-selector=
 
       config:
