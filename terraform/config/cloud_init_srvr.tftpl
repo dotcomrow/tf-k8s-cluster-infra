@@ -1306,46 +1306,6 @@ write_files:
             
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 
-      cat <<EOF | sudo tee /tmp/gateway-class.yaml
-      apiVersion: gateway.networking.k8s.io/v1
-      kind: GatewayClass
-      metadata:
-        name: apisix
-      spec:
-        controllerName: apisix.apache.org/gateway-controller
-      ---
-      apiVersion: gateway.networking.k8s.io/v1
-      kind: Gateway
-      metadata:
-        name: apisix-gateway
-        namespace: apisix
-        annotations:
-          linkerd.io/inject: enabled
-      spec:
-        gatewayClassName: apisix
-        listeners:
-          - name: http
-            port: 80
-            protocol: HTTP
-            allowedRoutes:
-              namespaces:
-                from: All
-          - name: https
-            port: 443
-            protocol: HTTPS
-            tls:
-              mode: Terminate
-              certificateRefs:
-                - name: apisix-default-tls
-                  kind: Secret
-                  group: ""
-            allowedRoutes:
-              namespaces:
-                from: All
-      EOF
-
-      sudo kubectl apply -f /tmp/gateway-class.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
       # 2) Install the CRDs
       sudo linkerd install --crds \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
@@ -1563,6 +1523,46 @@ write_files:
       sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+            cat <<EOF | sudo tee /tmp/gateway-class.yaml
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: GatewayClass
+      metadata:
+        name: apisix
+      spec:
+        controllerName: apisix.apache.org/gateway-controller
+      ---
+      apiVersion: gateway.networking.k8s.io/v1
+      kind: Gateway
+      metadata:
+        name: apisix-gateway
+        namespace: apisix
+        annotations:
+          linkerd.io/inject: enabled
+      spec:
+        gatewayClassName: apisix
+        listeners:
+          - name: http
+            port: 80
+            protocol: HTTP
+            allowedRoutes:
+              namespaces:
+                from: All
+          - name: https
+            port: 443
+            protocol: HTTPS
+            tls:
+              mode: Terminate
+              certificateRefs:
+                - name: apisix-default-tls
+                  kind: Secret
+                  group: ""
+            allowedRoutes:
+              namespaces:
+                from: All
+      EOF
+
+      sudo kubectl apply -f /tmp/gateway-class.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       ADMIN_KEY=$(openssl rand -hex 16)
       cat <<EOF | sudo tee /tmp/apisix-values.yaml
