@@ -1564,6 +1564,7 @@ write_files:
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
+      ADMIN_KEY=$(openssl rand -hex 16)
       cat <<EOF | sudo tee /tmp/apisix-values.yaml
       ingress-controller:
         enabled: true
@@ -1589,7 +1590,7 @@ write_files:
             udp: []
         admin_key:
           - name: "admin"
-            key: "edd1c9f034335f136f87ad84b625c8f1"
+            key: "$ADMIN_KEY"
             role: admin
         plugins:
           - api-breaker
