@@ -94,7 +94,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     discard      = "on"
     size         = 300
     file_format  = "raw"             # ✅ Best raw performance
-    cache     = "writeback,unsafe"
+    cache     = "unsafe"
   }
 
   scsi_hardware = "virtio-scsi-single"  # ✅ Enable for efficient single queue

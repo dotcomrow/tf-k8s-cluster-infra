@@ -70,7 +70,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     discard      = "on"
     size         = 300
     file_format  = "raw"             # ✅ Fastest disk format
-    cache     = "writeback,unsafe"
+    cache     = "unsafe"
   }
 
   scsi_hardware = "virtio-scsi-single"  # ✅ Modern, efficient I/O controller
