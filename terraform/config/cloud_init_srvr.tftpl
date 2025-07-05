@@ -1565,54 +1565,23 @@ write_files:
       sudo kubectl apply -f /tmp/gateway-class.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Write the values file
-      cat <<EOF | sudo tee /tmp/apisix-values.yaml
-      ingress-controller:
-        enabled: true
-        config:
-          apisix:
-            baseURL: http://apisix-admin:9180/apisix/admin
-            serviceNamespace: apisix
-          kubernetes:
-            enableGatewayAPI: true
-        args:
-          - ingress-apisix
-          - --namespace-selector=
-
-      apisix:
-        admin:
-          allow:
-            - 0.0.0.0/0
-          credentials:
-            admin: ""
-        enableIPv6: false
-        plugins:
-          - api-breaker
-          - authz-keycloak
-          - cors
-          - echo
-          - openid-connect
-          - prometheus
-          - proxy-rewrite
-          - real-ip
-        nginx:
-          http_listen:
-            - addr: 127.0.0.1
-              port: 9080
-          ssl:
-            - addr: 127.0.0.1
-              port: 9443
-          stream_proxy:
-            tcp: []
-            udp: []
-
-      service:
-        type: LoadBalancer
-        loadBalancerIP: 10.0.0.112
-
-      extraEnvVars:
-        - name: APISIX_ENABLE_IPV6
-          value: "false"
-      EOF
+      sudo helm upgrade --install apisix apisix/apisix \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --namespace apisix \
+        --set service.type=NodePort \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix \
+        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
+        --set ingress-controller.args[0]="ingress-apisix" \
+        --set ingress-controller.args[1]="--namespace-selector=" \
+        --set config.enable_ipv6=false \
+        --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
+        --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
+        --set-string config.nginx_config.stream_proxy.tcp="[]" \
+        --set-string config.nginx_config.stream_proxy.udp="[]" \
+        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
+        --set extraEnv[0].value="false" \
+        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
 
       # Upgrade/install
       sudo helm upgrade --install apisix apisix/apisix \
@@ -1637,6 +1606,8 @@ write_files:
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
         --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
 
       echo "🔥 Restarting APISIX pod..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix

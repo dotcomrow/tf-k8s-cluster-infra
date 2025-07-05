@@ -88,7 +88,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     discard      = "on"              # ✅ TRIM support
     size         = 1175
     file_format  = "raw"              # ✅ Raw for speed
-    cache     = "writeback"
+    cache     = "writeback,unsafe"
   }
 
   scsi_hardware = "virtio-scsi-single" # ✅ Optimal SCSI controller

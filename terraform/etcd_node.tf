@@ -70,7 +70,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     discard      = "on"
     size         = 500
     file_format  = "raw"             # ✅ Faster I/O
-    cache     = "writeback"
+    cache     = "writeback,unsafe"
   }
 
   scsi_hardware = "virtio-scsi-single"  # ✅ Best for single-queue low-latency disk ops
