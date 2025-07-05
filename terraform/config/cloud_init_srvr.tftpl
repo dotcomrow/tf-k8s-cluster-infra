@@ -1586,16 +1586,13 @@ write_files:
         args:
           - ingress-apisix
           - --namespace-selector=
-        env:
-          - name: APISIX_ADMIN_KEY
-            envFrom:
-              - secretRef:
-                  name: apisix-admin-key
 
       apisix:
         admin:
+          allow:
+            - 0.0.0.0/0
           credentials:
-            secretName: apisix-admin-key
+            admin: ""
         enableIPv6: false
         plugins:
           - api-breaker
