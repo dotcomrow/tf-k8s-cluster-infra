@@ -1588,10 +1588,9 @@ write_files:
           - --namespace-selector=
         env:
           - name: APISIX_ADMIN_KEY
-            valueFrom:
-              secretKeyRef:
-                name: apisix-admin-key
-                key: admin
+            envFrom:
+              - secretRef:
+                  name: apisix-admin-key
 
       apisix:
         admin:
