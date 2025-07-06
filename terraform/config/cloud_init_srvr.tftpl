@@ -1519,7 +1519,7 @@ write_files:
       fi
       
       sudo helm repo update
-      
+
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
       KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
@@ -1598,7 +1598,7 @@ write_files:
 
       echo "🌐 Patching gateway service to use static IP $LOADBALANCER_IP..."
       sudo kubectl --kubeconfig="$KUBECONFIG" patch service apisix-gateway --namespace "$NAMESPACE" --type 'merge' \
-        -p "{\"spec\": {\"type\": \"LoadBalancer\", \"loadBalancerIP\": \"${LOADBALANCER_IP}\"}}"
+        -p "{\"spec\": {\"type\": \"LoadBalancer\", \"loadBalancerIP\": \"$LOADBALANCER_IP\"}}"
 
       echo "🔥 Restarting APISIX to apply changes..."
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
