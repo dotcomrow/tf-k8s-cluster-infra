@@ -51,6 +51,10 @@ write_files:
       for dev in /sys/block/sd*/queue/scheduler; do
         echo none > "$dev"
       done
+
+      systemctl disable apt-daily.timer
+      systemctl disable snapd
+      systemctl disable motd-news.timer
       
       # Sysctl parameters
       cat <<EOF > /etc/sysctl.d/99-performance-tuning.conf
