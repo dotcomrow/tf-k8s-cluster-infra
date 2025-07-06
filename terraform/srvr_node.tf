@@ -67,7 +67,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
-    flags = "aes=on,pdpe1gb=on,pcid=on"
+    flags   = "+aes,+pdpe1gb,+pcid"
   }
 
   numa {
