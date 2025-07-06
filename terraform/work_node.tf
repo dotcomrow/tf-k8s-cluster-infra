@@ -34,7 +34,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  
+
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
     file_format  = "raw"
@@ -45,11 +45,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     sockets = 3
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
-    flags  = [
-      "aes",
-      "pdpe1gb",
-      "pcid"
-    ]
+    flags = "aes=on,avx=on,avx2=on,ssse3=on,pdpe1gb=on,pcid=on,tsc-deadline=on,invtsc=on"
   }
 
   numa {

@@ -43,14 +43,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     sockets = 1
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
-    flags  = [
-      "aes",
-      "pdpe1gb",
-      "pcid",
-      "spec-ctrl",
-      "ssbd",
-      "md-clear"
-    ]
+    flags = "aes=on,pdpe1gb=on,pcid=on,spec-ctrl=on,ssbd=on,md-clear=on"
   }
 
   numa {
