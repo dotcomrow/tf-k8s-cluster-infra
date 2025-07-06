@@ -129,8 +129,7 @@ resource "null_resource" "enable_viommu_work_node" {
 
   provisioner "local-exec" {
     command = <<EOT
-      qm set ${proxmox_virtual_environment_vm.work_rancher_vm.vm_id} \
-        -machine type=q35,viommu=on
+      qm set ${proxmox_virtual_environment_vm.work_rancher_vm.vm_id} --machine q35 --viommu 1
     EOT
   }
 }
