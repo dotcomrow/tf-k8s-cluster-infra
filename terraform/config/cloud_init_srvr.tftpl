@@ -1582,8 +1582,8 @@ write_files:
           echo "✅ ConfigMap found."
           break
         fi
-        echo "⌛ Not ready yet... retrying in 2s"
-        sleep 2
+        echo "⌛ Not ready yet... retrying in 20s"
+        sleep 20
       done
 
       # Fail if ConfigMap never appeared
