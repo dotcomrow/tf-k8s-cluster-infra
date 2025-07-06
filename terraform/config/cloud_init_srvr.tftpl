@@ -1576,6 +1576,22 @@ write_files:
         --namespace "$NAMESPACE" \
         --kubeconfig="$KUBECONFIG"
 
+      echo "⏳ Waiting for ConfigMap '$CONFIGMAP_NAME' to become available..."
+      for i in {1..30}; do
+        if sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" >/dev/null 2>&1; then
+          echo "✅ ConfigMap found."
+          break
+        fi
+        echo "⌛ Not ready yet... retrying in 2s"
+        sleep 2
+      done
+
+      # Fail if ConfigMap never appeared
+      if ! sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" >/dev/null 2>&1; then
+        echo "❌ ConfigMap '$CONFIGMAP_NAME' not found after 60 seconds."
+        exit 1
+      fi
+
       echo "📂 Exporting current ConfigMap..."
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
         -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
