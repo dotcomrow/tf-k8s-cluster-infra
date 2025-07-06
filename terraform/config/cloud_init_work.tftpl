@@ -754,7 +754,7 @@ write_files:
 runcmd:
   - |
       CPU_FLAGS="nohz_full=0-59 isolcpus=0-59 rcu_nocbs=0-59"
-      sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"${CPU_FLAGS}\"|" /etc/default/grub
+      sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$CPU_FLAGS\"|" /etc/default/grub
       update-grub
       grub-mkconfig -o /boot/grub/grub.cfg || true
 
