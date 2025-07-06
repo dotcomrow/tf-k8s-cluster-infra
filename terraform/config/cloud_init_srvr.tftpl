@@ -1583,12 +1583,6 @@ write_files:
         --set extraEnv[0].value="false" \
         --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
 
-      # Upgrade/install
-      sudo helm upgrade --install apisix apisix/apisix \
-        --namespace apisix \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        -f /tmp/apisix-values.yaml
-
       sudo apt install yq jq -y
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
