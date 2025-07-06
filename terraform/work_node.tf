@@ -46,15 +46,10 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     sockets = 3
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
-    flags = [
+    flags  = [
       "aes",
-      "avx",
-      "avx2",
-      "ssse3",
       "pdpe1gb",
-      "pcid",
-      "tsc-deadline",
-      "invtsc"
+      "pcid"
     ]
   }
 

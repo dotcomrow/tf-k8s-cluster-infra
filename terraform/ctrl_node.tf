@@ -43,12 +43,13 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     sockets = 1
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
-    flags = [
+    flags  = [
       "aes",
-      "ssse3",
       "pdpe1gb",
       "pcid",
-      "tsc-deadline"
+      "spec-ctrl",
+      "ssbd",
+      "md-clear"
     ]
   }
 
