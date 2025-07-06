@@ -1610,7 +1610,7 @@ write_files:
 
       echo "📤 Updating ConfigMap..."
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
-        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | sudo kubectl apply -f -
+        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | sudo kubectl --kubeconfig="$KUBECONFIG" apply -f -
 
       echo "🌐 Patching gateway service to use static IP $LOADBALANCER_IP..."
       sudo kubectl --kubeconfig="$KUBECONFIG" patch service apisix-gateway --namespace "$NAMESPACE" --type 'merge' \
