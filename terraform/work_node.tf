@@ -34,6 +34,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
+  viommu  = true  # ✅ Enable IOMMU for PCI passthrough
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
