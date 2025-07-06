@@ -1574,7 +1574,8 @@ write_files:
       echo "🎯 Installing APISIX Helm chart (bare-bones, no config)..."
       sudo helm upgrade --install apisix apisix/apisix \
         --namespace "$NAMESPACE" \
-        --kubeconfig="$KUBECONFIG"
+        --kubeconfig="$KUBECONFIG" \
+        --set ingress-controller.enabled=true
 
       echo "⏳ Waiting for ConfigMap '$CONFIGMAP_NAME' to become available..."
       for i in {1..30}; do
