@@ -1618,6 +1618,33 @@ write_files:
       sudo yq -i '.deployment.admin.allow_admin = ["127.0.0.1/24","0.0.0.0/0"]' "$TMP_FILE"
       sudo yq -i '.deployment.admin.admin_key = [{"name":"admin","key":"edd1c9f034335f136f87ad84b625c8f1","role":"admin"},{"name":"viewer","key":"4054f7cf07e344346cd3f287985e76a2","role":"viewer"}]' "$TMP_FILE"
 
+      # Patch APISIX_ADMIN_KEY
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n apisix patch deployment apisix-ingress-controller --type='json' -p='[
+        {
+          "op": "add",
+          "path": "/spec/template/spec/containers/0/env/-",
+          "value": {"name": "APISIX_ADMIN_KEY", "value": "edd1c9f034335f136f87ad84b625c8f1"}
+        }
+      ]'
+
+      # Patch APISIX_BASE_URL
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n apisix patch deployment apisix-ingress-controller --type='json' -p='[
+        {
+          "op": "add",
+          "path": "/spec/template/spec/containers/0/env/-",
+          "value": {"name": "APISIX_BASE_URL", "value": "http://apisix-admin:9180/apisix/admin"}
+        }
+      ]'
+
+      # Patch KUBERNETES_KUBECONFIG
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n apisix patch deployment apisix-ingress-controller --type='json' -p='[
+        {
+          "op": "add",
+          "path": "/spec/template/spec/containers/0/env/-",
+          "value": {"name": "KUBERNETES_KUBECONFIG", "value": "/etc/rancher/rke2/rke2.yaml"}
+        }
+      ]'
+
       echo "📤 Updating ConfigMap..."
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
         --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | sudo kubectl --kubeconfig="$KUBECONFIG" apply -f -
