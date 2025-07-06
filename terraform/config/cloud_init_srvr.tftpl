@@ -1580,8 +1580,6 @@ write_files:
         --namespace "$NAMESPACE" \
         --kubeconfig="$KUBECONFIG" 
 
-      sudo kubectl --kubeconfig="$KUBECONFIG" delete ingressclass apisix
-
       sudo helm upgrade --install apisix-ingress-controller apisix/apisix-ingress-controller \
         --namespace "$NAMESPACE" \
         --kubeconfig="$KUBECONFIG" \
@@ -1660,8 +1658,8 @@ write_files:
       echo "🔥 Restarting APISIX to apply changes..."
       sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
 
-      echo "🔥 Recreating ingress-controller to reset config..."
-      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete deployment apisix-ingress-controller
+      echo "🔥 Restarting ingress-controller pod to reset config..."
+      sudo kubectl --kubeconfig="$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix-ingress-controller
 
       echo "✅ Install complete. ConfigMap is now authoritative and all flags were applied precisely."
 
