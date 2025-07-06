@@ -34,8 +34,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  viommu  = true  # ✅ Enable IOMMU for PCI passthrough
-
+  
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
     file_format  = "raw"
@@ -127,4 +126,15 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   }
 
   depends_on = [ proxmox_virtual_environment_vm.ctrl_rancher_vm ]
+}
+
+resource "null_resource" "enable_viommu_work_node" {
+  depends_on = [proxmox_virtual_environment_vm.work_rancher_vm]
+
+  provisioner "local-exec" {
+    command = <<EOT
+      qm set ${proxmox_virtual_environment_vm.work_rancher_vm.vm_id} \
+        -machine type=q35,viommu=on
+    EOT
+  }
 }
