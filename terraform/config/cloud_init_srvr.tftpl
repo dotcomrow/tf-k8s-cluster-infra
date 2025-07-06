@@ -1574,8 +1574,17 @@ write_files:
       echo "🎯 Installing APISIX Helm chart (bare-bones, no config)..."
       sudo helm upgrade --install apisix apisix/apisix \
         --namespace "$NAMESPACE" \
+        --kubeconfig="$KUBECONFIG" 
+
+      sudo kubectl --kubeconfig="$KUBECONFIG" delete ingressclass apisix
+
+      sudo helm upgrade --install apisix-ingress-controller apisix/apisix-ingress-controller \
+        --namespace "$NAMESPACE" \
         --kubeconfig="$KUBECONFIG" \
-        --set ingress-controller.enabled=true
+        --set config.apisix.adminKey="edd1c9f034335f136f87ad84b625c8f1" \
+        --set ingressController.enabled=true \
+        --set config.apisix.baseURL="http://apisix-admin:9180/apisix/admin" \
+        --set config.kubernetes.kubeconfig="/etc/rancher/rke2/rke2.yaml"
 
       echo "⏳ Waiting for ConfigMap '$CONFIGMAP_NAME' to become available..."
       for i in {1..30}; do
