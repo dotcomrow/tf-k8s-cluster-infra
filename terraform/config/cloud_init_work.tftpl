@@ -465,6 +465,7 @@ write_files:
         - "max-pods=${WORK_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=best-effort"
+        - "--reserved-cpus=0,1"
       EOF
 
   - path: /etc/security/limits.d/99-nofile.conf

@@ -652,6 +652,7 @@ write_files:
       kubelet-arg:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=best-effort"
+        - "--reserved-cpus=0,1"
       EOF
 
       systemctl enable rke2-server
