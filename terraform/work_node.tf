@@ -123,13 +123,3 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   depends_on = [ proxmox_virtual_environment_vm.ctrl_rancher_vm ]
 }
-
-resource "null_resource" "enable_viommu_work_node" {
-  depends_on = [proxmox_virtual_environment_vm.work_rancher_vm]
-
-  provisioner "local-exec" {
-    command = <<EOT
-      qm set ${proxmox_virtual_environment_vm.work_rancher_vm.vm_id} --machine q35 --viommu 1
-    EOT
-  }
-}
