@@ -42,7 +42,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   cpu {
     cores   = 20
-    sockets = 3
+    sockets = 2
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
@@ -64,16 +64,8 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     policy    = "bind"
   }
 
-  numa {
-    device = "numa2"
-    cpus   = "40-59"
-    memory = 123904  # 124 GiB in MiB
-    hostnodes = "2"
-    policy    = "bind"
-  }
-
   memory {
-    dedicated = 371712       # fixed RAM allocation in MiB
+    dedicated = 247808       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   

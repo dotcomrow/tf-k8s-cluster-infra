@@ -39,7 +39,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   cpu {
-    cores   = 5
+    cores   = 10
     sockets = 1
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
@@ -47,11 +47,11 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   numa {
-    device = "numa0"
-    cpus   = "0-4"
-    memory = 32768
-    hostnodes = "3"
-    policy    = "bind"
+    device     = "numa2"
+    cpus       = "50-59"
+    memory     = 32768
+    hostnodes  = "2"
+    policy     = "bind"
   }
 
   memory {

@@ -39,7 +39,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   cpu {
-    cores   = 4
+    cores   = 10
     sockets = 1
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
@@ -47,15 +47,15 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   numa {
-    device = "numa0"
-    cpus   = "0-3"
-    memory = 24576
-    hostnodes = "3"
-    policy = "bind"
+    device     = "numa2"
+    cpus       = "40-49"
+    memory     = 28672
+    hostnodes  = "2"
+    policy     = "bind"
   }
 
   memory {
-    dedicated = 24576       # fixed RAM allocation in MiB
+    dedicated = 28672       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 

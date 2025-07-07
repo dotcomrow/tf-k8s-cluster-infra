@@ -63,7 +63,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   cpu {
-    cores   = 5
+    cores   = 12
     sockets = 1
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
@@ -71,15 +71,15 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   numa {
-    device = "numa0"
-    cpus   = "0-4"   # convert "7-10" to list
-    memory = 28672           # in MiB, unchanged
-    hostnodes = "3"
-    policy    = "bind"
+    device     = "numa3"
+    cpus       = "60-71"
+    memory     = 32768  # 32 GiB
+    hostnodes  = "3"
+    policy     = "bind"
   }
 
   memory {
-    dedicated = 28672       # fixed RAM allocation in MiB
+    dedicated = 32768       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 
