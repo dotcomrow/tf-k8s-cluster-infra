@@ -1810,6 +1810,39 @@ write_files:
           field.cattle.io/projectId: local:infrastructure
           scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
       ---
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: scheduler-sa
+        namespace: scheduler-plugins
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: scheduler-config
+        namespace: scheduler-plugins
+      data:
+        scheduler-config.yaml: |
+          apiVersion: kubescheduler.config.k8s.io/v1beta3
+          kind: KubeSchedulerConfiguration
+          profiles:
+            - schedulerName: topology-aware-scheduler
+              plugins:
+                score:
+                  enabled:
+                    - name: NodeResourcesFit
+                    - name: NodeAffinity
+                  disabled:
+                    - name: '*'
+                filter:
+                  enabled:
+                    - name: NodeUnschedulable
+                    - name: NodeName
+                    - name: NodeAffinity
+                    - name: TaintToleration
+                  disabled:
+                    - name: '*'
+      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -1825,62 +1858,22 @@ write_files:
             labels:
               app: scheduler-plugins
           spec:
+            serviceAccountName: scheduler-sa
             containers:
-            - name: scheduler
-              image: registry.k8s.io/scheduler-plugins/kube-scheduler:v0.28.4
-              args:
-                - "--config=/etc/kubernetes/scheduler-config.yaml"
-                - "--v=3"
-              volumeMounts:
-                - name: scheduler-config
-                  mountPath: /etc/kubernetes
-                  readOnly: true
+              - name: scheduler
+                image: registry.k8s.io/scheduler-plugins/kube-scheduler:v0.28.9
+                command: ["kube-scheduler"]
+                args:
+                  - "--config=/etc/kubernetes/scheduler-config.yaml"
+                  - "--v=3"
+                volumeMounts:
+                  - name: scheduler-config
+                    mountPath: /etc/kubernetes
+                    readOnly: true
             volumes:
               - name: scheduler-config
                 configMap:
                   name: scheduler-config
-      ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: scheduler-config
-        namespace: scheduler-plugins
-
-      data:
-        scheduler-config.yaml: |
-          apiVersion: kubescheduler.config.k8s.io/v1beta3
-          kind: KubeSchedulerConfiguration
-          profiles:
-            - schedulerName: topology-aware-scheduler
-              plugins:
-                score:
-                  enabled:
-                    - name: NodeResourcesFit
-                    - name: NodeAffinity
-                    - name: TopologyAware
-                  disabled:
-                    - name: '*'
-                filter:
-                  enabled:
-                    - name: NodeUnschedulable
-                    - name: NodeName
-                    - name: NodeAffinity
-                    - name: TaintToleration
-                    - name: TopologyMatch
-                  disabled:
-                    - name: '*'
-              pluginConfig:
-                - name: TopologyAware
-                  args:
-                    kubeConfigPath: ""
-                    scoringStrategy:
-                      type: MostAllocated
-                      resources:
-                        - name: cpu
-                          weight: 1
-                        - name: memory
-                          weight: 1
-                    cacheResyncPeriodSeconds: 15
       ---
       apiVersion: scheduling.k8s.io/v1
       kind: PriorityClass
@@ -1896,11 +1889,61 @@ write_files:
         name: scheduler-plugins
       rules:
         - apiGroups: [""]
-          resources: ["nodes"]
+          resources:
+            - pods
+            - nodes
+            - configmaps
+            - services
+            - persistentvolumeclaims
+            - persistentvolumes
+            - replicationcontrollers
+            - namespaces
+            - resourcequotas
           verbs: ["get", "list", "watch"]
         - apiGroups: [""]
-          resources: ["pods"]
+          resources:
+            - events
+          verbs: ["create", "patch", "update"]
+        - apiGroups: ["apps"]
+          resources:
+            - replicasets
+            - replicasets/status
+            - statefulsets
+            - statefulsets/status
+            - deployments
+            - deployments/status
+            - daemonsets
+            - daemonsets/status
           verbs: ["get", "list", "watch"]
+        - apiGroups: ["autoscaling"]
+          resources:
+            - horizontalpodautoscalers
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["policy"]
+          resources:
+            - poddisruptionbudgets
+            - poddisruptionbudgets/status
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["storage.k8s.io"]
+          resources:
+            - csidrivers
+            - csinodes
+            - csistoragecapacities
+            - storageclasses
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["flowcontrol.apiserver.k8s.io"]
+          resources:
+            - flowschemas
+            - prioritylevelconfigurations
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["node.k8s.io"]
+          resources:
+            - runtimeclasses
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["coordination.k8s.io"]               # ✅ NEW for leader election
+          resources:
+            - leases
+          verbs: ["get", "list", "watch", "create", "update", "patch"]
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
@@ -1912,7 +1955,7 @@ write_files:
         name: scheduler-plugins
       subjects:
         - kind: ServiceAccount
-          name: default
+          name: scheduler-sa
           namespace: scheduler-plugins
       EOF
 
