@@ -651,7 +651,7 @@ write_files:
 
       kubelet-arg:
         - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=best-effort"
+        - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
       EOF
 
