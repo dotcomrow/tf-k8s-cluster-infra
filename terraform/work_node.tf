@@ -66,7 +66,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device     = "numa2"
-    cpus       = ""
+    cpus       = "0"
     memory     = 65536
     hostnodes  = "2"
     policy     = "preferred"
@@ -74,7 +74,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   numa {
     device     = "numa3"
-    cpus       = ""
+    cpus       = "0"
     memory     = 65536
     hostnodes  = "3"
     policy     = "preferred"
