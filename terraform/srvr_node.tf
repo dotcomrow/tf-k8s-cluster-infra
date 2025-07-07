@@ -42,6 +42,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         LINODE_TOKEN = var.LINODE_TOKEN
         LINODE_DRIVER_URL = var.LINODE_DRIVER_URL
         GOOGLE_CREDENTIALS = base64encode(trimspace(var.GOOGLE_CREDENTIALS))
+        SRVR_NODE_MAX_PODS = var.SRVR_NODE_MAX_PODS
       })
     file_name = "cloud_init_srvr.yaml"
   }

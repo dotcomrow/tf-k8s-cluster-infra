@@ -751,6 +751,7 @@ write_files:
         - "enable-admission-plugins=PodNodeSelector"
 
       kubelet-arg:
+        - "max-pods=${SRVR_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"

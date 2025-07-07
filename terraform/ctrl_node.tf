@@ -18,6 +18,7 @@ resource "proxmox_virtual_environment_file" "ctrl_cloud_init_config" {
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE
         MONITORED_RESOURCE_NODE_ID = var.ctrl_hostname
         UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
+        CTRL_NODE_MAX_PODS = var.CTRL_NODE_MAX_PODS
       })
     file_name = "cloud_init_ctrl.yaml"
   }

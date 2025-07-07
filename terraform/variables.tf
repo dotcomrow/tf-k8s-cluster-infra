@@ -220,6 +220,24 @@ variable "WORK_NODE_MAX_PODS" {
   default     = 250
 }
 
+variable "CTRL_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the ctrl node"
+  type        = number
+  default     = 250
+}
+
+variable "ETCD_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the etcd node"
+  type        = number
+  default     = 250
+}
+
+variable "SRVR_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the srvr node"
+  type        = number
+  default     = 250
+}
+
 variable "enable_hugepages" {
   description = "Enable hugepages for VMs"
   type        = bool
