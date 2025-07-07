@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
 
   numa {
     device     = "numa0"
-    cpus       = "40-49"
+    cpus       = "0-9"
     memory     = 28672
     hostnodes  = "2"
     policy     = "bind"
