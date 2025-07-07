@@ -742,12 +742,17 @@ write_files:
 
       sudo mkdir -p /etc/systemd/system/rke2-server.service.d/
 
-      sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
+      sudo tee /etc/rancher/rke2/config.yaml > /dev/null <<EOF
       # ────────────────────────────────────────────────────────────────────────
-      # Enable the PodNodeSelector admission plugin on the kube-api-server
+      # RKE2 Configuration: Admission Plugins + Kubelet NUMA-aware Settings
       # ────────────────────────────────────────────────────────────────────────
+
       kube-apiserver-arg:
         - "enable-admission-plugins=PodNodeSelector"
+
+      kubelet-arg:
+        - "--cpu-manager-policy=static"
+        - "--topology-manager-policy=best-effort"
       EOF
 
       systemctl enable rke2-server
@@ -1785,6 +1790,9 @@ write_files:
       #!/bin/bash
       set -e
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
+
+      sudo helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo helm install nfd nfd/node-feature-discovery -n node-feature-discovery --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # adding apisix routes for linkerd and jaeger
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -

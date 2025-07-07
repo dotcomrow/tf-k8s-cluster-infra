@@ -47,7 +47,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   numa {
-    device     = "numa2"
+    device     = "numa0"
     cpus       = "50-59"
     memory     = 32768
     hostnodes  = "2"

@@ -462,6 +462,8 @@ write_files:
 
       kubelet-arg:
         - "max-pods=${WORK_NODE_MAX_PODS}"
+        - "--cpu-manager-policy=static"
+        - "--topology-manager-policy=best-effort"
       EOF
 
   - path: /etc/security/limits.d/99-nofile.conf

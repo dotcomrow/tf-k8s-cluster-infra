@@ -64,8 +64,24 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     policy    = "bind"
   }
 
+  numa {
+    device     = "numa2"
+    cpus       = ""
+    memory     = 65536
+    hostnodes  = "2"
+    policy     = "preferred"
+  }
+
+  numa {
+    device     = "numa3"
+    cpus       = ""
+    memory     = 65536
+    hostnodes  = "3"
+    policy     = "preferred"
+  }
+
   memory {
-    dedicated = 247808       # fixed RAM allocation in MiB
+    dedicated = 378880       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
