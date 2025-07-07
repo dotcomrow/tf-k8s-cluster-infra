@@ -742,7 +742,7 @@ write_files:
 
       sudo mkdir -p /etc/systemd/system/rke2-server.service.d/
 
-      sudo tee /etc/rancher/rke2/config.yaml > /dev/null <<EOF
+      sudo tee -a /etc/rancher/rke2/config.yaml > /dev/null <<EOF
       # ────────────────────────────────────────────────────────────────────────
       # RKE2 Configuration: Admission Plugins + Kubelet NUMA-aware Settings
       # ────────────────────────────────────────────────────────────────────────
