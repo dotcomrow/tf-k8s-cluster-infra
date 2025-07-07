@@ -1793,7 +1793,128 @@ write_files:
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
       sudo helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo helm install nfd nfd/node-feature-discovery -n node-feature-discovery --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo helm install nfd nfd/node-feature-discovery \
+        -n node-feature-discovery \
+        --create-namespace \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --set topologyUpdater.enabled=true
+
+      sudo kubectl annotate namespace node-feature-discovery field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: scheduler-plugins
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: scheduler-plugins
+        namespace: scheduler-plugins
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: scheduler-plugins
+        template:
+          metadata:
+            labels:
+              app: scheduler-plugins
+          spec:
+            containers:
+            - name: scheduler
+              image: registry.k8s.io/scheduler-plugins/kube-scheduler:v0.28.4
+              args:
+                - "--config=/etc/kubernetes/scheduler-config.yaml"
+                - "--v=3"
+              volumeMounts:
+                - name: scheduler-config
+                  mountPath: /etc/kubernetes
+                  readOnly: true
+            volumes:
+              - name: scheduler-config
+                configMap:
+                  name: scheduler-config
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: scheduler-config
+        namespace: scheduler-plugins
+
+      data:
+        scheduler-config.yaml: |
+          apiVersion: kubescheduler.config.k8s.io/v1beta3
+          kind: KubeSchedulerConfiguration
+          profiles:
+            - schedulerName: topology-aware-scheduler
+              plugins:
+                score:
+                  enabled:
+                    - name: NodeResourcesFit
+                    - name: NodeAffinity
+                    - name: TopologyAware
+                  disabled:
+                    - name: '*'
+                filter:
+                  enabled:
+                    - name: NodeUnschedulable
+                    - name: NodeName
+                    - name: NodeAffinity
+                    - name: TaintToleration
+                    - name: TopologyMatch
+                  disabled:
+                    - name: '*'
+              pluginConfig:
+                - name: TopologyAware
+                  args:
+                    kubeConfigPath: ""
+                    scoringStrategy:
+                      type: MostAllocated
+                      resources:
+                        - name: cpu
+                          weight: 1
+                        - name: memory
+                          weight: 1
+                    cacheResyncPeriodSeconds: 15
+      ---
+      apiVersion: scheduling.k8s.io/v1
+      kind: PriorityClass
+      metadata:
+        name: topology-aware-critical
+      value: 1000000000
+      globalDefault: false
+      description: "Priority class for topology-aware scheduler"
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: scheduler-plugins
+      rules:
+        - apiGroups: [""]
+          resources: ["nodes"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get", "list", "watch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: scheduler-plugins
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: scheduler-plugins
+      subjects:
+        - kind: ServiceAccount
+          name: default
+          namespace: scheduler-plugins
+      EOF
 
       # adding apisix routes for linkerd and jaeger
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
