@@ -285,3 +285,23 @@ variable "VAULT_SECRET_ID" {
   type        = string
   nullable = false
 }
+
+variable "apis" {
+  description = "The list of apis to enable"  
+  type        = list(string)
+  default     = [
+    "iam.googleapis.com", 
+    "cloudresourcemanager.googleapis.com", 
+    "bigquery.googleapis.com",
+    "bigquerystorage.googleapis.com",
+    "cloudbilling.googleapis.com",
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "containerregistry.googleapis.com",
+    "compute.googleapis.com",
+    "eventarc.googleapis.com",                   # ✅ Add this
+    "pubsub.googleapis.com",                     # ✅ Recommended (used by Eventarc triggers)
+    "secretmanager.googleapis.com",              # ✅ Required for your secret sync
+    "logging.googleapis.com"                     # Optional, for better visibility
+  ]
+}

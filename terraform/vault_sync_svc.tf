@@ -2,6 +2,20 @@ locals {
   image_tag = formatdate("YYYYMMDDHHmmss", timestamp())
 }
 
+resource "google_project_service" "project_service" {
+  count = length(var.apis)
+
+  disable_dependent_services = true
+  project = google_project.project.project_id
+  service = var.apis[count.index]
+}
+
+data "google_compute_default_service_account" "default" {
+  project = google_project.infra.project_id
+
+  depends_on = [ google_project_service.project_service ]
+}
+
 resource "google_project_iam_member" "registry_permissions" {
   project = google_project.infra.project_id
   role   = "roles/composer.environmentAndStorageObjectViewer"
