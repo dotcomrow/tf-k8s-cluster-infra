@@ -1,8 +1,7 @@
 name: Build and Deploy Services
 
 on:
-  push:
-    branches: ["prod"]
+  workflow_dispatch:
 
 permissions: write-all
 
