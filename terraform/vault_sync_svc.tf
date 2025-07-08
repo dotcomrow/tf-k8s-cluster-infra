@@ -88,9 +88,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_artifact_registry_repository.vault_sync_repo,
     google_service_account.eventarc_service_account,
     google_project_iam_member.cloud_run_secret_access,
-    google_cloud_run_service_iam_member.eventarc_invoker,
     google_pubsub_topic.secret_manager_events,
-    google_project_iam_member.eventarc_invoker,
     google_project_iam_member.pubsub_subscriber,
     google_project_iam_member.eventarc_receive_auditlog
   ]
