@@ -106,6 +106,8 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
   format          = "DOCKER"
   project         = google_project.infra.project_id
   description     = "Hosted repo for vault-sync image"
+
+  depends_on = [ google_project_service.project_service ]
 }
 
 resource "null_resource" "ghcr_to_gcp_image_sync" {
@@ -163,4 +165,6 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   triggers = {
     always_run = "${timestamp()}"
   }
+
+  depends_on = [ google_artifact_registry_repository.vault_sync_repo ]
 }
