@@ -29,7 +29,14 @@ resource "google_eventarc_trigger" "secret_manager_trigger" {
 
   depends_on = [
     google_project_service.project_service,
-    google_cloud_run_v2_service.vault_sync_svc
+    google_cloud_run_v2_service.vault_sync_svc,
+    google_service_account.eventarc_service_account,
+    google_cloud_run_service_iam_member.eventarc_invoker,
+    google_pubsub_topic.secret_manager_events,
+    google_project_iam_member.eventarc_invoker,
+    google_project_iam_member.pubsub_subscriber,
+    google_project_iam_member.eventarc_receive_auditlog,
+    google_project_iam_member.cloud_run_secret_access
   ]
 }
 

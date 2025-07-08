@@ -48,7 +48,7 @@ data "google_iam_policy" "noauth" {
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
-  name     = "${var.project_name}"
+  name     = "vault-sync-run-container"
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
   project  = "${google_project.infra.project_id}"
@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/${var.project_name}/${var.project_name}:${local.image_tag}"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/${var.project_name}/vault-sync-run-container:${local.image_tag}"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -114,7 +114,8 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
       GHCR_USER   = var.GITHUB_ORG
-      IMAGE_NAME  = var.project_name
+      PROJECT_NAME = var.project_name
+      IMAGE_NAME  = "vault-sync-run-container"
       REGION      = var.region
       PROJECT_ID  = google_project.infra.project_id
       IMAGE_TAG   = local.image_tag
@@ -143,7 +144,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
       # Delete all images in Artifact Registry repo (digests + tags)
-      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME/$IMAGE_NAME"
+      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
       EXISTING_IMAGES=$(gcloud artifacts docker images list "$REPO_PATH" --format="get(version)" || true)
       for image in $EXISTING_IMAGES; do
         gcloud artifacts docker images delete "$REPO_PATH@$image" --quiet --delete-tags || true
@@ -154,9 +155,9 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
 
       # Tag and push to GCP Artifact Registry
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
-        "$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME/$IMAGE_NAME:${local.image_tag}"
+        "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
 
-      docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME/$IMAGE_NAME:${local.image_tag}"
+      docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
 
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
     EOT
