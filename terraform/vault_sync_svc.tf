@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/${var.project_name}/vault-sync-run-container:${local.image_tag}"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -87,7 +87,12 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     null_resource.ghcr_to_gcp_image_sync,
     google_artifact_registry_repository.vault_sync_repo,
     google_service_account.eventarc_service_account,
-    google_project_iam_member.cloud_run_secret_access
+    google_project_iam_member.cloud_run_secret_access,
+    google_cloud_run_service_iam_member.eventarc_invoker,
+    google_pubsub_topic.secret_manager_events,
+    google_project_iam_member.eventarc_invoker,
+    google_project_iam_member.pubsub_subscriber,
+    google_project_iam_member.eventarc_receive_auditlog
   ]
 
 }
@@ -114,7 +119,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
       GHCR_USER   = var.GITHUB_ORG
-      PROJECT_NAME = var.project_name
+      PROJECT_NAME = "vault-sync-run-container"
       IMAGE_NAME  = "vault-sync-run-container"
       REGION      = var.region
       PROJECT_ID  = google_project.infra.project_id
