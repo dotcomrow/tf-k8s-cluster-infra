@@ -126,5 +126,9 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     user_data_file_id = proxmox_virtual_environment_file.srvr_cloud_init_config.id
   }
 
-  depends_on = [ null_resource.download_iso, null_resource.ghcr_to_gcp_image_sync ]
+  depends_on = [ 
+    null_resource.download_iso, 
+    null_resource.ghcr_to_gcp_image_sync, 
+    google_cloud_run_v2_service.vault_sync_svc 
+  ]
 }
