@@ -85,7 +85,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.registry_permissions,
     google_project_iam_member.secret_manager_grant,
     null_resource.ghcr_to_gcp_image_sync,
-    google_artifact_registry_repository.vault_sync_repo,
     google_service_account.eventarc_service_account,
     google_project_iam_member.cloud_run_secret_access,
     google_pubsub_topic.secret_manager_events,
