@@ -45,6 +45,9 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         SRVR_NODE_MAX_PODS = var.SRVR_NODE_MAX_PODS
         GCP_PROJECT_ID = google_project.infra.project_id
         GCP_REGION = var.REGION
+        VAULT_KEY_ACCOUNT = local.vault_kms_key
+        VAULT_OIDC_CLIENT_ID = var.VAULT_OIDC_CLIENT_ID
+        VAULT_OIDC_CLIENT_SECRET = var.VAULT_OIDC_CLIENT_SECRET
       })
     file_name = "cloud_init_srvr.yaml"
   }

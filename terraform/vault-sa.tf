@@ -35,9 +35,8 @@ resource "google_service_account_key" "vault_key" {
   private_key_type   = "TYPE_GOOGLE_CREDENTIALS_FILE"
 }
 
-output "vault_credentials_json" {
-  value     = google_service_account_key.vault_key.private_key
-  sensitive = true
+locals {
+  vault_kms_key = google_service_account_key.vault_key.private_key
 }
 
 resource "google_kms_crypto_key_iam_member" "vault_kms_access" {
