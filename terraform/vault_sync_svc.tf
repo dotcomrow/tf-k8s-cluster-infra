@@ -2,6 +2,37 @@ locals {
   image_tag = formatdate("YYYYMMDDHHmmss", timestamp())
 }
 
+resource "google_project_iam_member" "registry_permissions" {
+  project = google_project.infra.project_id
+  role   = "roles/composer.environmentAndStorageObjectViewer"
+  member  = "serviceAccount:service-${google_project.infra.number}@serverless-robot-prod.iam.gserviceaccount.com"
+
+  depends_on = [ data.google_compute_default_service_account.default ]
+}
+
+resource "google_project_iam_member" "artifact_permissions" {
+  project = google_project.infra.project_id
+  role   = "roles/artifactregistry.reader"
+  member  = "serviceAccount:service-${google_project.infra.number}@serverless-robot-prod.iam.gserviceaccount.com"
+
+  depends_on = [ data.google_compute_default_service_account.default ]
+}
+
+resource "google_project_iam_member" "secret_manager_grant" {
+  project = google_project.infra.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
+}
+
+data "google_iam_policy" "noauth" {
+  binding {
+    role = "roles/run.invoker"
+    members = [
+      "allUsers",
+    ]
+  }
+}
+
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
   name     = "${var.project_name}"
   location = var.region
@@ -48,9 +79,9 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
 }
 
 resource "google_cloud_run_service_iam_policy" "noauth-user-profile" {
-  location = google_cloud_run_v2_service.svc.location
-  project  = google_cloud_run_v2_service.svc.project
-  service  = google_cloud_run_v2_service.svc.name
+  location = google_cloud_run_v2_service.vault_sync_svc.location
+  project  = google_cloud_run_v2_service.vault_sync_svc.project
+  service  = google_cloud_run_v2_service.vault_sync_svc.name
 
   policy_data = data.google_iam_policy.noauth.policy_data
 }
