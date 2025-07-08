@@ -2522,6 +2522,22 @@ write_files:
       type: Opaque
       data:
         key.json: ${GOOGLE_CREDENTIALS}
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: gcp-project-id
+        namespace: vault
+      data:
+        PROJECT_ID: ${GCP_PROJECT_ID}
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: gcp-project-region
+        namespace: vault
+      data:
+        PROJECT_REGION: ${GCP_REGION}
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
