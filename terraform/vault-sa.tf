@@ -79,10 +79,10 @@ resource "null_resource" "kms_iam_binding" {
       ./google-cloud-sdk/bin/gcloud config set project ${google_project.infra.project_id}
       ./google-cloud-sdk/bin/gcloud config set compute/region ${var.region}
 
-      gcloud kms keys add-iam-policy-binding vault-unseal \
+      ./google-cloud-sdk/bin/gcloud kms keys add-iam-policy-binding vault-unseal \
         --location=${var.region} \
-        --keyring=shared-infra-ring \
-        --key=projects/${google_project.infra.project_id}/locations/${var.region}/keyRings/shared-infra-ring/cryptoKeys/vault-unseal \
+        --keyring=vault-infra-ring \
+        --key=projects/${google_project.infra.project_id}/locations/${var.region}/keyRings/vault-infra-ring/cryptoKeys/vault-unseal \
         --member="serviceAccount:${google_service_account.vault_crypto_unseal_acct.email}" \
         --role="projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto_role.role_id}" \
         --project=${google_project.infra.project_id}
