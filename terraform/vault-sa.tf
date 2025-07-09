@@ -2,8 +2,6 @@ resource "google_kms_key_ring" "infra_ring" {
   name     = "shared-infra-ring"
   location = var.region
   project  = google_project.infra.project_id
-
-  depends_on = [google_project_service.enabled_apis]
 }
 
 resource "google_kms_crypto_key" "vault_key" {
