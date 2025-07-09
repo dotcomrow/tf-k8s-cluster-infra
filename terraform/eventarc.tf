@@ -28,7 +28,8 @@ resource "google_eventarc_trigger" "secret_manager_trigger" {
   service_account = google_service_account.eventarc_service_account.email
 
   depends_on = [
-    google_project_service.project_service
+    google_project_service.project_service,
+    google_cloud_run_v2_service.vault_sync_svc
   ]
 }
 
