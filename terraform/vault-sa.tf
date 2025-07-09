@@ -1,5 +1,5 @@
 resource "google_kms_key_ring" "vault_infra_ring" {
-  name     = "shared-infra-ring"
+  name     = "vault-infra-ring"
   location = var.region
   project  = google_project.infra.project_id
 }
@@ -33,7 +33,7 @@ locals {
 }
 
 resource "google_project_iam_custom_role" "vault_kms_crypto_role" {
-  role_id     = "vaultKmsCryptoAccessCustomRole"
+  role_id     = "kmsVaultSyncRole"
   title       = "Vault KMS Crypto Access"
   description = "Minimal permissions to allow Vault auto-unseal via GCP KMS"
   project     = google_project.infra.project_id
