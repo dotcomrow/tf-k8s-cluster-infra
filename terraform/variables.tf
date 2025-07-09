@@ -298,6 +298,7 @@ variable "apis" {
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "containerregistry.googleapis.com",
+    "cloudkms.googleapis.com",
     "compute.googleapis.com",
     "eventarc.googleapis.com",                   # ✅ Add this
     "pubsub.googleapis.com",                     # ✅ Recommended (used by Eventarc triggers)
