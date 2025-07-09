@@ -55,8 +55,8 @@ resource "google_organization_iam_member" "kms_org_service_agent" {
 }
 
 resource "google_project_iam_custom_role" "vault_kms_crypto" {
-  role_id     = "vaultKmsAccess"
-  title       = "Vault KMS Access"
+  role_id     = "vaultKmsCryptoAccess"
+  title       = "Vault KMS Crypto Access"
   description = "Minimal permissions to allow Vault auto-unseal via GCP KMS"
   project     = google_project.infra.project_id
 
