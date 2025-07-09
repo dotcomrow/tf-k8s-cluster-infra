@@ -43,6 +43,8 @@ resource "google_kms_crypto_key_iam_member" "vault_kms_access" {
   crypto_key_id = google_kms_crypto_key.vault_key.id
   role          = "projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms.role_id}"
   member        = "serviceAccount:${google_service_account.vault.email}"
+
+  depends_on = [google_project_iam_custom_role.vault_kms]
 }
 
 # give GCP’s KMS service-agent permission to view key usage
