@@ -2831,9 +2831,7 @@ write_files:
                     done
 
                     # Extract and export root token
-                    ROOT_TOKEN=$(grep '"root_token"' /vault/data/init.json | sed -E 's/.*"root_token": *"([^"]+)".*/\1/')
-                    export VAULT_TOKEN=$ROOT_TOKEN
-                    vault login -address=$VAULT_ADDR -no-print $ROOT_TOKEN
+                    export VAULT_TOKEN=$(jq -r '.root_token' /vault/data/init.json)
 
                     # Write admin policy
                     cat <<EOF > /vault/data/admin-policy.hcl
