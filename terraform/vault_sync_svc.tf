@@ -89,7 +89,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.cloud_run_secret_access,
     google_pubsub_topic.secret_manager_events,
     google_project_iam_member.eventarc_receive_auditlog,
-    google_cloud_run_service_iam_policy.noauth-user-profile,
     google_eventarc_trigger.secret_manager_trigger
   ]
 
@@ -101,6 +100,8 @@ resource "google_cloud_run_service_iam_policy" "noauth-user-profile" {
   service  = google_cloud_run_v2_service.vault_sync_svc.name
 
   policy_data = data.google_iam_policy.noauth.policy_data
+
+  depends_on = [ google_cloud_run_v2_service.vault_sync_svc ]
 }
 
 resource "google_artifact_registry_repository" "vault_sync_repo" {
