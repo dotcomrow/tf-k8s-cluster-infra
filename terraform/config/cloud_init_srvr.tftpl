@@ -2714,9 +2714,9 @@ write_files:
           api_addr      = "https://vault.app.suncoast.systems"
 
           seal "gcpckms" {
-            project     = "k8s-vault-1e54"
+            project     = "${GCP_PROJECT_ID}"
             region      = "us-east1"
-            key_ring    = "shared-infra-ring"
+            key_ring    = "vault-infra-ring"
             crypto_key  = "vault-unseal"
             credentials = "/etc/vault/vault-unseal-sa.json"
           }
