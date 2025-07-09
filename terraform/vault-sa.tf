@@ -39,12 +39,12 @@ locals {
   vault_kms_key = google_service_account_key.vault_key.private_key
 }
 
-resource "google_kms_crypto_key_iam_member" "vault_kms_access" {
+resource "google_kms_crypto_key_iam_member" "vault_kms_crypto_access" {
   crypto_key_id = google_kms_crypto_key.vault_key.id
-  role          = "projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms.role_id}"
+  role          = "projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto.role_id}"
   member        = "serviceAccount:${google_service_account.vault.email}"
 
-  depends_on = [google_project_iam_custom_role.vault_kms]
+  depends_on = [google_project_iam_custom_role.vault_kms_crypto]
 }
 
 # give GCP’s KMS service-agent permission to view key usage
@@ -54,7 +54,7 @@ resource "google_organization_iam_member" "kms_org_service_agent" {
   member = "serviceAccount:service-org-${var.gcp_org_id}@gcp-sa-cloudkms.iam.gserviceaccount.com"
 }
 
-resource "google_project_iam_custom_role" "vault_kms" {
+resource "google_project_iam_custom_role" "vault_kms_crypto" {
   role_id     = "vaultKmsAccess"
   title       = "Vault KMS Access"
   description = "Minimal permissions to allow Vault auto-unseal via GCP KMS"
