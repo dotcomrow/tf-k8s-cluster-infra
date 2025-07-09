@@ -29,7 +29,7 @@ resource "google_service_account_key" "vault_crypto_key" {
 }
 
 locals {
-  vault_kms_key = google_service_account_key.vault_key.private_key
+  vault_kms_key = google_service_account_key.vault_crypto_key.private_key
 }
 
 resource "google_project_iam_custom_role" "vault_kms_crypto_role" {

@@ -89,7 +89,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.cloud_run_secret_access,
     google_pubsub_topic.secret_manager_events,
     google_project_iam_member.eventarc_receive_auditlog,
-    google_kms_crypto_key_iam_member.vault_kms_crypto_access
+    null_resource.kms_iam_binding
   ]
 
 }
