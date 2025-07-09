@@ -63,7 +63,8 @@ resource "null_resource" "kms_iam_binding" {
   depends_on = [
     google_kms_crypto_key.vault_crypto_key,
     google_service_account.vault_crypto_unseal_acct,
-    null_resource.wait_for_custom_role
+    null_resource.wait_for_custom_role,
+    google_kms_crypto_key.vault_crypto_key
   ]
 
   provisioner "local-exec" {
