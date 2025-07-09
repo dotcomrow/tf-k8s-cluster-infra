@@ -2715,7 +2715,7 @@ write_files:
 
           seal "gcpckms" {
             project     = "${GCP_PROJECT_ID}"
-            region      = "us-east1"
+            region      = "${GCP_REGION}"
             key_ring    = "vault-infra-ring"
             crypto_key  = "vault-unseal"
             credentials = "/etc/vault/vault-unseal-sa.json"
