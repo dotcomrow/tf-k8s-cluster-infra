@@ -11,18 +11,18 @@ resource "google_kms_crypto_key" "vault_key" {
   rotation_period = "100000s"
 }
 
-resource "google_service_account" "vault_unseal" {
+resource "google_service_account" "vault_unseal_acct" {
   account_id   = "vault-unseal"
   display_name = "Vault Unseal Service Account"
   project      = google_project.infra.project_id
 }
 
 resource "google_service_account_key" "vault_key" {
-  service_account_id = google_service_account.vault_unseal.email
+  service_account_id = google_service_account.vault_unseal_acct.email
   private_key_type   = "TYPE_GOOGLE_CREDENTIALS_FILE"
 
   depends_on = [
-      google_service_account.vault_unseal,
+      google_service_account.vault_unseal_acct,
       google_kms_crypto_key.vault_key,
       google_kms_crypto_key_iam_member.vault_kms_crypto_access,
       google_project_iam_custom_role.vault_kms_crypto_ops_role
@@ -36,7 +36,7 @@ locals {
 resource "google_kms_crypto_key_iam_member" "vault_kms_crypto_access" {
   crypto_key_id = google_kms_crypto_key.vault_key.id
   role          = "projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto_ops_role.role_id}"
-  member        = "serviceAccount:${google_service_account.vault_unseal.email}"
+  member        = "serviceAccount:${google_service_account.vault_unseal_acct.email}"
 
   depends_on = [
         google_project_iam_custom_role.vault_kms_crypto_ops_role,
