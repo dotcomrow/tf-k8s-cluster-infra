@@ -79,13 +79,13 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-11"
-    memory     = 98304  # 32 GiB
+    memory     = 110592  # 32 GiB
     hostnodes  = "3"
     policy     = "bind"
   }
 
   memory {
-    dedicated = 98304       # fixed RAM allocation in MiB
+    dedicated = 110592       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 
