@@ -2785,10 +2785,10 @@ write_files:
                     mountPath: /vault/data
                   - name: gcp-creds
                     mountPath: /etc/vault
-                      readOnly: true
+                    readOnly: true
                   - name: oidc-creds
                     mountPath: /etc/vault-oidc
-                      readOnly: true
+                    readOnly: true
                   - name: shared-utils
                     mountPath: /usr/local/bin/kubectl
                     subPath: kubectl
@@ -2799,10 +2799,10 @@ write_files:
                     readOnly: true
                   - name: gcp-project-region
                     mountPath: /config/gcp-project-region
-                      readOnly: true
+                    readOnly: true
                   - name: script
                     mountPath: /opt/configscript
-                      readOnly: true
+                    readOnly: true
                   - name: script-tmp
                     mountPath: /opt/scripts
                 command: ["/bin/sh"]
@@ -2996,12 +2996,12 @@ write_files:
                     volumeMounts:
                       - name: gcp-creds
                         mountPath: /tmp
-                          readOnly: true
+                        readOnly: true
                       - name: shared-creds
                         mountPath: /shared-creds
                       - name: script
                         mountPath: /opt/configscript
-                          readOnly: true
+                        readOnly: true
                       - name: script-tmp
                         mountPath: /opt/scripts
                     command: ["/bin/sh"]
