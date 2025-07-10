@@ -2807,7 +2807,6 @@ write_files:
                     vault server -config=/vault/config/vault.hcl &
                     VAULT_PID=$!
                     sleep 5
-                    # initialize/unseal logic omitted for brevity
 
                     # Initialize if necessary
                     if [ ! -f /vault/data/init.json ]; then
@@ -2826,75 +2825,81 @@ write_files:
                     cat <<EOF > /vault/data/admin-policy.hcl
                     path "*" { capabilities = ["create","read","update","delete","list","sudo"] }
                     EOF
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" policy write admin /vault/data/admin-policy.hcl
 
-                    vault policy write -token=$(jq -r '.root_token' /vault/data/init.json) admin /vault/data/admin-policy.hcl
-
-                    if ! vault auth list -format=json -token=$(jq -r '.root_token' /vault/data/init.json) | grep -q '"oidc/"'; then
-                      vault auth enable -token=$(jq -r '.root_token' /vault/data/init.json) oidc
+                    # Enable auth methods
+                    if ! vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth list -format=json | grep -q '"oidc/"'; then
+                      vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth enable oidc
                     fi
 
-                    if ! vault auth list -format=json -token=$(jq -r '.root_token' /vault/data/init.json) | grep -q '"kubernetes/"'; then
-                      vault auth enable -token=$(jq -r '.root_token' /vault/data/init.json) kubernetes
+                    if ! vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth list -format=json | grep -q '"kubernetes/"'; then
+                      vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth enable kubernetes
                     fi
 
-                    if ! vault auth list -format=json -token=$(jq -r '.root_token' /vault/data/init.json) | grep -q '"approle/"'; then
-                      vault auth enable -token=$(jq -r '.root_token' /vault/data/init.json) approle
+                    if ! vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth list -format=json | grep -q '"approle/"'; then
+                      vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth enable approle
                     fi
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) auth/kubernetes/config \
+                    # Kubernetes config
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write auth/kubernetes/config \
                       token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
                       kubernetes_host="https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_SERVICE_PORT_HTTPS" \
                       kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
-                    # Create a policy for AVP to read secrets
+                    # AVP policy
                     cat <<EOF > /vault/data/avp-policy.hcl
                     path "secret/data/*" {
                       capabilities = ["read"]
                     }
                     EOF
-                    vault policy write -token=$(jq -r '.root_token' /vault/data/init.json) avp /vault/data/avp-policy.hcl
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" policy write avp /vault/data/avp-policy.hcl
 
-                    vault policy write -token=$(jq -r '.root_token' /vault/data/init.json) vault-sync - <<EOF
+                    # Vault sync policy
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" policy write vault-sync - <<EOF
                     path "secret/*" {
                       capabilities = ["create", "update"]
                     }
                     EOF
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) auth/approle/role/vault-sync \
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write auth/approle/role/vault-sync \
                       token_ttl=1h \
                       token_max_ttl=4h \
                       bind_secret_id=true \
                       secret_id_bound_cidrs=0.0.0.0/0 \
                       policies=vault-sync
 
-                    vault read -token=$(jq -r '.root_token' /vault/data/init.json) -field=role_id auth/approle/role/vault-sync/role-id > /vault/creds-data/role_id.txt
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" read -field=role_id auth/approle/role/vault-sync/role-id > /vault/creds-data/role_id.txt
                     echo >> /vault/creds-data/role_id.txt
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
                     echo >> /vault/creds-data/secret_id.txt
 
-                    # write gcp project id, region, and service name to shared data
+                    # GCP identifiers
                     cat /config/gcp-project-id/PROJECT_ID > /vault/creds-data/project_id.txt
                     cat /config/gcp-project-region/PROJECT_REGION > /vault/creds-data/region.txt
                     echo "vault-sync-run-container" > /vault/creds-data/service_name.txt
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) auth/kubernetes/role/argocd \
+                    # ArgoCD role for AVP
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write auth/kubernetes/role/argocd \
                       bound_service_account_names=argocd-repo-server \
                       bound_service_account_namespaces=argocd \
                       policies=avp \
                       ttl=24h
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) auth/oidc/config \
+                    # OIDC setup
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write auth/oidc/config \
                       oidc_discovery_url="https://vault.app.suncoast.systems/dex" \
                       oidc_client_id="$(cat /etc/vault-oidc/client_id)" \
                       oidc_client_secret="$(cat /etc/vault-oidc/client_secret)" \
                       default_role="default"
 
-                    if vault auth list -format=json -token=$(jq -r '.root_token' /vault/data/init.json) | grep -q '"github/"'; then
-                      vault auth disable -token=$(jq -r '.root_token' /vault/data/init.json) github
+                    # Disable GitHub auth if present
+                    if vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth list -format=json | grep -q '"github/"'; then
+                      vault -token="$(jq -r '.root_token' /vault/data/init.json)" auth disable github
                     fi
 
-                    vault write -token=$(jq -r '.root_token' /vault/data/init.json) auth/oidc/role/default \
+                    # Default OIDC role
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" write auth/oidc/role/default \
                       bound_audiences="$(cat /etc/vault-oidc/client_id)" \
                       user_claim="email" \
                       groups_claim="groups" \
@@ -2903,7 +2908,8 @@ write_files:
                       policies="admin" \
                       ttl="1h"
 
-                    vault secrets enable -token=$(jq -r '.root_token' /vault/data/init.json) -path=secret -version=2 kv
+                    # Enable KV secrets engine
+                    vault -token="$(jq -r '.root_token' /vault/data/init.json)" secrets enable -path=secret -version=2 kv
 
                     cat <<EOF | kubectl apply -f -
                     apiVersion: batch/v1
