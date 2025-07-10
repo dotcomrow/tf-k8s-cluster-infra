@@ -50,13 +50,13 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-9"
-    memory     = 61440
+    memory     = 63488
     hostnodes  = "2"
     policy     = "bind"
   }
 
   memory {
-    dedicated = 61440       # fixed RAM allocation in MiB
+    dedicated = 63488       # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 
