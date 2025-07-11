@@ -103,7 +103,7 @@ resource "google_cloud_run_service_iam_policy" "noauth-user-profile" {
 
   depends_on = [ 
       google_cloud_run_v2_service.vault_sync_svc,
-      google_eventarc_trigger.secret_manager_trigger
+      google_eventarc_trigger.vault_secret_events
    ]
 }
 
