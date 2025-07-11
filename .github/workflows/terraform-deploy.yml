@@ -46,6 +46,13 @@ jobs:
         if: ${{ github.event.inputs.mode == 'state-remove' }}
         run: |
           echo "⬇️ Installing Terraform..."
+          
+          # Clean up existing terraform (directory or file)
+          if [ -e /usr/local/bin/terraform ]; then
+            echo "⚠️ Removing existing terraform at /usr/local/bin/terraform..."
+            sudo rm -rf /usr/local/bin/terraform
+          fi
+
           curl -fsSL https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip -o terraform.zip
           unzip -o -q terraform.zip
           sudo mv terraform /usr/local/bin/
