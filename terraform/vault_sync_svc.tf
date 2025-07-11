@@ -117,53 +117,56 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
   depends_on = [ google_project_service.project_service ]
 }
 
+data "external" "ghcr_digest" {
+  program = ["bash", "-c", <<-EOT
+    set -euo pipefail
+
+    docker pull ghcr.io/${GITHUB_ORG}/vault-sync-run-container:latest > /dev/null
+    DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2)
+    echo "{\"digest\": \"${DIGEST}\"}"
+  EOT
+  ]
+}
+
 resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
-      GHCR_USER   = var.GITHUB_ORG
+      GHCR_USER    = var.GITHUB_ORG
       PROJECT_NAME = "vault-sync-run-container"
-      IMAGE_NAME  = "vault-sync-run-container"
-      REGION      = var.region
-      PROJECT_ID  = google_project.infra.project_id
-      IMAGE_TAG   = local.image_tag
+      IMAGE_NAME   = "vault-sync-run-container"
+      REGION       = var.region
+      PROJECT_ID   = google_project.infra.project_id
+      IMAGE_TAG    = local.image_tag
     }
 
     command = <<-EOT
       #!/bin/bash
+      set -euo pipefail
 
       # Setup directories for isolated gcloud and docker configs
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
 
-      # Download gcloud SDK and configure PATH
       curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
       tar -xf google-cloud-cli-linux-x86_64.tar.gz
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
 
-      # Authenticate with GCP
       printf "%s" "$GOOGLE_CREDENTIALS" > key.json
       gcloud auth activate-service-account --key-file=key.json
       gcloud config set project "$PROJECT_ID"
-
-      # ✅ Login to Artifact Registry directly
       echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://$REGION-docker.pkg.dev
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
-      # Delete all images in Artifact Registry repo (digests + tags)
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
       EXISTING_IMAGES=$(gcloud artifacts docker images list "$REPO_PATH" --format="get(version)" || true)
       for image in $EXISTING_IMAGES; do
         gcloud artifacts docker images delete "$REPO_PATH@$image" --quiet --delete-tags || true
       done
 
-      # Pull from GHCR
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
-
-      # Tag and push to GCP Artifact Registry
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
         "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
-
       docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
 
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
@@ -171,8 +174,8 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    always_run = "${timestamp()}"
+    ghcr_digest = data.external.ghcr_digest.result["digest"]
   }
 
-  depends_on = [ google_artifact_registry_repository.vault_sync_repo ]
+  depends_on = [google_artifact_registry_repository.vault_sync_repo]
 }
