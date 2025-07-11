@@ -148,7 +148,7 @@ data "external" "gcp_digest" {
       gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet
       docker pull ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest > /dev/null 2>&1 || echo '{"digest": "none"}' && exit 0
       DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)
-      echo "{\"digest\": \"${DIGEST}\"}"
+      echo "{\"digest\": \\"${DIGEST}\\"}"
     EOF
   ]
 }
