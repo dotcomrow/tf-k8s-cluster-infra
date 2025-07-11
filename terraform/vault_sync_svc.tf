@@ -55,10 +55,6 @@ resource "google_project_iam_member" "secret_manager_grant" {
   member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
 }
 
-locals {
-  image_tag = data.external.ghcr_tag.result.tag
-}
-
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
   name     = "vault-sync-run-container"
   location = var.region
