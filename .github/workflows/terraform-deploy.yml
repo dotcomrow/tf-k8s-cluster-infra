@@ -17,7 +17,7 @@ on:
           - state-cleanup
           - state-remove
       target_resource:
-        description: 'Terraform resource to remove from state (e.g., google_eventarc_trigger.secret_manager_trigger)'
+        description: 'Terraform resource to cleanup or remove from state (e.g., google_eventarc_trigger.secret_manager_trigger)'
         required: false
 
 permissions: write-all
