@@ -42,21 +42,17 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Install Terraform
+      - name: Download Terraform Locally
         if: ${{ github.event.inputs.mode == 'state-remove' }}
         run: |
-          echo "⬇️ Installing Terraform..."
-          
-          # Clean up existing terraform (directory or file)
-          if [ -e /usr/local/bin/terraform ]; then
-            echo "⚠️ Removing existing terraform at /usr/local/bin/terraform..."
-            sudo rm -rf /usr/local/bin/terraform
-          fi
+          echo "⬇️ Downloading Terraform binary locally..."
 
+          rm -rf ./terraform terraform.zip
           curl -fsSL https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip -o terraform.zip
           unzip -o -q terraform.zip
-          sudo mv terraform /usr/local/bin/
-          terraform -version
+
+          chmod +x terraform
+          ./terraform -version
 
       - name: Force remove broken resource from state
         if: ${{ github.event.inputs.mode == 'state-remove' }}
@@ -71,13 +67,13 @@ jobs:
             exit 1
           fi
 
-          echo "🔐 Logging into Terraform Cloud and initializing..."
-          terraform init -input=false
+          echo "🔐 Initializing Terraform Cloud remote backend..."
+          ./terraform init -input=false
 
           echo "🗑️ Removing $TARGET_RESOURCE from Terraform state..."
-          terraform state rm "$TARGET_RESOURCE"
+          ./terraform state rm "$TARGET_RESOURCE"
 
-          echo "✅ Done. You can now re-run apply safely."
+          echo "✅ Resource successfully removed from state."
 
       - name: Trigger Terraform State Cleanup for Broken Resource
         if: ${{ github.event.inputs.mode == 'state-cleanup' }}
