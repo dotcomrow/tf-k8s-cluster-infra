@@ -60,8 +60,13 @@ app.post('/sync-all', async (req: Request, res: Response) => {
 app.post('/', async (req: Request, res: Response) => {
   try {
     const event = req.body;
-    const secretVersion = event?.protoPayload?.resourceName;
+    let secretVersion = event?.protoPayload?.resourceName;
     if (!secretVersion) throw new Error("Missing secret version in event payload");
+
+    // Ensure we get the correct format
+    if (!secretVersion.includes("/versions/")) {
+      secretVersion = `${secretVersion}/versions/latest`;
+    }
 
     console.log("Accessing secret:", secretVersion);
     const [accessResponse] = await client.accessSecretVersion({ name: secretVersion });
@@ -80,7 +85,7 @@ app.post('/', async (req: Request, res: Response) => {
       },
       body: JSON.stringify({
         data: {
-          value: payload  // wrap the string inside an object
+          value: payload
         }
       }),
     });
