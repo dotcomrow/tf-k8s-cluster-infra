@@ -104,11 +104,15 @@ data "external" "ghcr_digest" {
     "bash", "-c",
     <<-EOT
       set -euo pipefail
+
       IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
       docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
       docker pull "$IMAGE" >/dev/null 2>&1
-      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
-      echo "{\"image_id\": \"$ID\"}"
+
+      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+
+      # Print only valid JSON to stdout
+      echo "{\"digest\": \"$DIGEST\"}"
     EOT
   ]
 }
