@@ -138,7 +138,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
 
     command = <<-EOT
       #!/bin/bash
-      set -euo pipefail
+      set -e
 
       # Setup directories for isolated gcloud and docker configs
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
