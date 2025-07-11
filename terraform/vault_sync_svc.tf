@@ -103,7 +103,14 @@ data "external" "ghcr_digest" {
   program = [
     "bash",
     "-c",
-    "set -e; docker image rm -f IMAGE 2>/dev/null || true; docker pull ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest > /dev/null; DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2); echo \"{\\\"digest\\\": \\\"$DIGEST\\\"}\""
+    <<-EOT
+      set -e
+      IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
+      docker image rm -f "$IMAGE" || true
+      docker pull "$IMAGE"
+      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+      echo "{\"digest\": \"$DIGEST\"}"
+    EOT
   ]
 }
 
