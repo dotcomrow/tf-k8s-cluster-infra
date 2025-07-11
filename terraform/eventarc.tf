@@ -1,4 +1,4 @@
-resource "google_eventarc_trigger" "vault_secret_manager_trigger" {
+resource "google_eventarc_trigger" "secret_manager_trigger" {
   name     = "vault-sync-trigger"
   location = var.region
   project  = google_project.infra.project_id
