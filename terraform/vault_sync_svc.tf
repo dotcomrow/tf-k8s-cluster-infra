@@ -118,13 +118,10 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
 }
 
 data "external" "ghcr_digest" {
-  program = ["bash", "-c", <<-EOT
-    set -euo pipefail
-
-    docker pull ghcr.io/${GITHUB_ORG}/vault-sync-run-container:latest > /dev/null
-    DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2)
-    echo "{\"digest\": \"${DIGEST}\"}"
-  EOT
+  program = [
+    "bash",
+    "-c",
+    "set -e; docker pull ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest > /dev/null; DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2); echo \"{\\\"digest\\\": \\\"$DIGEST\\\"}\""
   ]
 }
 
@@ -174,7 +171,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    ghcr_digest = data.external.ghcr_digest.result["digest"]
+    image_digest = data.external.ghcr_digest.result.digest
   }
 
   depends_on = [google_artifact_registry_repository.vault_sync_repo]
