@@ -32,7 +32,7 @@ resource "google_project_iam_member" "secret_manager_grant" {
 }
 
 locals {
-  ghcr_digest_tag = replace(data.external.ghcr_digest.result.digest, ":", "-")
+  ghcr_digest_tag = replace(data.external.ghcr_digest.result.image_id, ":", "-")
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
