@@ -109,10 +109,14 @@ data "external" "ghcr_digest" {
       docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
       docker pull "$IMAGE" >/dev/null 2>&1
 
-      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE" || true)
 
-      # Print only valid JSON to stdout
-      echo "{\"digest\": \"$DIGEST\"}"
+      if [ -z "$IMAGE_ID" ]; then
+        echo '{"error": "Failed to get GHCR image ID"}'
+        exit 1
+      fi
+
+      echo "{\"image_id\": \"$IMAGE_ID\"}"
     EOT
   ]
 }
