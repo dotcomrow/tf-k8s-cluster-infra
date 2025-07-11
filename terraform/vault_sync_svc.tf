@@ -103,12 +103,12 @@ data "external" "ghcr_digest" {
   program = [
     "bash", "-c",
     <<-EOT
-      set -e
+      set -euo pipefail
       IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" || true
-      docker pull "$IMAGE" > /dev/null
-      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
-      echo "{\"image_id\": \"$IMAGE_ID\"}"
+      docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
+      docker pull "$IMAGE" >/dev/null 2>&1
+      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
+      echo "{\"image_id\": \"$ID\"}"
     EOT
   ]
 }
@@ -117,23 +117,31 @@ data "external" "gcp_digest" {
   program = [
     "bash", "-c",
     <<-EOT
-      set -e
+      set -euo pipefail
       IMAGE="${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" || true
+      docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
+
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
-      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz > /dev/null
-      tar -xf google-cloud-cli-linux-x86_64.tar.gz > /dev/null
+
+      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz >/dev/null
+      tar -xf google-cloud-cli-linux-x86_64.tar.gz >/dev/null
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
+
       printf '%s' '${var.GOOGLE_CREDENTIALS}' > key.json
-      gcloud auth activate-service-account --key-file=key.json > /dev/null
-      gcloud config set project '${google_project.infra.project_id}' > /dev/null
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev > /dev/null
-      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet > /dev/null
-      docker pull "$IMAGE" > /dev/null
-      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
-      echo "{\"image_id\": \"$IMAGE_ID\"}"
+      gcloud auth activate-service-account --key-file=key.json >/dev/null
+      gcloud config set project '${google_project.infra.project_id}' >/dev/null
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev >/dev/null
+      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet >/dev/null
+
+      if ! docker pull "$IMAGE" >/dev/null 2>&1; then
+        echo "{\"image_id\": \"none\"}"
+        exit 0
+      fi
+
+      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
+      echo "{\"image_id\": \"$ID\"}"
     EOT
   ]
 }
