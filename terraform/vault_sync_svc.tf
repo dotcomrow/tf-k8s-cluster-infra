@@ -123,6 +123,10 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
   depends_on = [google_project_service.project_service]
 }
 
+output "selected_image_tag" {
+  value = local.image_tag
+}
+
 resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
@@ -158,7 +162,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
       # Validate vars
-      if [[ -z "$TAG" || -z "$IMAGE_NAME" || -z "$GHCR_USER" ]]; then
+      if [ -z "$TAG" ] || [ -z "$IMAGE_NAME" ] || [ -z "$GHCR_USER" ]; then
         echo "❌ One or more required variables are empty: TAG=$TAG, IMAGE_NAME=$IMAGE_NAME, GHCR_USER=$GHCR_USER"
         exit 1
       fi
