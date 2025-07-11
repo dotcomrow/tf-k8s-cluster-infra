@@ -11,6 +11,10 @@ resource "null_resource" "get_ghcr_tag" {
         | head -n 1 > ${path.module}/.ghcr_tag.txt
     EOT
   }
+
+  triggers = {
+    always_run = timestamp()
+  }
 }
 
 data "local_file" "ghcr_tag_file" {
@@ -173,5 +177,8 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     create_before_destroy = true
   }
 
-  depends_on = [google_artifact_registry_repository.vault_sync_repo]
+  depends_on = [
+    google_artifact_registry_repository.vault_sync_repo,
+    null_resource.fetch_ghcr_tag
+  ]
 }
