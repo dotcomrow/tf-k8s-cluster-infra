@@ -42,17 +42,35 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
-      - name: Download Terraform Locally
+      - name: Auto-install correct Terraform version for workspace
         if: ${{ github.event.inputs.mode == 'state-remove' }}
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
         run: |
-          echo "⬇️ Downloading Terraform binary locally..."
+          set -e
+          echo "🔍 Fetching Terraform version from Terraform Cloud workspace..."
 
-          rm -rf ./terraform terraform.zip
-          curl -fsSL https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip -o terraform.zip
+          ORG="${{ github.repository_owner }}"
+          WORKSPACE="${{ github.event.repository.name }}"
+
+          VERSION=$(curl -s \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            https://app.terraform.io/api/v2/organizations/$ORG/workspaces/$WORKSPACE \
+            | jq -r '.data.attributes."terraform-version"')
+
+          if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+            echo "❌ Could not detect Terraform version for workspace."
+            exit 1
+          fi
+
+          echo "⬇️ Downloading Terraform v$VERSION..."
+          rm -rf terraform terraform.zip
+          curl -fsSL "https://releases.hashicorp.com/terraform/${VERSION}/terraform_${VERSION}_linux_amd64.zip" -o terraform.zip
           unzip -o -q terraform.zip
-
           chmod +x terraform
           ./terraform -version
+          echo "✅ Terraform v$VERSION installed successfully."
 
       - name: Force remove broken resource from state
         if: ${{ github.event.inputs.mode == 'state-remove' }}
