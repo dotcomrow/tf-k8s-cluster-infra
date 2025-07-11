@@ -1,3 +1,18 @@
+data "external" "ghcr_tag" {
+  program = [
+    "bash", "-c",
+    <<-EOT
+      set -e
+      curl -s -H "Accept: application/vnd.github.v3+json" \
+        "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
+        | jq -r '.tags[] | select(startswith("ts-"))' \
+        | sort -r \
+        | head -n 1 \
+        | jq -R '{tag: .}'
+    EOT
+  ]
+}
+
 resource "google_project_service" "project_service" {
   count = length(var.apis)
 
@@ -32,7 +47,7 @@ resource "google_project_iam_member" "secret_manager_grant" {
 }
 
 locals {
-  ghcr_digest_tag = replace(data.external.ghcr_digest.result.digest, ":", "-")
+  image_tag = data.external.ghcr_tag.result.tag
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
@@ -45,7 +60,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.ghcr_digest_tag}"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -99,54 +114,6 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
   depends_on = [google_project_service.project_service]
 }
 
-data "external" "ghcr_digest" {
-  program = [
-    "bash", "-c",
-    <<-EOT
-      set -euo pipefail
-      IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
-      docker pull "$IMAGE" >/dev/null
-      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
-      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
-      echo "{\"image_id\": \"$ID\", \"digest\": \"$DIGEST\"}"
-    EOT
-  ]
-}
-
-data "external" "gcp_digest" {
-  program = [
-    "bash", "-c",
-    <<-EOT
-      set -euo pipefail
-      IMAGE="${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
-
-      export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
-      export DOCKER_CONFIG="$(pwd)/.docker"
-      mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
-
-      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz >/dev/null
-      tar -xf google-cloud-cli-linux-x86_64.tar.gz >/dev/null
-      export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
-
-      printf '%s' '${var.GOOGLE_CREDENTIALS}' > key.json
-      gcloud auth activate-service-account --key-file=key.json >/dev/null
-      gcloud config set project '${google_project.infra.project_id}' >/dev/null
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev >/dev/null
-      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet >/dev/null
-
-      if ! docker pull "$IMAGE" >/dev/null 2>&1; then
-        echo "{\"image_id\": \"none\"}"
-        exit 0
-      fi
-
-      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
-      echo "{\"image_id\": \"$ID\"}"
-    EOT
-  ]
-}
-
 resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
@@ -155,6 +122,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       IMAGE_NAME   = "vault-sync-run-container"
       REGION       = var.region
       PROJECT_ID   = google_project.infra.project_id
+      TAG          = local.image_tag
     }
 
     command = <<-EOT
@@ -173,27 +141,25 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
 
-      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" --filter="tags:latest" --format="get(digest)" || true)
-      if [[ -n "$LATEST_DIGEST" ]]; then
-        gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
-      fi
-      docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
+      docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
 
-      # Push the GHCR image to GCP
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:sha256-$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" | cut -d@ -f2)"
-      docker push "$REPO_PATH:sha256-$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" | cut -d@ -f2)"
+      # Delete all images in GCP registry (optional cleanup)
+      for digest in $(gcloud artifacts docker images list "$REPO_PATH" --format="get(digest)" || true); do
+        gcloud artifacts docker images delete "$REPO_PATH@$digest" --quiet --delete-tags || true
+      done
 
-      # Also push as :latest (optional, for GCP UI access or local use)
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:latest"
-      docker push "$REPO_PATH:latest"
+      # Push to GCP with timestamp tag
+      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG" "$REPO_PATH:$TAG"
+      docker push "$REPO_PATH:$TAG"
 
-      echo "✅ GHCR image successfully synced to GCP Artifact Registry."
+      echo "✅ GHCR image pushed to GCP with tag $TAG"
+
+      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   }
 
   triggers = {
-    source_image_id = data.external.ghcr_digest.result.image_id
-    target_image_id = data.external.gcp_digest.result.image_id
+    tag = local.image_tag
   }
 
   lifecycle {
