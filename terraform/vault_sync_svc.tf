@@ -127,17 +127,17 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
       GHCR_USER    = var.GITHUB_ORG
-      PROJECT_NAME = "vault-sync-run-container"
-      IMAGE_NAME   = "vault-sync-run-container"
-      REGION       = var.region
-      PROJECT_ID   = google_project.infra.project_id
-      TAG          = local.image_tag
       GHCR_PAT     = var.GHCR_PAT
+      PROJECT_ID   = google_project.infra.project_id
+      REGION       = var.region
+      IMAGE_NAME   = "vault-sync-run-container"
+      TAG          = local.image_tag
     }
 
     command = <<-EOT
       #!/bin/bash
       set -e
+
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
@@ -157,25 +157,28 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       # Authenticate to GHCR
       echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-      # Define Artifact Registry path (image name must match repo name)
-      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/vault-sync-run-container"
+      # Validate vars
+      if [[ -z "$TAG" || -z "$IMAGE_NAME" || -z "$GHCR_USER" ]]; then
+        echo "❌ One or more required variables are empty: TAG=$TAG, IMAGE_NAME=$IMAGE_NAME, GHCR_USER=$GHCR_USER"
+        exit 1
+      fi
 
-      # Pull from GHCR
-      docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
+      GHCR_IMAGE="ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
+      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME"
 
-      # Delete all existing GCP images (optional)
+      echo "📦 Pulling from GHCR: $GHCR_IMAGE"
+      docker pull "$GHCR_IMAGE"
+
+      echo "🧹 Cleaning up existing images in Artifact Registry..."
       for digest in $(gcloud artifacts docker images list "$REPO_PATH" --format="get(digest)" || true); do
         gcloud artifacts docker images delete "$REPO_PATH@$digest" --quiet --delete-tags || true
       done
 
-      # Push to GCP
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG" "$REPO_PATH:$TAG"
+      echo "🚀 Tagging and pushing image to GCP Artifact Registry: $REPO_PATH:$TAG"
+      docker tag "$GHCR_IMAGE" "$REPO_PATH:$TAG"
       docker push "$REPO_PATH:$TAG"
 
-      echo "✅ GHCR image pushed to GCP with tag $TAG"
-
-      # Clean up Docker local images
-      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
+      echo "✅ GHCR image successfully pushed to GCP with tag $TAG"
     EOT
   }
 
@@ -189,3 +192,4 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
 
   depends_on = [google_artifact_registry_repository.vault_sync_repo]
 }
+
