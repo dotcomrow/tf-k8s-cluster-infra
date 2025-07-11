@@ -109,6 +109,7 @@ data "external" "ghcr_digest" {
       docker pull "$IMAGE" 1>&2
       DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
       echo "{\"digest\": \"$DIGEST\"}"
+      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   ]
 }
@@ -118,7 +119,7 @@ data "external" "gcp_digest" {
     "bash", "-c",
     <<-EOT
       set -e
-      docker image rm -f IMAGE 2>/dev/null || true
+      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
@@ -127,14 +128,15 @@ data "external" "gcp_digest" {
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
       printf '%s' '${var.GOOGLE_CREDENTIALS}' > key.json
       gcloud auth activate-service-account --key-file=key.json 1>&2
-      gcloud config set project 'tf-k8s-cluster-infra-9734' 1>&2
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://us-east1-docker.pkg.dev 1>&2
-      gcloud auth configure-docker us-east1-docker.pkg.dev --quiet 1>&2
-      if ! docker pull "us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
+      gcloud config set project '${google_project.infra.project_id}' 1>&2
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev 1>&2
+      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet 1>&2
+      if ! docker pull "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
         echo "{\"digest\": \"none\"}"
         exit 0
       fi
-      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
+      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
+      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   ]
 }
@@ -174,6 +176,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:latest"
       docker push "$REPO_PATH:latest"
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
+      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   }
 
