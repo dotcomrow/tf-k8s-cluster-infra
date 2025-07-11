@@ -50,14 +50,6 @@ resource "google_service_account" "eventarc_service_account" {
   project      = google_project.infra.project_id
 }
 
-resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
-  service  = google_cloud_run_v2_service.vault_sync_svc.name
-  location = var.region
-  project  = google_project.infra.project_id
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.eventarc_service_account.email}"
-}
-
 resource "google_pubsub_topic" "secret_manager_events" {
   name    = "${var.project_name}-secret-events"
   project = google_project.infra.project_id
