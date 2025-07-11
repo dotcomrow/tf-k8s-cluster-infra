@@ -14,6 +14,10 @@ on:
           - rebuild-all
           - rebuild-vms
           - apply-patch
+          - state-cleanup
+      target_resource:
+        description: 'Terraform resource address to target (only for state-cleanup mode)'
+        required: false
 
 permissions: write-all
 
@@ -36,6 +40,59 @@ jobs:
         with:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
+
+      - name: Trigger Terraform State Cleanup for Broken Resource
+        if: ${{ github.event.inputs.mode == 'state-cleanup' }}
+        run: |
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          ORG_NAME="${{ github.repository_owner }}"
+          TOKEN="${{ secrets.TFE_TOKEN }}"
+          TARGET_RESOURCE="${{ github.event.inputs.target_resource }}"
+
+          if [[ -z "$TARGET_RESOURCE" ]]; then
+            echo "❌ Error: target_resource input is required for state-cleanup mode."
+            exit 1
+          fi
+
+          echo "🔍 Looking up workspace ID for $WORKSPACE_NAME..."
+          WORKSPACE_ID=$(curl -s \
+            --header "Authorization: Bearer $TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME | jq -r '.data.id')
+
+          echo "🧹 Generating destroy plan targeting $TARGET_RESOURCE"
+          DATA=$(jq -n \
+            --arg wid "$WORKSPACE_ID" \
+            --arg target "$TARGET_RESOURCE" \
+            '{
+              data: {
+                attributes: {
+                  "is-destroy": true,
+                  "message": "State cleanup run from GitHub Actions",
+                  "target-addrs": [$target]
+                },
+                type: "runs",
+                relationships: {
+                  workspace: {
+                    data: {
+                      type: "workspaces",
+                      id: $wid
+                    }
+                  }
+                }
+              }
+            }')
+
+          echo "🚀 Sending destroy run to Terraform Cloud..."
+          curl -s -X POST \
+            --header "Authorization: Bearer $TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$DATA" \
+            https://app.terraform.io/api/v2/runs | jq
+
+          echo "⏳ Waiting 90 seconds for destroy to propagate..."
+          sleep 90
+
 
       - name: Force stop Proxmox VMs for rebuild
         if: ${{ github.event.inputs.mode == 'rebuild-vms' }}
