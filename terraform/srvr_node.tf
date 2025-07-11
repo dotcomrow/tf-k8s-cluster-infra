@@ -130,6 +130,6 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   depends_on = [ 
     null_resource.download_iso, 
     null_resource.ghcr_to_gcp_image_sync, 
-    google_cloud_run_service_iam_policy.noauth-user-profile
+    google_cloud_run_service_iam_member.noauth_user
   ]
 }
