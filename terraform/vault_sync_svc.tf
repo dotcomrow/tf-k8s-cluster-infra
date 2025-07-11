@@ -101,14 +101,27 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
 
 data "external" "ghcr_digest" {
   program = [
-    "bash",
-    "-c",
+    "bash", "-c",
     <<-EOT
       set -e
       IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" || true
-      docker pull "$IMAGE"
+
+      # Make 100% sure it's removed
+      docker image rm -f "$IMAGE" > /dev/null 2>&1 || true
+      docker system prune -af > /dev/null 2>&1 || true
+
+      # Force pull latest version
+      docker pull "$IMAGE" > /dev/null
+
+      # Capture digest
       DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+
+      # Fallback or error if digest is missing
+      if [ -z "$DIGEST" ]; then
+        echo "Failed to get digest" >&2
+        exit 1
+      fi
+
       echo "{\"digest\": \"$DIGEST\"}"
     EOT
   ]
