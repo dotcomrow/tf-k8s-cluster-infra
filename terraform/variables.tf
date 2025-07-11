@@ -277,13 +277,13 @@ variable "VAULT_ADDRESS" {
 variable "VAULT_ROLE_ID" {
   description = "Vault role id"
   type        = string
-  nullable = false
+  default     = "value"
 }
 
 variable "VAULT_SECRET_ID" {
   description = "Vault secret id"
   type        = string
-  nullable = false
+  default     = "value"
 }
 
 variable "apis" {
