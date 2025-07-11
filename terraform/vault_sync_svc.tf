@@ -192,7 +192,8 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    digest_comparison_hash = "${data.external.ghcr_digest.result.digest}-${data.external.gcp_digest.result.digest}"
+    source_digest = data.external.ghcr_digest.result.digest
+    target_digest = data.external.gcp_digest.result.digest
   }
 
   lifecycle {
