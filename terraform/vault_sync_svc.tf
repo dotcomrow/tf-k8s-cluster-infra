@@ -105,11 +105,10 @@ data "external" "ghcr_digest" {
     <<-EOT
       set -e
       IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
-      docker image rm -f "$IMAGE" 2>/dev/null || true
-      docker pull "$IMAGE" 1>&2
-      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
-      echo "{\"digest\": \"$DIGEST\"}"
-      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
+      docker image rm -f "$IMAGE" || true
+      docker pull "$IMAGE" > /dev/null
+      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
+      echo "{\"image_id\": \"$IMAGE_ID\"}"
     EOT
   ]
 }
@@ -119,24 +118,22 @@ data "external" "gcp_digest" {
     "bash", "-c",
     <<-EOT
       set -e
-      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
+      IMAGE="${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
+      docker image rm -f "$IMAGE" || true
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
-      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz 1>&2
-      tar -xf google-cloud-cli-linux-x86_64.tar.gz 1>&2
+      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz > /dev/null
+      tar -xf google-cloud-cli-linux-x86_64.tar.gz > /dev/null
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
       printf '%s' '${var.GOOGLE_CREDENTIALS}' > key.json
-      gcloud auth activate-service-account --key-file=key.json 1>&2
-      gcloud config set project '${google_project.infra.project_id}' 1>&2
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev 1>&2
-      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet 1>&2
-      if ! docker pull "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
-        echo "{\"digest\": \"none\"}"
-        exit 0
-      fi
-      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
-      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
+      gcloud auth activate-service-account --key-file=key.json > /dev/null
+      gcloud config set project '${google_project.infra.project_id}' > /dev/null
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev > /dev/null
+      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet > /dev/null
+      docker pull "$IMAGE" > /dev/null
+      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
+      echo "{\"image_id\": \"$IMAGE_ID\"}"
     EOT
   ]
 }
@@ -181,8 +178,8 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    source_digest = data.external.ghcr_digest.result.digest
-    target_digest = data.external.gcp_digest.result.digest
+    source_image_id = data.external.ghcr_digest.result.image_id
+    target_image_id = data.external.gcp_digest.result.image_id
   }
 
   lifecycle {
