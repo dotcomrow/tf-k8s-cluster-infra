@@ -121,7 +121,7 @@ data "external" "ghcr_digest" {
   program = [
     "bash",
     "-c",
-    "set -e; docker pull ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest > /dev/null; DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2); echo \"{\\\"digest\\\": \\\"$DIGEST\\\"}\""
+    "set -e; docker image rm -f IMAGE 2>/dev/null || true;  docker pull ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest > /dev/null; DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest | cut -d@ -f2); echo \"{\\\"digest\\\": \\\"$DIGEST\\\"}\""
   ]
 }
 
@@ -130,6 +130,7 @@ data "external" "gcp_digest" {
     "bash", "-c",
     <<-EOT
       set -e
+      docker image rm -f IMAGE 2>/dev/null || true
 
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
@@ -186,10 +187,14 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
-      EXISTING_IMAGES=$(gcloud artifacts docker images list "$REPO_PATH" --format="get(version)" || true)
-      for image in $EXISTING_IMAGES; do
-        gcloud artifacts docker images delete "$REPO_PATH@$image" --quiet --delete-tags || true
-      done
+      # ✅ Delete only the previous :latest digest (safe)
+      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" \
+        --filter="tags:latest" \
+        --format="get(digest)" || true)
+
+      if [[ -n "$LATEST_DIGEST" ]]; then
+        gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
+      fi
 
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
