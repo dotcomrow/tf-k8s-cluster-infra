@@ -104,19 +104,12 @@ data "external" "ghcr_digest" {
     "bash", "-c",
     <<-EOT
       set -euo pipefail
-
       IMAGE="ghcr.io/${var.GITHUB_ORG}/vault-sync-run-container:latest"
       docker image rm -f "$IMAGE" >/dev/null 2>&1 || true
-      docker pull "$IMAGE" >/dev/null 2>&1
-
-      IMAGE_ID=$(docker inspect --format='{{.Id}}' "$IMAGE" || true)
-
-      if [ -z "$IMAGE_ID" ]; then
-        echo '{"error": "Failed to get GHCR image ID"}'
-        exit 1
-      fi
-
-      echo "{\"image_id\": \"$IMAGE_ID\"}"
+      docker pull "$IMAGE" >/dev/null
+      ID=$(docker inspect --format='{{.Id}}' "$IMAGE")
+      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
+      echo "{\"image_id\": \"$ID\", \"digest\": \"$DIGEST\"}"
     EOT
   ]
 }
