@@ -4,6 +4,7 @@ data "external" "ghcr_tag" {
     <<-EOT
       set -e
       curl -s -H "Accept: application/vnd.github.v3+json" \
+        -u "dotcomrow:${GHCR_TOKEN}" \
         "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
         | jq -r '.tags[] | select(startswith("ts-"))' \
         | sort -r \
@@ -123,6 +124,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       REGION       = var.region
       PROJECT_ID   = google_project.infra.project_id
       TAG          = local.image_tag
+      GHCR_PAT     = var.GHCR_PAT
     }
 
     command = <<-EOT
@@ -141,6 +143,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
 
+      echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
 
       # Delete all images in GCP registry (optional cleanup)

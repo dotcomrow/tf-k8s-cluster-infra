@@ -306,3 +306,9 @@ variable "apis" {
     "logging.googleapis.com"                     # Optional, for better visibility
   ]
 }
+
+variable "GHCR_PAT" {
+  description = "GitHub Container Registry Personal Access Token"
+  type        = string
+  default     = "your-ghcr-personal-access-token"
+}
