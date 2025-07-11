@@ -135,22 +135,22 @@ data "external" "gcp_digest" {
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
 
-      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
-      tar -xf google-cloud-cli-linux-x86_64.tar.gz
+      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz 1>&2
+      tar -xf google-cloud-cli-linux-x86_64.tar.gz 1>&2
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
 
       printf '%s' '${var.GOOGLE_CREDENTIALS}' > key.json
-      gcloud auth activate-service-account --key-file=key.json
-      gcloud config set project '${google_project.infra.project_id}'
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev
-      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet
+      gcloud auth activate-service-account --key-file=key.json 1>&2
+      gcloud config set project 'tf-k8s-cluster-infra-9734' 1>&2
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://us-east1-docker.pkg.dev 1>&2
+      gcloud auth configure-docker us-east1-docker.pkg.dev --quiet 1>&2
 
-      if ! docker pull "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
-        echo '{"digest": "none"}'
+      if ! docker pull "us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
+        echo "{\"digest\": \"none\"}"
         exit 0
       fi
 
-      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
+      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
     EOT
   ]
 }
