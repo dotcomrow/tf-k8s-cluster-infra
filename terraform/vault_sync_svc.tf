@@ -1,17 +1,25 @@
-data "external" "ghcr_tag" {
-  program = [
-    "bash", "-c",
-    <<-EOT
-      set -e
+# Write tag to file using a null_resource + local-exec
+resource "null_resource" "get_ghcr_tag" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -euo pipefail
       curl -s -H "Accept: application/vnd.github.v3+json" \
-        -u "dotcomrow:${var.GHCR_PAT}" \
+        -u "${var.GITHUB_ORG}:${var.GHCR_PAT}" \
         "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
         | jq -r '.tags[] | select(startswith("ts-"))' \
         | sort -r \
-        | head -n 1 \
-        | jq -R '{tag: .}'
+        | head -n 1 > ${path.module}/.ghcr_tag.txt
     EOT
-  ]
+  }
+}
+
+data "local_file" "ghcr_tag_file" {
+  depends_on = [null_resource.get_ghcr_tag]
+  filename   = "${path.module}/.ghcr_tag.txt"
+}
+
+locals {
+  image_tag = trimspace(data.local_file.ghcr_tag_file.content)
 }
 
 resource "google_project_service" "project_service" {
