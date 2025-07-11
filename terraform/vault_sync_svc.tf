@@ -4,7 +4,7 @@ data "external" "ghcr_tag" {
     <<-EOT
       set -e
       curl -s -H "Accept: application/vnd.github.v3+json" \
-        -u "dotcomrow:${GHCR_TOKEN}" \
+        -u "dotcomrow:${var.GHCR_PAT}" \
         "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
         | jq -r '.tags[] | select(startswith("ts-"))' \
         | sort -r \
