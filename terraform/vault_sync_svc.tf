@@ -31,6 +31,10 @@ resource "google_project_iam_member" "secret_manager_grant" {
   member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
 }
 
+locals {
+  ghcr_digest_tag = replace(data.external.ghcr_digest.result.digest, ":", "-")
+}
+
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
   name     = "vault-sync-run-container"
   location = var.region
@@ -41,7 +45,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${replace(data.external.ghcr_digest.result.digest, ":", "-")}"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.ghcr_digest_tag}"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -168,8 +172,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    source_digest = data.external.ghcr_digest.result.digest
-    target_digest = data.external.gcp_digest.result.digest
+    digest_comparison_hash = "${data.external.ghcr_digest.result.digest}-${data.external.gcp_digest.result.digest}"
   }
 
   lifecycle {
