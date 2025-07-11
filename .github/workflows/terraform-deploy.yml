@@ -15,8 +15,9 @@ on:
           - rebuild-vms
           - apply-patch
           - state-cleanup
+          - state-remove
       target_resource:
-        description: 'Terraform resource address to target (only for state-cleanup mode)'
+        description: 'Terraform resource to remove from state (e.g., google_eventarc_trigger.secret_manager_trigger)'
         required: false
 
 permissions: write-all
@@ -40,6 +41,27 @@ jobs:
         with:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
+
+      - name: Force remove broken resource from state
+        if: ${{ github.event.inputs.mode == 'state-remove' }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TFE_TOKEN }}
+        run: |
+          set -e
+
+          TARGET_RESOURCE="${{ github.event.inputs.target_resource }}"
+          if [[ -z "$TARGET_RESOURCE" ]]; then
+            echo "❌ You must specify target_resource input for state-remove mode."
+            exit 1
+          fi
+
+          echo "🔐 Logging into Terraform Cloud and initializing..."
+          terraform init -input=false
+
+          echo "🗑️ Removing $TARGET_RESOURCE from Terraform state..."
+          terraform state rm "$TARGET_RESOURCE"
+
+          echo "✅ Done. You can now re-run apply safely."
 
       - name: Trigger Terraform State Cleanup for Broken Resource
         if: ${{ github.event.inputs.mode == 'state-cleanup' }}
