@@ -141,30 +141,40 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
+
+      # Install gcloud CLI
       curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
       tar -xf google-cloud-cli-linux-x86_64.tar.gz
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
+
+      # Authenticate to GCP
       printf "%s" "$GOOGLE_CREDENTIALS" > key.json
       gcloud auth activate-service-account --key-file=key.json
       gcloud config set project "$PROJECT_ID"
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://$REGION-docker.pkg.dev
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin "https://$REGION-docker.pkg.dev"
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
 
+      # Authenticate to GHCR
       echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      # Define Artifact Registry path (image name must match repo name)
+      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/vault-sync-run-container"
+
+      # Pull from GHCR
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
 
-      # Delete all images in GCP registry (optional cleanup)
+      # Delete all existing GCP images (optional)
       for digest in $(gcloud artifacts docker images list "$REPO_PATH" --format="get(digest)" || true); do
         gcloud artifacts docker images delete "$REPO_PATH@$digest" --quiet --delete-tags || true
       done
 
-      # Push to GCP with timestamp tag
+      # Push to GCP
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG" "$REPO_PATH:$TAG"
       docker push "$REPO_PATH:$TAG"
 
       echo "✅ GHCR image pushed to GCP with tag $TAG"
 
+      # Clean up Docker local images
       docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   }
@@ -177,8 +187,5 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     create_before_destroy = true
   }
 
-  depends_on = [
-    google_artifact_registry_repository.vault_sync_repo,
-    null_resource.get_ghcr_tag
-  ]
+  depends_on = [google_artifact_registry_repository.vault_sync_repo]
 }
