@@ -172,6 +172,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://$REGION-docker.pkg.dev
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
+
       LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" --filter="tags:latest" --format="get(digest)" || true)
       if [[ -n "$LATEST_DIGEST" ]]; then
         gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
@@ -187,7 +188,6 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       docker push "$REPO_PATH:latest"
 
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
-      docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
   }
 
