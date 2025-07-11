@@ -145,14 +145,12 @@ data "external" "gcp_digest" {
       echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://${var.region}-docker.pkg.dev
       gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet
 
-      REPO="${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container"
-
-      if ! docker pull "$REPO:latest" > /dev/null 2>&1; then
+      if ! docker pull "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest" > /dev/null 2>&1; then
         echo '{"digest": "none"}'
         exit 0
       fi
 
-      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' $REPO:latest | cut -d@ -f2)\"}"
+      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)\"}"
     EOT
   ]
 }
