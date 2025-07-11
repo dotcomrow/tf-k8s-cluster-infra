@@ -13,6 +13,7 @@ on:
           - apply-vms
           - rebuild-all
           - rebuild-vms
+          - apply-patch
 
 permissions: write-all
 
@@ -122,6 +123,14 @@ jobs:
         run: |
           echo "🕐 Waiting 180 seconds to allow destroy to complete..."
           sleep 180
+
+      - name: Trigger Lightweight Terraform Apply (patch/fix only)
+        if: ${{ github.event.inputs.mode == 'apply-patch' }}
+        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
+        with:
+          workspace: ${{ github.event.repository.name }}
+          configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
+          plan_only: false
 
       - name: Trigger Terraform Apply
         uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
