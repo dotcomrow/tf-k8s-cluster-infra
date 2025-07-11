@@ -32,7 +32,7 @@ resource "google_project_iam_member" "secret_manager_grant" {
 }
 
 locals {
-  ghcr_digest_tag = replace(data.external.ghcr_digest.result.image_id, ":", "-")
+  ghcr_digest_tag = replace(data.external.ghcr_digest.result.digest, ":", "-")
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
@@ -184,10 +184,15 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
         gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
       fi
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/$GHCR_USER/$IMAGE_NAME:latest | cut -d@ -f2 | sed 's/:/-/')"
-      docker push "$REPO_PATH:$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/$GHCR_USER/$IMAGE_NAME:latest | cut -d@ -f2 | sed 's/:/-/')"
+
+      # Push the GHCR image to GCP
+      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:sha256-$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" | cut -d@ -f2)"
+      docker push "$REPO_PATH:sha256-$(docker inspect --format='{{index .RepoDigests 0}}' "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" | cut -d@ -f2)"
+
+      # Also push as :latest (optional, for GCP UI access or local use)
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:latest"
       docker push "$REPO_PATH:latest"
+
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
       docker images --format '{{.Repository}}:{{.ID}}' | grep -v '^hashicorp/tfci:' | cut -d: -f2 | xargs -r docker rmi -f
     EOT
