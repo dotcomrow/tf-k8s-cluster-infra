@@ -197,6 +197,14 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
 
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
         "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
+
+      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" \
+        --filter="tags:latest" \
+        --format="get(digest)" || true)
+
+      if [[ -n "$LATEST_DIGEST" ]]; then
+        gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
+      fi
       
       docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
       docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
