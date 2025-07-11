@@ -48,7 +48,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
+            image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.ghcr_image_digest_tag}"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -112,6 +112,11 @@ data "external" "ghcr_digest" {
   ]
 }
 
+locals {
+  ghcr_image_digest_tag = replace(data.external.ghcr_digest.result.digest, ":", "-")
+}
+
+
 data "external" "gcp_digest" {
   program = [
     "bash", "-c",
@@ -158,7 +163,6 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       #!/bin/bash
       set -e
 
-      # Setup directories for isolated gcloud and docker configs
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
       export DOCKER_CONFIG="$(pwd)/.docker"
       mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
@@ -174,32 +178,24 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME"
-      # ✅ Delete only the previous :latest digest (safe)
-      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" \
-        --filter="tags:latest" \
-        --format="get(digest)" || true)
 
+      # Remove old :latest digest safely
+      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" --filter="tags:latest" --format="get(digest)" || true)
       if [[ -n "$LATEST_DIGEST" ]]; then
         gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
       fi
 
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
-        "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
 
-      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
-        "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
+      # Tag by digest
+      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/$GHCR_USER/$IMAGE_NAME:latest | cut -d@ -f2 | sed 's/:/-/')"
 
-      LATEST_DIGEST=$(gcloud artifacts docker images list "$REPO_PATH" \
-        --filter="tags:latest" \
-        --format="get(digest)" || true)
+      # Push by digest tag
+      docker push "$REPO_PATH:$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/$GHCR_USER/$IMAGE_NAME:latest | cut -d@ -f2 | sed 's/:/-/')"
 
-      if [[ -n "$LATEST_DIGEST" ]]; then
-        gcloud artifacts docker images delete "$REPO_PATH@$LATEST_DIGEST" --quiet --delete-tags || true
-      fi
-      
-      docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
-      docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
+      # Push :latest for Cloud Run
+      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" "$REPO_PATH:latest"
+      docker push "$REPO_PATH:latest"
 
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
     EOT
