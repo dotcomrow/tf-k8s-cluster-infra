@@ -41,7 +41,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${replace(data.external.ghcr_digest.result.digest, ":", "-")}"
 
       env {
         name  = "GCP_PROJECT_ID"
