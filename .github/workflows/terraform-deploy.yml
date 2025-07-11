@@ -67,13 +67,29 @@ jobs:
             exit 1
           fi
 
-          echo "🔐 Initializing Terraform Cloud remote backend..."
-          ./terraform init -input=false
+          echo "📁 Setting up temporary backend config to connect to TFC..."
+          mkdir -p tfc-state-cleanup
+          cat > tfc-state-cleanup/backend.tf <<EOF
+          terraform {
+            backend "remote" {
+              organization = "${{ github.repository_owner }}"
 
-          echo "🗑️ Removing $TARGET_RESOURCE from Terraform state..."
-          ./terraform state rm "$TARGET_RESOURCE"
+              workspaces {
+                name = "${{ github.event.repository.name }}"
+              }
+            }
+          }
+          EOF
 
-          echo "✅ Resource successfully removed from state."
+          cd tfc-state-cleanup
+
+          echo "🔐 Initializing remote backend..."
+          ../terraform init -input=false
+
+          echo "🗑️ Removing $TARGET_RESOURCE from Terraform Cloud state..."
+          ../terraform state rm "$TARGET_RESOURCE"
+
+          echo "✅ Done. Resource removed from state successfully."
 
       - name: Trigger Terraform State Cleanup for Broken Resource
         if: ${{ github.event.inputs.mode == 'state-cleanup' }}
