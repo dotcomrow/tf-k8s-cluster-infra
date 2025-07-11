@@ -7,43 +7,36 @@ permissions: write-all
 
 jobs:
   deploy:
+    name: "Build and Deploy"
+    runs-on: ubuntu-latest
+
     env:
       TF_CLOUD_ORGANIZATION: ${{ github.repository_owner }}
       TF_API_TOKEN: ${{ secrets.TFE_TOKEN }}
-    name: "Build and Deploy"
-    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Get next version
-        uses: reecetech/version-increment@2023.9.3
-        id: version
-        with:
-          scheme: calver
-          increment: patch
+      # Generate GCP-compatible timestamp tag (ts-YYYYMMDD-HHMMSS)
+      - name: Set timestamp tag
+        id: set-tag
+        run: |
+          echo "tag=ts-$(date -u +%Y%m%d-%H%M%S)" >> "$GITHUB_OUTPUT"
 
-      # ────────────────────────────────────────────────
-      # ⛓️ GHCR Build & Push Steps
-      # ────────────────────────────────────────────────
-
+      # Login to GitHub Container Registry
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      # Build the Docker image with the timestamp tag
       - name: Build Docker image
         run: |
           cd src/vault-sync-svc
-          docker build -t ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):${{ steps.version.outputs.version }} .
+          docker build -t ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):${{ steps.set-tag.outputs.tag }} .
 
+      # Push the image to GHCR using the timestamp tag
       - name: Push Docker image to GHCR
         run: |
           cd src/vault-sync-svc
-          docker push ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):${{ steps.version.outputs.version }}
+          docker push ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):${{ steps.set-tag.outputs.tag }}
 
-      - name: Tag and Push 'latest' Docker image
-        run: |
-          cd src/vault-sync-svc
-          docker tag ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):${{ steps.version.outputs.version }} \
-                     ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):latest
-          docker push ghcr.io/${{ github.repository_owner }}/$(basename ${{ github.repository }}):latest
