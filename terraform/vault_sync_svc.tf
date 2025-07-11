@@ -152,8 +152,7 @@ data "external" "gcp_digest" {
         exit 0
       fi
 
-      DIGEST="$(docker inspect --format='{{index .RepoDigests 0}}' $REPO:latest | cut -d@ -f2)"
-      echo "{\"digest\": \"${DIGEST}\"}"
+      echo "{\"digest\": \"$(docker inspect --format='{{index .RepoDigests 0}}' $REPO:latest | cut -d@ -f2)\"}"
     EOT
   ]
 }
