@@ -1,14 +1,14 @@
-# Write tag to file using a null_resource + local-exec
 resource "null_resource" "get_ghcr_tag" {
   provisioner "local-exec" {
     command = <<-EOT
       set -e
+      echo "🔍 Fetching latest GHCR tag for vault-sync-run-container..."
       curl -s -H "Accept: application/vnd.github.v3+json" \
         -u "${var.GITHUB_ORG}:${var.GHCR_PAT}" \
         "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
         | jq -r '.tags[] | select(startswith("ts-"))' \
         | sort -r \
-        | head -n 1 > ${path.module}/.ghcr_tag.txt
+        | head -n 1 | tee ${path.module}/.ghcr_tag.txt
     EOT
   }
 
