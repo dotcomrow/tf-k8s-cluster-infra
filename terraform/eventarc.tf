@@ -1,5 +1,16 @@
-resource "google_eventarc_trigger" "secret_manager_trigger" {
-  name     = "vault-sync-trigger"
+locals {
+  secret_event_methods = {
+    create_secret = "google.cloud.secretmanager.v1.SecretManagerService.CreateSecret"
+    update_secret = "google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret"
+    delete_secret = "google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret"
+    add_version   = "google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion"
+  }
+}
+
+resource "google_eventarc_trigger" "vault_secret_events" {
+  for_each = local.secret_event_methods
+
+  name     = "vault-${each.key}-trigger"
   location = var.region
   project  = google_project.infra.project_id
 
@@ -15,7 +26,7 @@ resource "google_eventarc_trigger" "secret_manager_trigger" {
 
   matching_criteria {
     attribute = "methodName"
-    value     = "google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion"
+    value     = each.value
   }
 
   destination {
