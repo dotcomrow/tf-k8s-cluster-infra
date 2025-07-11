@@ -10,7 +10,7 @@ locals {
 resource "google_eventarc_trigger" "vault_secret_events" {
   for_each = local.secret_event_methods
 
-  name     = "vault-${each.key}-trigger"
+  name = "vault-${replace(each.key, "_", "-")}-trigger"
   location = var.region
   project  = google_project.infra.project_id
 
