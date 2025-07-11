@@ -95,7 +95,13 @@ app.post('/', async (req: Request, res: Response) => {
       case "google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion":
       case "google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret":
         console.log(`📥 Fetching secret version: ${secretPath}`);
-        const [accessResponse] = await client.accessSecretVersion({ name: secretPath });
+        let versionedSecretPath = secretPath;
+        if (!versionedSecretPath.includes("/versions/")) {
+          versionedSecretPath += "/versions/latest";
+        }
+
+        const [accessResponse] = await client.accessSecretVersion({ name: versionedSecretPath });
+
         const payload = accessResponse.payload?.data?.toString();
         if (!payload) throw new Error("Empty secret payload");
 
