@@ -194,7 +194,12 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       docker pull "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest"
       docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
         "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
+
+      docker tag "ghcr.io/$GHCR_USER/$IMAGE_NAME:latest" \
+        "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
+      
       docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:${local.image_tag}"
+      docker push "$REGION-docker.pkg.dev/$PROJECT_ID/$PROJECT_NAME/$IMAGE_NAME:latest"
 
       echo "✅ GHCR image successfully synced to GCP Artifact Registry."
     EOT
