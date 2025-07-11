@@ -88,6 +88,10 @@ app.post('/', async (req: Request, res: Response) => {
     console.log(`🔔 Received Secret Manager event: ${methodName}`);
 
     switch (methodName) {
+      case "google.cloud.secretmanager.v1.SecretManagerService.CreateSecret":
+        console.log(`📁 Creating placeholder in Vault for new secret: ${vaultPath}`);
+        await writeToVault(vaultPath, "__PLACEHOLDER__");
+        break;
       case "google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion":
       case "google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret":
         console.log(`📥 Fetching secret version: ${secretPath}`);
