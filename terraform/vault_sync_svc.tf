@@ -1,5 +1,5 @@
 locals {
-  image_tag = formatdate("YYYYMMDDHHmmss", timestamp())
+  image_tag = "latest"
 }
 
 resource "google_project_service" "project_service" {
@@ -57,7 +57,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
     containers {
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest"
 
       env {
         name  = "GCP_PROJECT_ID"
@@ -125,6 +125,34 @@ data "external" "ghcr_digest" {
   ]
 }
 
+data "external" "gcp_digest" {
+  program = [
+    "bash", "-c",
+    <<-EOF
+      set -e
+
+      # Setup directories for isolated gcloud and docker configs
+      export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
+      export DOCKER_CONFIG="$(pwd)/.docker"
+      mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
+
+      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
+      tar -xf google-cloud-cli-linux-x86_64.tar.gz
+      export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
+
+      printf "%s" "$GOOGLE_CREDENTIALS" > key.json
+      gcloud auth activate-service-account --key-file=key.json
+      gcloud config set project ${google_project.infra.project_id}
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin https://$REGION-docker.pkg.dev
+
+      gcloud auth configure-docker ${var.region}-docker.pkg.dev --quiet
+      docker pull ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest > /dev/null 2>&1 || echo '{"digest": "none"}' && exit 0
+      DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:latest | cut -d@ -f2)
+      echo "{\"digest\": \"${DIGEST}\"}"
+    EOF
+  ]
+}
+
 resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
     environment = {
@@ -171,7 +199,12 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   }
 
   triggers = {
-    image_digest = data.external.ghcr_digest.result.digest
+    source_digest = data.external.ghcr_digest.result.digest
+    target_digest = data.external.gcp_digest.result.digest
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 
   depends_on = [google_artifact_registry_repository.vault_sync_repo]
