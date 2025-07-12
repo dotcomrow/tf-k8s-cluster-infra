@@ -165,7 +165,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       fi
 
       GHCR_IMAGE="ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
-      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME"
+      REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME/$IMAGE_NAME"
 
       echo "📦 Pulling from GHCR: $GHCR_IMAGE"
       docker pull "$GHCR_IMAGE"
