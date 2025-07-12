@@ -2901,7 +2901,7 @@ write_files:
           }
           EOF
 
-          VAULT_TOKEN="$(jq -r '.root_token' /vault/data/init.json)" vault policy write vault-sync - <<EOF
+          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write vault-sync - <<EOF
           # KV v2 read, write, delete
           path "secret/data/*" {
             capabilities = ["create", "read", "update", "delete"]
