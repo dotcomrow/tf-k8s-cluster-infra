@@ -1,26 +1,28 @@
 locals {
-  existing_tag_file_content = try(trimspace(file("${path.module}/.ghcr_tag.txt")), "")
+  ghcr_tag_path = "${path.module}/.ghcr_tag.txt"
 }
 
 resource "null_resource" "get_ghcr_tag" {
   triggers = {
-    tag_value = local.existing_tag_file_content
+    always_run = timestamp()
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       set -e
+      echo "📦 Fetching GHCR tag..."
       curl -s -H "Authorization: Bearer ${var.GHCR_PAT}" \
         https://api.github.com/users/${var.GITHUB_ORG}/packages/container/vault-sync-run-container/versions \
         | jq -r '.[].metadata.container.tags[]' \
-        | grep '^ts-' | sort -r | head -n1 > ${path.module}/.ghcr_tag.txt
+        | grep '^ts-' | sort -r | head -n1 > "${local.ghcr_tag_path}"
+      echo "✅ Latest tag written to ${local.ghcr_tag_path}"
     EOT
   }
 }
 
 data "local_file" "ghcr_tag_file" {
   depends_on = [null_resource.get_ghcr_tag]
-  filename   = "${path.module}/.ghcr_tag.txt"
+  filename   = local.ghcr_tag_path
 }
 
 locals {
