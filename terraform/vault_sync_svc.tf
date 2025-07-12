@@ -124,7 +124,7 @@ resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
   service  = google_cloud_run_v2_service.vault_sync_svc.name
 
   role   = "roles/run.invoker"
-  member = "serviceAccount:service-${google_project.infra.number}@gcp-sa-eventarc.iam.gserviceaccount.com"
+  member = "serviceAccount:${google_service_account.eventarc_service_account.email}"
 }
 
 resource "google_artifact_registry_repository" "vault_sync_repo" {
