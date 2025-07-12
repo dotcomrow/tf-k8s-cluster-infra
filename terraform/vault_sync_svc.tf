@@ -102,13 +102,13 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   ]
 }
 
-resource "google_cloud_run_service_iam_member" "noauth_user" {
+resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
   location = google_cloud_run_v2_service.vault_sync_svc.location
   project  = google_cloud_run_v2_service.vault_sync_svc.project
   service  = google_cloud_run_v2_service.vault_sync_svc.name
 
   role   = "roles/run.invoker"
-  member = "allUsers"
+  member = "serviceAccount:service-${google_project.infra.number}@gcp-sa-eventarc.iam.gserviceaccount.com"
 }
 
 resource "google_artifact_registry_repository" "vault_sync_repo" {

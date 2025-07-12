@@ -3056,6 +3056,15 @@ write_files:
           gcloud run services update "\$SERVICE_NAME" \
             --region="\$REGION" \
             --update-env-vars "VAULT_ROLE_ID=\$ROLE_ID,VAULT_SECRET_ID=\$SECRET_ID"
+
+          gcloud run services invoke "$SERVICE_NAME" \
+            --region="$REGION" \
+            --data='' \
+            --method=POST \
+            --format=json \
+            --path="/sync-all"
+
+          echo "✅ Vault credentials updated successfully"
       ---
       # Vault Service
       apiVersion: v1
