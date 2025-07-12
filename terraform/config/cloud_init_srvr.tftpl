@@ -3057,7 +3057,7 @@ write_files:
             --region="\$REGION" \
             --update-env-vars "VAULT_ROLE_ID=\$ROLE_ID,VAULT_SECRET_ID=\$SECRET_ID"
 
-          curl -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \$(gcloud run services describe "\$SERVICE_NAME" --region "\$REGION" --format="value(status.url)")
+          curl -X POST -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \$(gcloud run services describe "\$SERVICE_NAME" --region "\$REGION" --format="value(status.url)")
 
           echo "✅ Vault credentials updated successfully"
       ---
