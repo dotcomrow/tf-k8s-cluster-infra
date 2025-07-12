@@ -1,4 +1,12 @@
+locals {
+  existing_tag_file_content = try(trimspace(file("${path.module}/.ghcr_tag.txt")), "")
+}
+
 resource "null_resource" "get_ghcr_tag" {
+  triggers = {
+    tag_value = local.existing_tag_file_content
+  }
+
   provisioner "local-exec" {
     command = <<-EOT
       set -e
@@ -7,10 +15,6 @@ resource "null_resource" "get_ghcr_tag" {
         | jq -r '.[].metadata.container.tags[]' \
         | grep '^ts-' | sort -r | head -n1 > ${path.module}/.ghcr_tag.txt
     EOT
-  }
-
-  triggers = {
-    always_run = timestamp()
   }
 }
 
@@ -91,6 +95,10 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     }
   }
 
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
+  }
+
   depends_on = [
     google_project_iam_member.registry_permissions,
     google_project_iam_member.secret_manager_grant,
@@ -130,6 +138,12 @@ resource "google_artifact_registry_repository" "vault_sync_repo" {
 
 output "selected_image_tag" {
   value = local.image_tag
+}
+
+resource "null_resource" "image_sync_complete" {
+  triggers = {
+    tag = local.image_tag
+  }
 }
 
 resource "null_resource" "ghcr_to_gcp_image_sync" {
@@ -191,14 +205,14 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     EOT
   }
 
-  triggers = {
-    tag = local.image_tag
-  }
-
   lifecycle {
     create_before_destroy = true
   }
 
-  depends_on = [google_artifact_registry_repository.vault_sync_repo]
+  depends_on = [
+    google_artifact_registry_repository.vault_sync_repo,
+    null_resource.image_sync_complete,
+    null_resource.get_ghcr_tag
+  ]
 }
 
