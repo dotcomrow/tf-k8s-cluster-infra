@@ -3194,6 +3194,8 @@ write_files:
                 value: "auth/kubernetes"
               - name: AVP_VAULT_ADDR
                 value: "https://vault.vault.svc.cluster.local:8200"
+              - name: AVP_VAULT_KV_VERSION
+                value: "2"
             volumes:
               - name: custom-tools
                 emptyDir: {}
@@ -3222,9 +3224,13 @@ write_files:
                   kind: Namespace
               configManagementPlugins: |
                 - name: avp
+                  init:
+                    command: ["/bin/sh", "-c"]
+                    args: ["test -x /usr/local/bin/argocd-vault-plugin"]
                   generate:
-                    command: ["argocd-vault-plugin"]
+                    command: ["/usr/local/bin/argocd-vault-plugin"]
                     args: ["generate", "./"]
+                  allowOverrides: true
             rbac:
               policy.csv: |
                 p, role:admin, applications, *, *, allow
