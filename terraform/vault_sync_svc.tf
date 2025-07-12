@@ -2,13 +2,10 @@ resource "null_resource" "get_ghcr_tag" {
   provisioner "local-exec" {
     command = <<-EOT
       set -e
-      echo "🔍 Fetching latest GHCR tag for vault-sync-run-container..."
-      curl -s -H "Accept: application/vnd.github.v3+json" \
-        -u "${var.GITHUB_ORG}:${var.GHCR_PAT}" \
-        "https://ghcr.io/v2/${var.GITHUB_ORG}/vault-sync-run-container/tags/list" \
-        | jq -r '.tags[] | select(startswith("ts-"))' \
-        | sort -r \
-        | head -n 1 | tee ${path.module}/.ghcr_tag.txt
+      curl -s -H "Authorization: Bearer ${var.GHCR_PAT}" \
+        https://api.github.com/users/${var.GITHUB_ORG}/packages/container/vault-sync-run-container/versions \
+        | jq -r '.[].metadata.container.tags[]' \
+        | grep '^ts-' | sort -r | head -n1 > ${path.module}/.ghcr_tag.txt
     EOT
   }
 
