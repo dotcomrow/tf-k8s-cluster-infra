@@ -3066,6 +3066,32 @@ write_files:
           curl -X POST -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \$SVC_URL/sync-all
 
           echo "✅ Vault credentials updated successfully"
+
+          echo "🚀 Applying App of Apps configuration..."
+          kubectl apply -n argocd -f - <<EOF
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: argocd-post-install-apps-repo-app
+            namespace: argocd
+          spec:
+            project: default
+            source:
+              repoURL: git@github.com:${GITHUB_ORG}/argocd-post-install.git
+              targetRevision: prod 
+              path: apps
+              directory:
+                recurse: true
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: argocd
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+          EOF
+
+          echo "✅ App of Apps applied."
       ---
       # Vault Service
       apiVersion: v1
@@ -3311,32 +3337,6 @@ write_files:
         sshPrivateKey: $PRIVATE_KEY_B64
         insecure: $INSECURE_B64
       EOF
-
-      echo "🚀 Applying App of Apps configuration..."
-      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -n "$ARGOCD_NAMESPACE" -f - <<EOF
-      apiVersion: argoproj.io/v1alpha1
-      kind: Application
-      metadata:
-        name: argocd-post-install-apps-repo-app
-        namespace: argocd
-      spec:
-        project: default
-        source:
-          repoURL: git@github.com:${GITHUB_ORG}/argocd-post-install.git
-          targetRevision: prod 
-          path: apps
-          directory:
-            recurse: true
-        destination:
-          server: https://kubernetes.default.svc
-          namespace: argocd
-        syncPolicy:
-          automated:
-            prune: true
-            selfHeal: true
-      EOF
-
-      echo "✅ App of Apps applied."
 
       echo "Cleaning up uneeded resources..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace applications
