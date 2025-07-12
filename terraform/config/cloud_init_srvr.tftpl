@@ -3056,8 +3056,14 @@ write_files:
           gcloud run services update "\$SERVICE_NAME" \
             --region="\$REGION" \
             --update-env-vars "VAULT_ROLE_ID=\$ROLE_ID,VAULT_SECRET_ID=\$SECRET_ID"
+          
+          SVC_URL=\$(gcloud run services describe "\$SERVICE_NAME" --region "\$REGION" --format="value(status.url)");
+          if [ -z "\$SVC_URL" ]; then
+            echo "❌ Failed to get service URL"
+            exit 1
+          fi
 
-          curl -X POST -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \$(gcloud run services describe "\$SERVICE_NAME" --region "\$REGION" --format="value(status.url)")
+          curl -X POST -H "Authorization: Bearer \$(gcloud auth print-identity-token)" \$SVC_URL/sync-all
 
           echo "✅ Vault credentials updated successfully"
       ---

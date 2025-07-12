@@ -99,8 +99,15 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.cloud_run_secret_access,
     google_pubsub_topic.secret_manager_events,
     google_project_iam_member.eventarc_receive_auditlog,
-    null_resource.kms_iam_binding
+    null_resource.kms_iam_binding,
+    google_project_iam_member.cloud_run_secret_list
   ]
+}
+
+resource "google_project_iam_member" "cloud_run_secret_list" {
+  project = google_project.infra.project_id
+  role    = "roles/secretmanager.viewer"
+  member  = "serviceAccount:${google_service_account.eventarc_service_account.email}"
 }
 
 resource "google_cloud_run_service_iam_member" "eventarc_invoker" {
