@@ -2900,12 +2900,21 @@ write_files:
             capabilities = ["read"]
           }
           EOF
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write avp /vault/data/avp-policy.hcl
 
-          # Vault sync policy
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write vault-sync - <<EOF
+          VAULT_TOKEN="$(jq -r '.root_token' /vault/data/init.json)" vault policy write vault-sync - <<EOF
+          # KV v2 read, write, delete
+          path "secret/data/*" {
+            capabilities = ["create", "read", "update", "delete"]
+          }
+
+          # KV v2 metadata access (for deletes and versions)
+          path "secret/metadata/*" {
+            capabilities = ["read", "delete", "list"]
+          }
+
+          # Optional: list root secrets path
           path "secret/*" {
-            capabilities = ["create", "update"]
+            capabilities = ["list"]
           }
           EOF
 
