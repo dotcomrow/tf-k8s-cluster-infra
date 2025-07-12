@@ -65,8 +65,18 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
 
   template {
     service_account = google_service_account.eventarc_service_account.email
+    max_instance_count = 1
+    cpu_idle = true
+
     containers {
       image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
+
+      resources {
+        limits {
+          cpu    = "0.25"
+          memory = "128Mi"
+        }
+      }
 
       env {
         name  = "GCP_PROJECT_ID"
