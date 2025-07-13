@@ -3242,6 +3242,7 @@ write_files:
               enabled: false
 
           repoServer:
+            automountServiceAccountToken: true
             extraInitContainers:
               - name: install-avp
                 image: alpine:3.19
@@ -3295,14 +3296,14 @@ write_files:
               application.namespaceResourceBlacklist: |
                 - group: ""
                   kind: Namespace
-              configManagementPlugins: |
+              configManagementPlugins: |-
                 - name: avp
                   init:
-                    command: ["/bin/sh", "-c"]
+                    command: ["/bin/sh","-c"]
                     args: ["test -x /usr/local/bin/argocd-vault-plugin"]
                   generate:
                     command: ["/usr/local/bin/argocd-vault-plugin"]
-                    args: ["generate", "./"]
+                    args: ["generate","./"]
                   allowOverrides: true
             rbac:
               policy.csv: |
