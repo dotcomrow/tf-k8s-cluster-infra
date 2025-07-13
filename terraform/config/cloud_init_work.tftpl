@@ -71,6 +71,21 @@ write_files:
       EOF
       
       sysctl --system
+
+      # install ethtool if it isn’t already
+      apt-get update && apt-get install -y ethtool
+
+      # turn on the big offloads
+      ethtool -K eth0 gro on gso on tso on
+      ethtool -K eth0 rx on tx on
+
+      # deeper tx queue
+      ip link set dev eth0 txqueuelen 10000
+
+      # bump the guest’s backlog to match
+      sysctl -w net.core.netdev_max_backlog=250000
+      sysctl -w net.core.rmem_max=134217728
+      sysctl -w net.core.wmem_max=134217728
       
       # Limit nofile
       cat <<EOF > /etc/security/limits.d/99-nofile.conf
