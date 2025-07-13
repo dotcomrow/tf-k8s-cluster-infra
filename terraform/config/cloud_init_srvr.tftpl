@@ -3270,6 +3270,8 @@ write_files:
                 value: "https://vault.vault.svc.cluster.local:8200"
               - name: AVP_VAULT_KV_VERSION
                 value: "2"
+              - name: AVP_TYPE
+                value: "vault"
             volumes:
               - name: custom-tools
                 emptyDir: {}
