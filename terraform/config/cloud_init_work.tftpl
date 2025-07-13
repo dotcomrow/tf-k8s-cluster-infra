@@ -72,20 +72,64 @@ write_files:
       
       sysctl --system
 
-      # install ethtool if it isn’t already
-      apt-get update && apt-get install -y ethtool
+      # 1) Install ethtool if missing
+      if ! command -v ethtool &>/dev/null; then
+        apt-get update && apt-get install -y ethtool
+      fi
 
-      # turn on the big offloads
-      ethtool -K eth0 gro on gso on tso on
-      ethtool -K eth0 rx on tx on
+      # 2) Pick all “large-MTU” interfaces automatically
+      #    (adjust the grep if your jumbo-MTU devices have a different naming scheme)
+      for IF in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(eth|vtnet)'); do
+        # bring MTU up before offloads
+        ip link set dev $IF mtu 9000
 
-      # deeper tx queue
-      ip link set dev eth0 txqueuelen 10000
+        # enable big-packet offloads
+        ethtool -K $IF gro on gso on tso on rx on tx on
 
-      # bump the guest’s backlog to match
+        # increase the kernel TX queue length
+        ip link set dev $IF txqueuelen 10000
+      done
+
+      # 3) Sysctls — bump backlog and buffers for all interfaces
+      #    and enable TCP MTU probing (helps path-MTU discovery)
       sysctl -w net.core.netdev_max_backlog=250000
       sysctl -w net.core.rmem_max=134217728
       sysctl -w net.core.wmem_max=134217728
+      sysctl -w net.ipv4.tcp_rmem="4096 87380 134217728"
+      sysctl -w net.ipv4.tcp_wmem="4096 87380 134217728"
+      sysctl -w net.ipv4.tcp_mtu_probing=1
+
+      # 4) Persist sysctls
+      cat <<EOF >/etc/sysctl.d/99-network-opt.conf
+      net.core.netdev_max_backlog=250000
+      net.core.rmem_max=134217728
+      net.core.wmem_max=134217728
+      net.ipv4.tcp_rmem=4096 87380 134217728
+      net.ipv4.tcp_wmem=4096 87380 134217728
+      net.ipv4.tcp_mtu_probing=1
+      EOF
+
+      # 5) Persist ethtool + txqueuelen via a systemd service
+      cat <<'EOF' >/etc/systemd/system/network-tweaks.service
+      [Unit]
+      Description=Apply ethtool offloads + txqueuelen
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/network-tweaks.sh
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+      # Install the same script to /usr/local/bin and make it executable
+      install -m755 "$0" /usr/local/bin/network-tweaks.sh
+      systemctl daemon-reload
+      systemctl enable network-tweaks
+
+      echo "✅ Network tweaks applied and will persist across reboots."
       
       # Limit nofile
       cat <<EOF > /etc/security/limits.d/99-nofile.conf
