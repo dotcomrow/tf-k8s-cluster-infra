@@ -1,3 +1,13 @@
+variable "ctrl_cpu_cores" {
+  type    = number
+  default = 10
+}
+
+variable "ctrl_cpu_sockets" {
+  type    = number
+  default = 1
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "ctrl_cloud_init_config" {
   content_type = "snippets"
@@ -40,8 +50,8 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   cpu {
-    cores   = 10
-    sockets = 1
+    cores   = var.ctrl_cpu_cores
+    sockets = var.ctrl_cpu_sockets
     type    = "host"     # ✅ Use host CPU model for full feature set
     numa    = true       # ✅ Enable NUMA for better memory locality
     flags   = ["+aes", "+pdpe1gb", "+pcid", "+spec-ctrl", "+ssbd", "+md-clear"]
@@ -83,6 +93,8 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     bridge   = "vmbr1"
     model    = "virtio"
     firewall = false             # ✅ Reduce overhead, firewalling not needed here
+    queues   = var.ctrl_cpu_cores * var.ctrl_cpu_sockets   # match the number of vCPUs you assigned, e.g. 10
+    mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
   initialization {

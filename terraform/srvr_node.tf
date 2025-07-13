@@ -1,3 +1,13 @@
+variable "srvr_cpu_cores" {
+  type    = number
+  default = 12
+}
+
+variable "srvr_cpu_sockets" {
+  type    = number
+  default = 1
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
   content_type = "snippets"
@@ -69,8 +79,8 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   }
 
   cpu {
-    cores   = 12
-    sockets = 1
+    cores   = var.srvr_cpu_cores
+    sockets = var.srvr_cpu_sockets
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
@@ -112,6 +122,8 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     bridge   = "vmbr1"
     model    = "virtio"          # ✅ Fastest virtual NIC
     firewall = false             # ✅ Skip Proxmox firewall for performance
+    queues   = var.srvr_cpu_cores * var.srvr_cpu_sockets   # match the number of vCPUs you assigned, e.g. 10
+    mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
   initialization {

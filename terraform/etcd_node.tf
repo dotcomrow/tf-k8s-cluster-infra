@@ -1,3 +1,13 @@
+variable "etcd_cpu_cores" {
+  type    = number
+  default = 10
+}
+
+variable "etcd_cpu_sockets" {
+  type    = number
+  default = 1
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "etcd_cloud_init_config" {
   content_type = "snippets"
@@ -40,8 +50,8 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   }
 
   cpu {
-    cores   = 10
-    sockets = 1
+    cores   = var.etcd_cpu_cores
+    sockets = var.etcd_cpu_sockets
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
     flags   = ["+aes", "+pdpe1gb", "+pcid", "+spec-ctrl", "+ssbd", "+md-clear"]
@@ -83,6 +93,8 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     bridge   = "vmbr1"
     model    = "virtio"
     firewall = false             # ✅ Reduce overhead, not needed for etcd VM
+    queues   = var.etcd_cpu_cores * var.etcd_cpu_sockets   # match the number of vCPUs you assigned, e.g. 10
+    mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
   initialization {
