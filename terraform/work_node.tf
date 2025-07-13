@@ -1,9 +1,9 @@
-variable "srvr_cpu_cores" {
+variable "work_cpu_cores" {
   type    = number
   default = 20
 }
 
-variable "srvr_cpu_sockets" {
+variable "work_cpu_sockets" {
   type    = number
   default = 2
 }
@@ -51,8 +51,8 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   }
 
   cpu {
-    cores   = var.srvr_cpu_cores
-    sockets = var.srvr_cpu_sockets
+    cores   = var.work_cpu_cores
+    sockets = var.work_cpu_sockets
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
