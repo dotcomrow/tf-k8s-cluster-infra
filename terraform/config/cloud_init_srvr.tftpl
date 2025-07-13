@@ -3045,6 +3045,8 @@ write_files:
                       name: vault-sync-script
                   - name: script-tmp
                     emptyDir: {}
+                  - name: kubectl-bin
+                    emptyDir: {}
           EOF
 
           wait \$VAULT_PID
