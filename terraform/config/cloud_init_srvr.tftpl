@@ -2980,7 +2980,10 @@ write_files:
               spec:
                 serviceAccountName: default
                 restartPolicy: Never
+
                 volumes:
+                  - name: kubectl-bin
+                    emptyDir: {}
                   - name: gcp-creds
                     secret:
                       secretName: gcp-service-account
@@ -2992,6 +2995,17 @@ write_files:
                       name: vault-sync-script
                   - name: script-tmp
                     emptyDir: {}
+
+                initContainers:
+                  - name: load-kubectl
+                    image: bitnami/kubectl:latest
+                    command: ["sh", "-c"]
+                    args:
+                      - cp /opt/bitnami/kubectl/bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl
+                    volumeMounts:
+                      - name: kubectl-bin
+                        mountPath: /kubectl-bin
+
                 containers:
                   - name: gcloud-update
                     image: google/cloud-sdk:slim
@@ -3002,7 +3016,10 @@ write_files:
                       limits:
                         cpu: "250m"
                         memory: "256Mi"
+                        
                     volumeMounts:
+                      - name: kubectl-bin
+                        mountPath: /usr/local/bin
                       - name: gcp-creds
                         mountPath: /tmp
                         readOnly: true
@@ -3015,6 +3032,19 @@ write_files:
                         mountPath: /opt/scripts
                     command: ["/bin/sh"]
                     args: ["-c", "cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
+
+                volumes:
+                  - name: gcp-creds
+                    secret:
+                      secretName: gcp-service-account
+                  - name: shared-creds
+                    persistentVolumeClaim:
+                      claimName: vault-creds-pvc
+                  - name: script
+                    configMap:
+                      name: vault-sync-script
+                  - name: script-tmp
+                    emptyDir: {}
           EOF
 
           wait \$VAULT_PID
