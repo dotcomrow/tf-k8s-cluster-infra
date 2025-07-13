@@ -3243,7 +3243,7 @@ write_files:
 
           repoServer:
             automountServiceAccountToken: true
-            extraInitContainers:
+            initContainers:
               - name: install-avp
                 image: alpine:3.19
                 command: ["/bin/sh", "-c"]
@@ -3255,11 +3255,11 @@ write_files:
                 volumeMounts:
                   - name: custom-tools
                     mountPath: /custom-tools
-            extraVolumeMounts:
+            volumeMounts:
               - mountPath: /usr/local/bin/argocd-vault-plugin
                 name: custom-tools
                 subPath: argocd-vault-plugin
-            extraEnv:
+            env:
               - name: AVP_AUTH_TYPE
                 value: "k8s"
               - name: AVP_K8S_ROLE
@@ -3270,7 +3270,7 @@ write_files:
                 value: "https://vault.vault.svc.cluster.local:8200"
               - name: AVP_VAULT_KV_VERSION
                 value: "2"
-            extraVolumes:
+            volumes:
               - name: custom-tools
                 emptyDir: {}
 
