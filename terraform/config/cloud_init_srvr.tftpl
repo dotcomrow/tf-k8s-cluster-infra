@@ -3297,6 +3297,7 @@ write_files:
             cmp:
               enabled: true
 
+            # 1) Download the AVP binary before repo-server starts
             initContainers:
               - name: install-avp
                 image: alpine:3.19
@@ -3305,46 +3306,49 @@ write_files:
                   - |
                     apk add --no-cache curl
                     curl -L https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v1.15.0/argocd-vault-plugin_1.15.0_linux_amd64 \
-                      -o /custom-tools/argocd-vault-plugin
-                    chmod +x /custom-tools/argocd-vault-plugin
+                      -o /custom/argocd-vault-plugin
+                    chmod +x /custom/argocd-vault-plugin
                 volumeMounts:
-                  - name: custom-tools
-                    mountPath: /custom-tools
+                  - name: avp-bin
+                    mountPath: /custom
 
-            containers:
-              - name: repo-server
-                args:
-                  - /usr/local/bin/argocd-repo-server
-                  - --plugin-use-manifest-generate-paths
-                env:
-                  - name: AVP_AUTH_TYPE
-                    value: "k8s"
-                  - name: AVP_K8S_ROLE
-                    value: "argocd"
-                  - name: AVP_K8S_MOUNT_PATH
-                    value: "auth/kubernetes"
-                  - name: AVP_VAULT_ADDR
-                    value: "http://vault.vault.svc.cluster.local:8200"
-                  - name: VAULT_ADDR
-                    value: "http://vault.vault.svc.cluster.local:8200"
-                  - name: AVP_KV_VERSION
-                    value: "2"
-                  - name: AVP_TYPE
-                    value: "vault"
-                  - name: AVP_MOUNT_PATH
-                    value: "secret"
-                volumeMounts:
-                  - name: custom-tools
-                    mountPath: /usr/local/bin/argocd-vault-plugin
-                    subPath: argocd-vault-plugin
-                  - name: custom-tools
-                    mountPath: /home/argocd/cmp-server/plugins/avp
-                    subPath: argocd-vault-plugin
-
+            # 2) Share that binary with the main container
             volumes:
-              - name: custom-tools
+              - name: avp-bin
                 emptyDir: {}
 
+            # 3) Mount it both in the PATH and in CMP’s plugin folder
+            volumeMounts:
+              - name: avp-bin
+                mountPath: /usr/local/bin/argocd-vault-plugin
+                subPath: argocd-vault-plugin
+              - name: avp-bin
+                mountPath: /home/argocd/cmp-server/plugins/avp
+                subPath: argocd-vault-plugin
+
+            # 4) Tell argocd-repo-server to hand off manifest generation
+            extraArgs:
+              - --plugin-use-manifest-generate-paths
+
+            # 5) Configure AVP via environment
+            extraEnv:
+              - name: AVP_AUTH_TYPE
+                value: "k8s"
+              - name: AVP_K8S_ROLE
+                value: "argocd"
+              - name: AVP_K8S_MOUNT_PATH
+                value: "auth/kubernetes"
+              - name: AVP_VAULT_ADDR
+                value: "http://vault.vault.svc.cluster.local:8200"
+              - name: VAULT_ADDR
+                value: "http://vault.vault.svc.cluster.local:8200"
+              - name: AVP_KV_VERSION
+                value: "2"
+              - name: AVP_TYPE
+                value: "vault"
+              - name: AVP_MOUNT_PATH
+                value: "secret"
+                
           configs:
             params:
               server.insecure: true
