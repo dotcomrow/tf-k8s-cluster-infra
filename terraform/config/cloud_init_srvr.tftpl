@@ -3294,6 +3294,8 @@ write_files:
           repoServer:
             automountServiceAccountToken: true
             enablePlugins: true
+            cmp:
+              enabled: true
             initContainers:
               - name: install-avp
                 image: alpine:3.19
