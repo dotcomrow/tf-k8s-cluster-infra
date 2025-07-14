@@ -2953,6 +2953,9 @@ write_files:
             kubernetes_host="https://\$KUBERNETES_SERVICE_HOST:\$KUBERNETES_SERVICE_PORT_HTTPS" \
             kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
+          # Enable KV secrets engine
+          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
+
           # AVP policy
           cat <<EOF > /vault/data/avp-policy.hcl
           path "secret/data/*" {
@@ -2974,6 +2977,12 @@ write_files:
           # Optional: list root secrets path
           path "secret/*" {
             capabilities = ["list"]
+          }
+          EOF
+
+          cat <<EOF | VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write avp -
+          path "secret/data/*" {
+            capabilities = ["read"]
           }
           EOF
 
@@ -3023,9 +3032,6 @@ write_files:
             oidc_scopes="openid,email,groups" \
             policies="admin" \
             ttl="1h"
-
-          # Enable KV secrets engine
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
 
           # Trigger follow-up job
           cat <<EOF | kubectl apply -f -
@@ -3318,6 +3324,8 @@ write_files:
                 value: "2"
               - name: AVP_TYPE
                 value: "vault"
+              - name: AVP_KV_MOUNT_PATH
+                value: "secret"
             volumes:
               - name: custom-tools
                 emptyDir: {}
