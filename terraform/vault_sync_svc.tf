@@ -107,7 +107,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     null_resource.ghcr_to_gcp_image_sync,
     google_service_account.eventarc_service_account,
     google_project_iam_member.cloud_run_secret_access,
-    google_pubsub_topic.secret_manager_events,
     google_project_iam_member.eventarc_receive_auditlog,
     null_resource.kms_iam_binding,
     google_project_iam_member.cloud_run_secret_list

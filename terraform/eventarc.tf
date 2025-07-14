@@ -50,11 +50,6 @@ resource "google_service_account" "eventarc_service_account" {
   project      = google_project.infra.project_id
 }
 
-resource "google_pubsub_topic" "secret_manager_events" {
-  name    = "${var.project_name}-secret-events"
-  project = google_project.infra.project_id
-}
-
 resource "google_project_iam_member" "eventarc_invoker" {
   project = google_project.infra.project_id
   role    = "roles/eventarc.eventReceiver"
