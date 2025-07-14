@@ -3293,6 +3293,7 @@ write_files:
 
           repoServer:
             automountServiceAccountToken: true
+            enablePlugins: true
             initContainers:
               - name: install-avp
                 image: alpine:3.19
@@ -3324,7 +3325,7 @@ write_files:
                 value: "2"
               - name: AVP_TYPE
                 value: "vault"
-              - name: AVP_KV_MOUNT_PATH
+              - name: AVP_MOUNT_PATH
                 value: "secret"
             volumes:
               - name: custom-tools
