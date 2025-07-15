@@ -41,6 +41,8 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   stop_on_destroy = false
   on_boot = true
 
+  autostart_delay = 15
+
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
 

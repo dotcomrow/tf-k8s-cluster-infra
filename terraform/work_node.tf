@@ -42,6 +42,9 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   stop_on_destroy = false
   on_boot = true
 
+  # pause (in seconds) before starting this VM
+  autostart_delay = 30
+
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
 
