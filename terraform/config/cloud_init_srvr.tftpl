@@ -3313,22 +3313,26 @@ write_files:
                   - name: avp-bin
                     mountPath: /avp
 
-            # 2) Share that directory (binary + socket) with all containers
+            # 2) Define the two shared volumes
             extraVolumes:
               - name: avp-bin
                 emptyDir: {}
               - name: cmp-plugins
                 emptyDir: {}
 
-            # 3) Mount the binary into $PATH and expose the socket folder
+            # 3) Mount them (plus the built-in var-files and tmp)
             extraVolumeMounts:
               - name: avp-bin
                 mountPath: /usr/local/bin/argocd-vault-plugin
                 subPath: argocd-vault-plugin
               - name: cmp-plugins
                 mountPath: /home/argocd/cmp-server/plugins
+              - name: var-files
+                mountPath: /var/run/argocd
+              - name: tmp
+                mountPath: /tmp
 
-            # 4) Start AVP in sidecar mode with a Unix socket
+            # 4) Sidecar to serve the socket
             extraContainers:
               - name: avp
                 image: alpine:3.19
@@ -3344,15 +3348,15 @@ write_files:
                   - name: cmp-plugins
                     mountPath: /home/argocd/cmp-server/plugins
                   - name: var-files
-                    mountPath: /var/run/argocd     # built-in chart volume
+                    mountPath: /var/run/argocd
                   - name: tmp
-                    mountPath: /tmp                # built-in chart volume
+                    mountPath: /tmp
 
-            # 5) Tell repo-server to hand off manifest generation
+            # 5) Tell Argo to use your plugin
             extraArgs:
               - --plugin-use-manifest-generate-paths
 
-            # 6) Plugin configuration via ENV
+            # 6) Plugin ENV
             extraEnv:
               - name: AVP_AUTH_TYPE
                 value: k8s
@@ -3370,7 +3374,7 @@ write_files:
                 value: vault
               - name: AVP_MOUNT_PATH
                 value: secret
-                
+
           configs:
             params:
               server.insecure: true
@@ -3403,7 +3407,6 @@ write_files:
                     args:
                       - generate
                       - .
-                    # tell Argo to dial your sidecar socket:
                     socket: /home/argocd/cmp-server/plugins/avp.sock
                   allowOverrides: true
 
