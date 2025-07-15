@@ -200,7 +200,7 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
   depends_on = [
     google_artifact_registry_repository.vault_sync_repo,
     null_resource.image_sync_complete,
-    data.external.ghcr_tag.result.tag
+    data.external.ghcr_tag
   ]
 }
 
