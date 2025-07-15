@@ -109,5 +109,5 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     user_data_file_id = proxmox_virtual_environment_file.ctrl_cloud_init_config.id
   }
 
-  depends_on = [ proxmox_virtual_environment_vm.srvr_rancher_vm ]
+  depends_on = [ proxmox_virtual_environment_vm.etcd_rancher_vm ]
 }
