@@ -3375,10 +3375,10 @@ write_files:
                 - name: avp
                   init:
                     command: ["/bin/sh","-c"]
-                    args: ["test -x /usr/local/bin/argocd-vault-plugin"]
+                    args: ["test -x /home/argocd/cmp-server/plugins/avp/avp"]
                   generate:
-                    command: ["/usr/local/bin/argocd-vault-plugin"]
-                    args: ["generate","./"]
+                    command: ["/home/argocd/cmp-server/plugins/avp/avp"]
+                    args: ["generate", "./"]
                   allowOverrides: true
             rbac:
               policy.csv: |
