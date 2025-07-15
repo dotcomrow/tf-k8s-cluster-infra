@@ -125,5 +125,5 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     user_data_file_id = proxmox_virtual_environment_file.work_cloud_init_config.id
   }
 
-  depends_on = [ proxmox_virtual_environment_vm.etcd_rancher_vm ]
+  depends_on = [ proxmox_virtual_environment_vm.srvr_rancher_vm ]
 }
