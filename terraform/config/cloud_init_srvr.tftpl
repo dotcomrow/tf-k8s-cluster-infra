@@ -3316,6 +3316,8 @@ write_files:
             volumes:
               - name: avp-bin
                 emptyDir: {}
+              - name: cmp-plugins
+                emptyDir: {}
 
             # 3) Mount it both in the PATH and in CMP’s plugin folder
             volumeMounts:
@@ -3329,6 +3331,21 @@ write_files:
             # 4) Tell argocd-repo-server to hand off manifest generation
             extraArgs:
               - --plugin-use-manifest-generate-paths
+
+            extraContainers:
+              - name: avp
+                image: alpine:3.19
+                command:
+                  - /usr/local/bin/argocd-vault-plugin
+                  - serve
+                  - --socket
+                  - /home/argocd/cmp-server/plugins/avp.sock
+                volumeMounts:
+                  - name: avp-bin
+                    mountPath: /usr/local/bin/argocd-vault-plugin
+                    subPath: argocd-vault-plugin
+                  - name: cmp-plugins
+                    mountPath: /home/argocd/cmp-server/plugins
 
             # 5) Configure AVP via environment
             extraEnv:
