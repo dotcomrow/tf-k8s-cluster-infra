@@ -3297,7 +3297,7 @@ write_files:
             cmp:
               enabled: true
 
-            # 1) download the AVP binary
+            # 1) Download the AVP binary before repo-server starts
             extraInitContainers:
               - name: install-avp
                 image: alpine:3.19
@@ -3313,20 +3313,22 @@ write_files:
                   - name: avp-bin
                     mountPath: /avp
 
-            # 2) share that directory (binary + socket) with all containers
+            # 2) Share that directory (binary + socket) with all containers
             extraVolumes:
               - name: avp-bin
                 emptyDir: {}
+              - name: cmp-plugins
+                emptyDir: {}
 
-            # 3) mount the binary into $PATH and give access to the socket dir
+            # 3) Mount the binary into $PATH and expose the socket folder
             extraVolumeMounts:
               - name: avp-bin
                 mountPath: /usr/local/bin/argocd-vault-plugin
                 subPath: argocd-vault-plugin
-              - name: avp-bin
+              - name: cmp-plugins
                 mountPath: /home/argocd/cmp-server/plugins
 
-            # 4) start AVP sidecar on a Unix socket
+            # 4) Start AVP in sidecar mode with a Unix socket
             extraContainers:
               - name: avp
                 image: alpine:3.19
@@ -3339,18 +3341,18 @@ write_files:
                   - name: avp-bin
                     mountPath: /usr/local/bin/argocd-vault-plugin
                     subPath: argocd-vault-plugin
-                  - name: avp-bin
+                  - name: cmp-plugins
                     mountPath: /home/argocd/cmp-server/plugins
                   - name: var-files
-                    mountPath: /var/run/argocd
+                    mountPath: /var/run/argocd     # built-in chart volume
                   - name: tmp
-                    mountPath: /tmp
+                    mountPath: /tmp                # built-in chart volume
 
-            # 5) hand off manifest generation to CMP
+            # 5) Tell repo-server to hand off manifest generation
             extraArgs:
               - --plugin-use-manifest-generate-paths
 
-            # 6) configure AVP via env
+            # 6) Plugin configuration via ENV
             extraEnv:
               - name: AVP_AUTH_TYPE
                 value: k8s
