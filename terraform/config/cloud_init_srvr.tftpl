@@ -3297,47 +3297,36 @@ write_files:
             cmp:
               enabled: true
 
-            # 1) Download the AVP binary before repo-server starts
-            initContainers:
+            # 1) download the AVP binary
+            extraInitContainers:
               - name: install-avp
                 image: alpine:3.19
                 command: ["/bin/sh","-c"]
                 args:
                   - |
                     apk add --no-cache curl
-                    curl -L https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v1.15.0/argocd-vault-plugin_1.15.0_linux_amd64 \
-                      -o /custom/argocd-vault-plugin
-                    chmod +x /custom/argocd-vault-plugin
+                    curl -L \
+                      https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v1.15.0/argocd-vault-plugin_1.15.0_linux_amd64 \
+                      -o /avp/argocd-vault-plugin
+                    chmod +x /avp/argocd-vault-plugin
                 volumeMounts:
                   - name: avp-bin
-                    mountPath: /custom
+                    mountPath: /avp
 
-            # 2) Share that binary & plugin socket dir with all containers
-            volumes:
+            # 2) share that directory (binary + socket) with all containers
+            extraVolumes:
               - name: avp-bin
                 emptyDir: {}
-              - name: cmp-plugins
-                emptyDir: {}
-              - name: var-files
-                emptyDir: {}
-              - name: tmp
-                emptyDir: {}
 
-            # 3) Mounts in the main repo-server container
-            volumeMounts:
-              # put the downloaded binary onto $PATH
+            # 3) mount the binary into $PATH and give access to the socket dir
+            extraVolumeMounts:
               - name: avp-bin
                 mountPath: /usr/local/bin/argocd-vault-plugin
                 subPath: argocd-vault-plugin
-              # give argocd-repo-server access to the socket dir
-              - name: cmp-plugins
+              - name: avp-bin
                 mountPath: /home/argocd/cmp-server/plugins
-              - name: var-files
-                mountPath: /var/run/argocd
-              - name: tmp
-                mountPath: /tmp
 
-            # 4) Sidecar: run the plugin in gRPC serve mode on a Unix socket
+            # 4) start AVP sidecar on a Unix socket
             extraContainers:
               - name: avp
                 image: alpine:3.19
@@ -3350,19 +3339,19 @@ write_files:
                   - name: avp-bin
                     mountPath: /usr/local/bin/argocd-vault-plugin
                     subPath: argocd-vault-plugin
-                  - name: cmp-plugins
+                  - name: avp-bin
                     mountPath: /home/argocd/cmp-server/plugins
                   - name: var-files
                     mountPath: /var/run/argocd
                   - name: tmp
                     mountPath: /tmp
 
-            # 5) Tell repo-server to delegate manifest generation
+            # 5) hand off manifest generation to CMP
             extraArgs:
               - --plugin-use-manifest-generate-paths
 
-            # 6) Vault-plugin environment
-            env:
+            # 6) configure AVP via env
+            extraEnv:
               - name: AVP_AUTH_TYPE
                 value: k8s
               - name: AVP_K8S_ROLE
@@ -3406,11 +3395,16 @@ write_files:
                 - name: avp
                   init:
                     command: ["/bin/sh","-c"]
-                    args: ["test -x /home/argocd/cmp-server/plugins/avp.sock"]
+                    args: ["test -S /home/argocd/cmp-server/plugins/avp.sock"]
                   generate:
-                    command: ["/home/argocd/cmp-server/plugins/avp.sock"]
-                    args: ["generate", "./"]
+                    command: ["/usr/local/bin/argocd-vault-plugin"]
+                    args:
+                      - generate
+                      - .
+                    # tell Argo to dial your sidecar socket:
+                    socket: /home/argocd/cmp-server/plugins/avp.sock
                   allowOverrides: true
+
             rbac:
               policy.csv: |
                 p, role:admin, applications, *, *, allow
