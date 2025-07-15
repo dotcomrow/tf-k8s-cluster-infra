@@ -1,32 +1,19 @@
-locals {
-  ghcr_tag_path = "${path.module}/.ghcr_tag.txt"
-}
-
-resource "null_resource" "get_ghcr_tag" {
-  triggers = {
-    always_run = timestamp()
-  }
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      set -e
-      echo "📦 Fetching GHCR tag..."
-      curl -s -H "Authorization: Bearer ${var.GHCR_PAT}" \
-        https://api.github.com/users/${var.GITHUB_ORG}/packages/container/vault-sync-run-container/versions \
-        | jq -r '.[].metadata.container.tags[]' \
-        | grep '^ts-' | sort -r | head -n1 > "${local.ghcr_tag_path}"
-      echo "✅ Latest tag written to ${local.ghcr_tag_path}"
-    EOT
-  }
-}
-
-data "local_file" "ghcr_tag_file" {
-  depends_on = [null_resource.get_ghcr_tag]
-  filename   = local.ghcr_tag_path
+data "external" "ghcr_tag" {
+  program = ["bash", "-c", <<-EOT
+    #!/usr/bin/env bash
+    set -e
+    TAG=$(curl -s \
+      -H "Authorization: Bearer ${var.GHCR_PAT}" \
+      https://api.github.com/users/${var.GITHUB_ORG}/packages/container/vault-sync-run-container/versions \
+      | jq -r '.[].metadata.container.tags[]' \
+      | grep '^ts-' | sort -r | head -n1)
+    jq -n --arg tag "$TAG" '{ tag: $tag }'
+  EOT
+  ]
 }
 
 locals {
-  image_tag = trimspace(data.local_file.ghcr_tag_file.content)
+  image_tag = data.external.ghcr_tag.result.tag
 }
 
 resource "google_project_service" "project_service" {
