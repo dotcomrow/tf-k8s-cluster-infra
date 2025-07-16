@@ -3569,54 +3569,54 @@ write_files:
       WantedBy=multi-user.target
 
 runcmd:
-  - sudo update-ca-certificates
-  - sudo systemctl daemon-reload
+  - update-ca-certificates
+  - systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
-  - sudo sysctl --system
-  - sudo update-grub
-  - sudo systemctl daemon-reload
+  - sysctl --system
+  - update-grub
+  - systemctl daemon-reload
 
-  - sudo systemctl enable set-dhcp-hostname.service
-  - sudo systemctl start set-dhcp-hostname.service
+  - systemctl enable set-dhcp-hostname.service
+  - systemctl start set-dhcp-hostname.service
 
-  - sudo systemctl enable fix-dns-nfs.service
-  - sudo systemctl start fix-dns-nfs.service
+  - systemctl enable fix-dns-nfs.service
+  - systemctl start fix-dns-nfs.service
   - /usr/local/bin/performance-tuning.sh
 
-  - sudo /usr/local/bin/setup-nfs-modules.sh
-  - sudo systemctl start load-nfs-modules.service
+  - /usr/local/bin/setup-nfs-modules.sh
+  - systemctl start load-nfs-modules.service
 
-  - sudo systemctl enable --now mount-shared-storage.service
+  - systemctl enable --now mount-shared-storage.service
 
-  - sudo systemctl enable disable-swap.service
-  - sudo systemctl start disable-swap.service
+  - systemctl enable disable-swap.service
+  - systemctl start disable-swap.service
 
-  - sudo systemctl enable setup-hosts-dns.service
-  - sudo systemctl start setup-hosts-dns.service
+  - systemctl enable setup-hosts-dns.service
+  - systemctl start setup-hosts-dns.service
 
-  - sudo systemctl enable configure-logging.service
-  - sudo systemctl start configure-logging.service
+  - systemctl enable configure-logging.service
+  - systemctl start configure-logging.service
 
-  - sudo systemctl enable setup-runtime.service
-  - sudo systemctl start setup-runtime.service
+  - systemctl enable setup-runtime.service
+  - systemctl start setup-runtime.service
 
-  - sudo systemctl enable rke2-preload-images.service
-  - sudo systemctl start rke2-preload-images.service
+  - systemctl enable rke2-preload-images.service
+  - systemctl start rke2-preload-images.service
 
-  - sudo systemctl enable bootstrap-rke2.service
-  - sudo systemctl start bootstrap-rke2.service
+  - systemctl enable bootstrap-rke2.service
+  - systemctl start bootstrap-rke2.service
 
-  - sudo systemctl enable set-nofile-limits.service
-  - sudo systemctl start set-nofile-limits.service
+  - systemctl enable set-nofile-limits.service
+  - systemctl start set-nofile-limits.service
 
-  - sudo systemctl enable k8s-addons.service
-  - sudo systemctl start k8s-addons.service
+  - systemctl enable k8s-addons.service
+  - systemctl start k8s-addons.service
 
-  - sudo systemctl enable install-apisix-rancher.service
-  - sudo systemctl start install-apisix-rancher.service
+  - systemctl enable install-apisix-rancher.service
+  - systemctl start install-apisix-rancher.service
 
-  - sudo systemctl enable gpu.service
-  - sudo systemctl start gpu.service
+  - systemctl enable gpu.service
+  - systemctl start gpu.service
 
-  - sudo systemctl enable post-install.service
-  - sudo systemctl start post-install.service
+  - systemctl enable post-install.service
+  - systemctl start post-install.service

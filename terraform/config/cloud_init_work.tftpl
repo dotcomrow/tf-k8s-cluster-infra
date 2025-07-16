@@ -875,30 +875,30 @@ runcmd:
       update-grub
       grub-mkconfig -o /boot/grub/grub.cfg || true
 
-  - sudo update-ca-certificates
-  - sudo systemctl daemon-reload
+  - update-ca-certificates
+  - systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
-  - sudo sysctl --system
-  - sudo update-grub
+  - sysctl --system
+  - update-grub
   - /usr/local/bin/disable-swap.sh
   - /usr/local/bin/setup-hosts-dns.sh
   - /usr/local/bin/performance-tuning.sh
 
-  - sudo systemctl enable setup-hosts-dns.service
-  - sudo systemctl start setup-hosts-dns.service
+  - systemctl enable setup-hosts-dns.service
+  - systemctl start setup-hosts-dns.service
   - /usr/local/bin/setup-nfs-modules.sh
-  - sudo systemctl enable --now mount-shared-storage.service
+  - systemctl enable --now mount-shared-storage.service
   - /usr/local/bin/setup-docker.sh
   - /usr/local/bin/setup-nvidia.sh
   - /usr/local/bin/setup-fluentbit.sh
   - /usr/local/bin/setup-rke2.sh
 
-  - sudo systemctl enable rke2-preload-images.service
-  - sudo systemctl start rke2-preload-images.service
+  - systemctl enable rke2-preload-images.service
+  - systemctl start rke2-preload-images.service
 
-  - sudo systemctl enable qemu-guest-agent
-  - sudo systemctl start qemu-guest-agent
-  - sudo systemctl daemon-reload
-  - sudo systemctl enable rke2-agent
-  - sudo systemctl start rke2-agent
+  - systemctl enable qemu-guest-agent
+  - systemctl start qemu-guest-agent
+  - systemctl daemon-reload
+  - systemctl enable rke2-agent
+  - systemctl start rke2-agent
   - reboot
