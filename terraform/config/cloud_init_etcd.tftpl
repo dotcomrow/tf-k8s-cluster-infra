@@ -53,7 +53,6 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euxo pipefail
       export HTTP_PROXY=http://10.0.0.10:3128
       export HTTPS_PROXY=http://10.0.0.10:3128
       export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
@@ -291,7 +290,6 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euxo pipefail
       echo "🔧 Applying performance tuning settings..."
 
       cat <<EOF | sudo tee /etc/sysctl.d/99-k8s-performance.conf
@@ -326,7 +324,6 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
 
       IMAGE_DIR="/var/lib/rancher/rke2/agent/images"
       ARCH="amd64"
@@ -369,7 +366,6 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      set -euo pipefail
 
       echo "Hostname=$(hostname)" >> /run/systemd/network/10-netplan-eth0.network || true
       sudo systemctl restart systemd-networkd || true
