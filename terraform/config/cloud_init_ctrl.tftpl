@@ -804,11 +804,11 @@ write_files:
       LimitNOFILE=1048576
 
 runcmd:
-  - update-ca-certificates
-  - systemctl daemon-reload
+  - sudo update-ca-certificates
+  - sudo systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
-  - sysctl --system
-  - update-grub
+  - sudo sysctl --system
+  - sudo update-grub
   - /usr/local/bin/disable-swap.sh
   - /usr/local/bin/setup-hosts-dns.sh
   - /usr/local/bin/setup-nfs-modules.sh
@@ -817,15 +817,15 @@ runcmd:
   - sudo systemctl enable setup-hosts-dns.service
   - sudo systemctl start setup-hosts-dns.service
 
-  - systemctl enable --now mount-shared-storage.service
+  - sudo systemctl enable --now mount-shared-storage.service
   - /usr/local/bin/setup-docker.sh
   - /usr/local/bin/setup-fluentbit.sh
   - /usr/local/bin/setup-rke2.sh
 
-  - systemctl enable rke2-preload-images.service
-  - systemctl start rke2-preload-images.service
+  - sudo systemctl enable rke2-preload-images.service
+  - sudo systemctl start rke2-preload-images.service
 
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-  - systemctl daemon-reload
+  - sudo systemctl enable qemu-guest-agent
+  - sudo systemctl start qemu-guest-agent
+  - sudo systemctl daemon-reload
 
