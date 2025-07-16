@@ -3645,5 +3645,7 @@ write_files:
       WantedBy=multi-user.target
 
 runcmd:
+  - systemctl daemon-reexec
+  - systemctl daemon-reload
   - systemctl enable initial-setup.service
   - systemctl start initial-setup.service

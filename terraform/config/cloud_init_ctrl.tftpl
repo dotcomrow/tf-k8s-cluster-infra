@@ -848,5 +848,7 @@ write_files:
       LimitNOFILE=1048576
 
 runcmd:
+  - systemctl daemon-reexec
+  - systemctl daemon-reload
   - systemctl enable initial-setup.service
   - systemctl start initial-setup.service
