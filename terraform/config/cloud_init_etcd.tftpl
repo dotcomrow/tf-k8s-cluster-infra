@@ -483,17 +483,17 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
-      sudo mkdir -p /etc/systemd/system/docker.service.d
-      cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
-      [Service]
-      Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      EOF
+      # sudo mkdir -p /etc/systemd/system/docker.service.d
+      # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
+      # [Service]
+      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+      # EOF
 
-      sudo mkdir -p /etc/systemd/system/containerd.service.d
-      cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/10-http-proxy.conf
-      [Service]
-      Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      EOF
+      # sudo mkdir -p /etc/systemd/system/containerd.service.d
+      # cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/10-http-proxy.conf
+      # [Service]
+      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+      # EOF
 
   - path: /usr/local/bin/setup-nfs-modules.sh
     permissions: '0755'
