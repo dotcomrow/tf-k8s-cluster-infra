@@ -156,6 +156,14 @@ write_files:
       [Service]
       LimitNOFILE=1048576
       EOF
+
+      cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
+      export HTTP_PROXY="http://10.0.0.10:3128"
+      export HTTPS_PROXY="http://10.0.0.10:3128"
+      export NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12,192.168.0.0/16"
+      EOF
+
+      sudo chmod +x /etc/profile.d/http_proxy.sh
       
       systemctl daemon-reexec
       systemctl daemon-reload
@@ -436,6 +444,18 @@ write_files:
       sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
       sudo apt-get update -y
       DEBIAN_FRONTEND=noninteractive sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+      sudo mkdir -p /etc/systemd/system/docker.service.d
+      cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
+      [Service]
+      Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+      EOF
+
+      sudo mkdir -p /etc/systemd/system/containerd.service.d
+      cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/10-http-proxy.conf
+      [Service]
+      Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+      EOF
 
   - path: /usr/local/bin/setup-nvidia.sh
     permissions: '0755'

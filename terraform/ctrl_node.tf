@@ -42,7 +42,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   on_boot = true
 
   startup {
-    up_delay   = "15"
+    up_delay   = "60"
   }
 
   bios     = "ovmf"  # ✅ Required for q35
