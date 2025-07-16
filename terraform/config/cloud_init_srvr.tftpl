@@ -30,9 +30,6 @@ growpart:
   mode: auto
   devices: ["/"]
 
-mounts:
-  - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
-
 write_files:
   - path: /etc/systemd/system/initial-setup.service
     permissions: '0644'
@@ -297,8 +294,10 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/bin/mount -t nfs ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage
+      ExecStart=/bin/mount -t nfs -o rw,_netdev,hard,intr,noatime,nolock,bg,retry=10 ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage
       RemainAfterExit=true
+      TimeoutSec=60
+      Restart=no
 
       [Install]
       WantedBy=multi-user.target
