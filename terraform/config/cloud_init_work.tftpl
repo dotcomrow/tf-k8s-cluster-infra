@@ -245,13 +245,13 @@ write_files:
       LimitNOFILE=1048576
       EOF
 
-      cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
-      export HTTP_PROXY="http://10.0.0.10:3128"
-      export HTTPS_PROXY="http://10.0.0.10:3128"
-      export NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12,192.168.0.0/16"
-      EOF
+      # cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
+      # export HTTP_PROXY="http://10.0.0.10:3128"
+      # export HTTPS_PROXY="http://10.0.0.10:3128"
+      # export NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12,192.168.0.0/16"
+      # EOF
 
-      sudo chmod +x /etc/profile.d/http_proxy.sh
+      # sudo chmod +x /etc/profile.d/http_proxy.sh
       
       systemctl daemon-reexec
       systemctl daemon-reload
