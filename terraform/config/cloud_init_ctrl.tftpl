@@ -75,6 +75,7 @@ write_files:
       systemctl enable qemu-guest-agent
       systemctl start qemu-guest-agent
       systemctl daemon-reload
+      
   - path: /usr/local/share/ca-certificates/squid-mitm.crt
     owner: root:root
     permissions: '0644'

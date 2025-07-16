@@ -107,6 +107,7 @@ write_files:
 
       systemctl enable post-install.service
       systemctl start post-install.service
+      
   - path: /usr/local/share/ca-certificates/squid-mitm.crt
     owner: root:root
     permissions: '0644'
