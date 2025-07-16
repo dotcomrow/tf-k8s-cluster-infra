@@ -34,6 +34,51 @@ mounts:
   - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
 
 write_files:
+  - path: /etc/systemd/system/initial-setup.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Post-bootstrap setup for Kubernetes node
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=-/etc/environment
+      ExecStart=/usr/local/bin/initial-setup.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/initial-setup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+      export HTTP_PROXY=http://10.0.0.10:3128
+      export HTTPS_PROXY=http://10.0.0.10:3128
+      export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
+
+      update-ca-certificates
+      systemctl daemon-reload
+      /usr/local/bin/performance-tuning.sh
+      sysctl --system
+      update-grub
+      /usr/local/bin/disable-swap.sh
+      /usr/local/bin/setup-hosts-dns.sh
+      /usr/local/bin/setup-nfs-modules.sh
+      systemctl enable setup-hosts-dns.service
+      systemctl start setup-hosts-dns.service
+      systemctl enable --now mount-shared-storage.service
+      /usr/local/bin/setup-docker.sh
+      /usr/local/bin/setup-fluentbit.sh
+      /usr/local/bin/setup-rke2.sh
+      systemctl enable rke2-preload-images.service
+      systemctl start rke2-preload-images.service
+      systemctl enable qemu-guest-agent
+      systemctl start qemu-guest-agent
+      systemctl daemon-reload
   - path: /usr/local/share/ca-certificates/squid-mitm.crt
     owner: root:root
     permissions: '0644'
@@ -804,28 +849,5 @@ write_files:
       LimitNOFILE=1048576
 
 runcmd:
-  - update-ca-certificates
-  - systemctl daemon-reload
-  - /usr/local/bin/performance-tuning.sh
-  - sysctl --system
-  - update-grub
-  - /usr/local/bin/disable-swap.sh
-  - /usr/local/bin/setup-hosts-dns.sh
-  - /usr/local/bin/setup-nfs-modules.sh
-  - /usr/local/bin/performance-tuning.sh
-
-  - systemctl enable setup-hosts-dns.service
-  - systemctl start setup-hosts-dns.service
-
-  - systemctl enable --now mount-shared-storage.service
-  - /usr/local/bin/setup-docker.sh
-  - /usr/local/bin/setup-fluentbit.sh
-  - /usr/local/bin/setup-rke2.sh
-
-  - systemctl enable rke2-preload-images.service
-  - systemctl start rke2-preload-images.service
-
-  - systemctl enable qemu-guest-agent
-  - systemctl start qemu-guest-agent
-  - systemctl daemon-reload
-
+  - systemctl enable initial-setup.service
+  - systemctl start initial-setup.service

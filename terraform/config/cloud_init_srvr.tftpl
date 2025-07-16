@@ -34,6 +34,83 @@ mounts:
   - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
 
 write_files:
+  - path: /etc/systemd/system/initial-setup.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Post-bootstrap setup for Kubernetes node
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=-/etc/environment
+      ExecStart=/usr/local/bin/initial-setup.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/bin/initial-setup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euxo pipefail
+      export HTTP_PROXY=http://10.0.0.10:3128
+      export HTTPS_PROXY=http://10.0.0.10:3128
+      export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
+
+      update-ca-certificates
+      systemctl daemon-reload
+      /usr/local/bin/performance-tuning.sh
+      sysctl --system
+      update-grub
+      systemctl daemon-reload
+
+      systemctl enable set-dhcp-hostname.service
+      systemctl start set-dhcp-hostname.service
+
+      systemctl enable fix-dns-nfs.service
+      systemctl start fix-dns-nfs.service
+      /usr/local/bin/performance-tuning.sh
+
+      /usr/local/bin/setup-nfs-modules.sh
+      systemctl start load-nfs-modules.service
+
+      systemctl enable --now mount-shared-storage.service
+
+      systemctl enable disable-swap.service
+      systemctl start disable-swap.service
+
+      systemctl enable setup-hosts-dns.service
+      systemctl start setup-hosts-dns.service
+
+      systemctl enable configure-logging.service
+      systemctl start configure-logging.service
+
+      systemctl enable setup-runtime.service
+      systemctl start setup-runtime.service
+
+      systemctl enable rke2-preload-images.service
+      systemctl start rke2-preload-images.service
+
+      systemctl enable bootstrap-rke2.service
+      systemctl start bootstrap-rke2.service
+
+      systemctl enable set-nofile-limits.service
+      systemctl start set-nofile-limits.service
+
+      systemctl enable k8s-addons.service
+      systemctl start k8s-addons.service
+
+      systemctl enable install-apisix-rancher.service
+      systemctl start install-apisix-rancher.service
+
+      systemctl enable gpu.service
+      systemctl start gpu.service
+
+      systemctl enable post-install.service
+      systemctl start post-install.service
   - path: /usr/local/share/ca-certificates/squid-mitm.crt
     owner: root:root
     permissions: '0644'
@@ -3569,54 +3646,5 @@ write_files:
       WantedBy=multi-user.target
 
 runcmd:
-  - update-ca-certificates
-  - systemctl daemon-reload
-  - /usr/local/bin/performance-tuning.sh
-  - sysctl --system
-  - update-grub
-  - systemctl daemon-reload
-
-  - systemctl enable set-dhcp-hostname.service
-  - systemctl start set-dhcp-hostname.service
-
-  - systemctl enable fix-dns-nfs.service
-  - systemctl start fix-dns-nfs.service
-  - /usr/local/bin/performance-tuning.sh
-
-  - /usr/local/bin/setup-nfs-modules.sh
-  - systemctl start load-nfs-modules.service
-
-  - systemctl enable --now mount-shared-storage.service
-
-  - systemctl enable disable-swap.service
-  - systemctl start disable-swap.service
-
-  - systemctl enable setup-hosts-dns.service
-  - systemctl start setup-hosts-dns.service
-
-  - systemctl enable configure-logging.service
-  - systemctl start configure-logging.service
-
-  - systemctl enable setup-runtime.service
-  - systemctl start setup-runtime.service
-
-  - systemctl enable rke2-preload-images.service
-  - systemctl start rke2-preload-images.service
-
-  - systemctl enable bootstrap-rke2.service
-  - systemctl start bootstrap-rke2.service
-
-  - systemctl enable set-nofile-limits.service
-  - systemctl start set-nofile-limits.service
-
-  - systemctl enable k8s-addons.service
-  - systemctl start k8s-addons.service
-
-  - systemctl enable install-apisix-rancher.service
-  - systemctl start install-apisix-rancher.service
-
-  - systemctl enable gpu.service
-  - systemctl start gpu.service
-
-  - systemctl enable post-install.service
-  - systemctl start post-install.service
+  - systemctl enable initial-setup.service
+  - systemctl start initial-setup.service
