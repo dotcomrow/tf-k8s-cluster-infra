@@ -797,7 +797,7 @@ write_files:
       LimitNOFILE=1048576
 
 runcmd:
-  - test -x /usr/bin/update-ca-certificates && sudo update-ca-certificates
+  - sudo update-ca-certificates
   - systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
   - sysctl --system
