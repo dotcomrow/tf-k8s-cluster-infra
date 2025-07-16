@@ -1516,6 +1516,12 @@ write_files:
             level: trace
       EOF
 
+      echo "⏳ Waiting for Rancher webhook to be ready..."
+      until sudo kubectl -n cattle-system get endpoints rancher-webhook --kubeconfig=/etc/rancher/rke2/rke2.yaml | grep -q 'ENDPOINTS'; do
+        sleep 60
+      done
+      echo "✅ Rancher webhook is ready"
+
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
         -f /tmp/linkerd-values.yaml \
