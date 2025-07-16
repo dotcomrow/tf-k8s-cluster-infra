@@ -293,7 +293,7 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=mkdir -p /mnt/shared-storage && /bin/mount -t nfs -o rw,_netdev,hard,intr,noatime,nolock,bg,retry=10 ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage
+      ExecStart=/bin/sh -c 'mkdir -p /mnt/shared-storage && /bin/mount -t nfs -o rw,_netdev,hard,intr,noatime,nolock,bg,retry=10 ${proxmox_host_ip}:/mnt/shared-storage /mnt/shared-storage'
       RemainAfterExit=true
       TimeoutSec=60
       Restart=no
