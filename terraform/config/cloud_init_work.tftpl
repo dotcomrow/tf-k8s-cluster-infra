@@ -56,9 +56,9 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
-      export HTTP_PROXY=http://10.0.0.10:3128
-      export HTTPS_PROXY=http://10.0.0.10:3128
-      export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
+      # export HTTP_PROXY=http://10.0.0.10:3128
+      # export HTTPS_PROXY=http://10.0.0.10:3128
+      # export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
 
       CPU_FLAGS="nohz_full=0-59 isolcpus=0-59 rcu_nocbs=0-59"
       sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$CPU_FLAGS\"|" /etc/default/grub
@@ -116,16 +116,16 @@ write_files:
       arTXFRi8rKOZ9JRw7kRuAXWyWzUZVUcYB3Klq5Q/vVXO/29k4V/b0GdzCjhAclLD
       WSJsjdw08g==
       -----END CERTIFICATE-----
-  - path: /etc/cloud/cloud.cfg
-    permissions: '0644'
-    content: |
-      apt_proxy: http://10.0.0.10:3128
-  - path: /etc/environment
-    permissions: '0644'
-    content: |
-      HTTP_PROXY="http://10.0.0.10:3128"
-      HTTPS_PROXY="http://10.0.0.10:3128"
-      NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+  # - path: /etc/cloud/cloud.cfg
+  #   permissions: '0644'
+  #   content: |
+  #     apt_proxy: http://10.0.0.10:3128
+  # - path: /etc/environment
+  #   permissions: '0644'
+  #   content: |
+  #     HTTP_PROXY="http://10.0.0.10:3128"
+  #     HTTPS_PROXY="http://10.0.0.10:3128"
+  #     NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
     content: |
