@@ -3351,7 +3351,7 @@ write_files:
 
             # 3) Mount it both in the PATH and in CMP’s plugin folder
             volumeMounts:
-              - name: argocd-vault-plugin-bin
+              - name: avp-bin
                 mountPath: /usr/local/bin/argocd-vault-plugin
                 subPath: argocd-vault-plugin
               - name: avp-bin
