@@ -38,6 +38,16 @@ mounts:
   - [ "${proxmox_host_ip}:/mnt/shared-storage", "/mnt/shared-storage", "nfs", "defaults,_netdev,nofail,x-systemd.automount,x-systemd.requires=network-online.target,x-systemd.after=network-online.target", "0", "0" ]
 
 write_files:
+  - path: /etc/cloud/cloud.cfg
+    permissions: '0644'
+    content: |
+      apt_proxy: http://10.0.0.10:3128
+  - path: /etc/environment
+    permissions: '0644'
+    content: |
+      HTTP_PROXY="http://10.0.0.10:3128"
+      HTTPS_PROXY="http://10.0.0.10:3128"
+      NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
     content: |
