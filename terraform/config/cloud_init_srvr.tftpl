@@ -3569,7 +3569,7 @@ write_files:
       WantedBy=multi-user.target
 
 runcmd:
-  - sudo update-ca-certificates
+  - update-ca-certificates
   - systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
   - sysctl --system
