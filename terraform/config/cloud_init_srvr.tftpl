@@ -630,8 +630,8 @@ write_files:
 
       [Service]
       Type=oneshot
-      ExecStart=/usr/bin/modprobe nfs
-      ExecStartPost=/usr/bin/modprobe nfsd
+      ExecStart=/usr/bin/env modprobe nfs
+      ExecStart=/usr/bin/env modprobe nfsd
       RemainAfterExit=true
 
       [Install]
