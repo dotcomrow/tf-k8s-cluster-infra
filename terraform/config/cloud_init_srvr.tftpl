@@ -1383,7 +1383,7 @@ write_files:
           echo "✅ Rancher webhook is ready"
           break
         else
-          echo "🔄 Waiting... (Endpoints: ${ENDPOINT_READY:-none}, Pods OK: $POD_STATUS_OK)"
+          echo "🔄 Waiting... (Endpoints: $ENDPOINT_READY, Pods OK: $POD_STATUS_OK)"
           sleep 3
         fi
       done
