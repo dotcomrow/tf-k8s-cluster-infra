@@ -874,8 +874,8 @@ runcmd:
       sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$CPU_FLAGS\"|" /etc/default/grub
       update-grub
       grub-mkconfig -o /boot/grub/grub.cfg || true
-      
-  - test -x /usr/bin/update-ca-certificates && update-ca-certificates
+
+  - test -x /usr/bin/update-ca-certificates && sudo update-ca-certificates
   - systemctl daemon-reload
   - /usr/local/bin/performance-tuning.sh
   - sysctl --system
