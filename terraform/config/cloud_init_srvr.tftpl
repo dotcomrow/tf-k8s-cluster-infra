@@ -107,41 +107,7 @@ write_files:
 
       systemctl enable post-install.service
       systemctl start post-install.service
-      
-  # - path: /usr/local/share/ca-certificates/squid-mitm.crt
-  #   owner: root:root
-  #   permissions: '0644'
-  #   content: |
-  #     -----BEGIN CERTIFICATE-----
-  #     MIIDMzCCAhugAwIBAgIIGKHqvm6WymEwDQYJKoZIhvcNAQELBQAwFjEUMBIGA1UE
-  #     AxMLaW50ZXJuYWwtY2EwHhcNMjUwMTI4MTMxMzI0WhcNMzUwMTI2MTMxMzI0WjAW
-  #     MRQwEgYDVQQDEwtpbnRlcm5hbC1jYTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCC
-  #     AQoCggEBALXLvSYragoYzZ1vPaM/iEqn5q1ZnSzt6ogTZsoODzSdKc+0VGAreEEa
-  #     8OBGU3zkEUGpER+FFq3BY7yUpt9R0AdJqjfXDP2i9zPAkaqigFESfXLON/8B08LL
-  #     qDlLaGFIzbewVvnHVM2Evc01+GJzkUGGeNsb6X5bhtEgwbGATiBgEPSMVwEpobxU
-  #     qrLEa+FcuL9OWRu8CS19gOyltgcHdb4U3ZiWxeagfKFZ8697/GIFo4WecXk3C8vG
-  #     /0b8o15ePwGNJJtyZWGn1QZCfGhkBtyEuO3xfWjGdGP41x/Z+ogOOc+lfqMJGC62
-  #     9tn9gQvw04+xpykTefamEgplZOlAX8ECAwEAAaOBhDCBgTAdBgNVHQ4EFgQUED9I
-  #     8iDIr2u2LLJIEv7zsj1suNkwRQYDVR0jBD4wPIAUED9I8iDIr2u2LLJIEv7zsj1s
-  #     uNmhGqQYMBYxFDASBgNVBAMTC2ludGVybmFsLWNhgggYoeq+bpbKYTAMBgNVHRME
-  #     BTADAQH/MAsGA1UdDwQEAwIBBjANBgkqhkiG9w0BAQsFAAOCAQEAF/hlVKECrRER
-  #     76uXCC4AJKRAxlXJzPGkuXfl3A6N/lRSfWRVQGYaC2Uskqht18y1osFglj6mLbaY
-  #     YJvEWpXNmWcuHm1WM384ePax+psarPoUzehwWC7mu3y323asw71hMEaZh53tHqBE
-  #     9y9QRDqUBSdSA0jsLb34T2vv4wdlrA5fDNhnTGzzlKuPTEAV66Zaq2E22qJt9KiK
-  #     R+wY0E8rJEQ92E280GR6JwsBIPlobCXuC96CV7hwrpeQCwaVbnBbhlTPl/UEmALx
-  #     arTXFRi8rKOZ9JRw7kRuAXWyWzUZVUcYB3Klq5Q/vVXO/29k4V/b0GdzCjhAclLD
-  #     WSJsjdw08g==
-  #     -----END CERTIFICATE-----
-  # - path: /etc/cloud/cloud.cfg
-  #   permissions: '0644'
-  #   content: |
-  #     apt_proxy: http://10.0.0.10:3128
-  # - path: /etc/environment
-  #   permissions: '0644'
-  #   content: |
-  #     HTTP_PROXY="http://10.0.0.10:3128"
-  #     HTTPS_PROXY="http://10.0.0.10:3128"
-  #     NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
+
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
     content: |
