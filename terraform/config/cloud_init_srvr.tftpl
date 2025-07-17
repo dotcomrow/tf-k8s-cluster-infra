@@ -3500,62 +3500,27 @@ write_files:
                       -o /custom/argocd-vault-plugin
                     chmod +x /custom/argocd-vault-plugin
                 volumeMounts:
-                  - name: avp-bin
+                  - name: custom-tools
                     mountPath: /custom
 
-            # 2) Share that binary with the main container
+              # 2) Share it with the repo-server container
             volumes:
-              - name: avp-bin
-                emptyDir: {}
-              - name: cmp-plugins
+              - name: custom-tools
                 emptyDir: {}
 
-            # 3) Mount it both in the PATH and in CMP’s plugin folder
-            volumeMounts:
-              - name: avp-bin
-                mountPath: /usr/local/bin/argocd-vault-plugin
-                subPath: argocd-vault-plugin
-              - name: avp-bin
-                mountPath: /home/argocd/cmp-server/plugins/avp/avp
-                subPath: argocd-vault-plugin
-
-            # 4) Tell argocd-repo-server to hand off manifest generation
-            extraArgs:
-              - --plugin-use-manifest-generate-paths
-              # 1) Define the two shared volumes
-            extraVolumes:
-              - name: avp-bin
-                emptyDir: {}
-              - name: cmp-plugins
-                emptyDir: {}
-
-            # 2) Mount them into the main repo-server container:
-            extraVolumeMounts:
-              # a) put the AVP binary on the repo-server $PATH
-              - name: avp-bin
-                mountPath: /usr/local/bin/argocd-vault-plugin
-                subPath: argocd-vault-plugin
-              # b) give repo-server access to the socket dir
-              - name: cmp-plugins
-                mountPath: /home/argocd/cmp-server/plugins
-
-            extraContainers:
-              - name: avp
-                image: alpine:3.19
-                command:
-                  - /usr/local/bin/argocd-vault-plugin
-                  - serve
-                  - --socket
-                  - /home/argocd/cmp-server/plugins/avp.sock
+            containers:
+              - name: repo-server
+                # 3) Tell ArgoCD to hand off to CMP
+                args:
+                  - /usr/local/bin/argocd-repo-server
+                  - --plugin-use-manifest-generate-paths
                 volumeMounts:
-                  - name: avp-bin
+                  - name: custom-tools
                     mountPath: /usr/local/bin/argocd-vault-plugin
                     subPath: argocd-vault-plugin
-                  - name: cmp-plugins
-                    mountPath: /home/argocd/cmp-server/plugins
 
             # 5) Configure AVP via environment
-            extraEnv:
+            env:
               - name: AVP_AUTH_TYPE
                 value: "k8s"
               - name: AVP_K8S_ROLE
