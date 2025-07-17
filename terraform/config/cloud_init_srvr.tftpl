@@ -1365,11 +1365,11 @@ write_files:
 
       while true; do
         # Check endpoint has at least one IP
-        ENDPOINT_READY=$(kubectl -n "$NAMESPACE" get endpoints "$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)
+        ENDPOINT_READY=$(sudo kubectl -n "$NAMESPACE" get endpoints "$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)
 
         # Check if all pods with app=rancher-webhook are Running and Ready
         POD_STATUS_OK=true
-        PODS=$(kubectl -n "$NAMESPACE" get pods -l app="$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" --no-headers 2>/dev/null)
+        PODS=$(sudo kubectl -n "$NAMESPACE" get pods -l app="$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" --no-headers 2>/dev/null)
         while read -r line; do
           STATUS=$(echo "$line" | awk '{print $3}')
           READY=$(echo "$line" | awk '{print $2}')
