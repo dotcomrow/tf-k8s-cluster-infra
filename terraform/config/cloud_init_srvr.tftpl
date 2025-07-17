@@ -1357,7 +1357,17 @@ write_files:
       value: github
       EOF
 
-      echo "⏳ Waiting for Rancher webhook to become healthy..."
+      echo "⏳ Waiting for Rancher webhook pod to become Ready..."
+      sudo kubectl wait \
+        --for=condition=Ready pod -l app=rancher-webhook \
+        -n cattle-system \
+        --timeout=1800s \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml || {
+          echo "❌ Rancher webhook pod did not become Ready in time"
+          exit 1
+      }
+
+      echo "⏳ Waiting for Rancher webhook endpoint to become healthy..."
 
       while true; do
         if ! sudo kubectl -n cattle-system get endpoints rancher-webhook --kubeconfig=/etc/rancher/rke2/rke2.yaml &>/dev/null; then
@@ -1369,8 +1379,36 @@ write_files:
         else
           echo "🔄 Endpoint exists but has no ready IPs yet..."
         fi
-        sleep 60
+        sleep 10
       done
+
+      echo "🔧 Patching all Rancher webhooks with timeoutSeconds=30..."
+
+      # Extract webhook indices and names using jq
+      mapfile -t WEBHOOKS < <(
+        sudo kubectl get validatingwebhookconfiguration rancher.cattle.io \
+          -o=json \
+          --kubeconfig=/etc/rancher/rke2/rke2.yaml |
+          jq -r '.webhooks | to_entries[] | "[" + (.key|tostring) + "] " + .value.name'
+      )
+
+      # Build JSON patch
+      PATCHES=()
+      for entry in "${WEBHOOKS[@]}"; do
+        index=$(echo "$entry" | grep -oP '^\[\K[0-9]+')
+        name=$(echo "$entry" | cut -d' ' -f2-)
+        echo "  → Patching webhook [$index]: $name"
+        PATCHES+=("{\"op\": \"replace\", \"path\": \"/webhooks/$index/timeoutSeconds\", \"value\": 30}")
+      done
+
+      # Join into a JSON array and apply the patch
+      PATCH_JSON="[$(IFS=,; echo "${PATCHES[*]}")]"
+
+      # Apply the patch
+      sudo kubectl patch validatingwebhookconfiguration rancher.cattle.io \
+        --type=json \
+        -p="$PATCH_JSON" \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace longhorn-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
