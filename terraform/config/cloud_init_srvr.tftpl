@@ -1357,6 +1357,16 @@ write_files:
       value: github
       EOF
 
+      echo "⏳ Waiting for Rancher webhook pod to be created..."
+
+      # Wait until a pod with the correct label appears
+      while ! sudo kubectl get pod -n cattle-system -l app=rancher-webhook --no-headers --kubeconfig=/etc/rancher/rke2/rke2.yaml | grep -q .; do
+        echo "🔄 Pod not found yet..."
+        sleep 60
+      done
+
+      echo "⏳ Pod found. Waiting for Rancher webhook pod to become Ready..."
+
       echo "⏳ Waiting for Rancher webhook pod to become Ready..."
       sudo kubectl wait \
         --for=condition=Ready pod -l app=rancher-webhook \
