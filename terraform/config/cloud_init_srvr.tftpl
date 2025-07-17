@@ -3473,6 +3473,22 @@ write_files:
             # 4) Tell argocd-repo-server to hand off manifest generation
             extraArgs:
               - --plugin-use-manifest-generate-paths
+              # 1) Define the two shared volumes
+            extraVolumes:
+              - name: avp-bin
+                emptyDir: {}
+              - name: cmp-plugins
+                emptyDir: {}
+
+            # 2) Mount them into the main repo-server container:
+            extraVolumeMounts:
+              # a) put the AVP binary on the repo-server $PATH
+              - name: avp-bin
+                mountPath: /usr/local/bin/argocd-vault-plugin
+                subPath: argocd-vault-plugin
+              # b) give repo-server access to the socket dir
+              - name: cmp-plugins
+                mountPath: /home/argocd/cmp-server/plugins
 
             extraContainers:
               - name: avp
