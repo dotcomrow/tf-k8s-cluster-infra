@@ -3455,8 +3455,8 @@ write_files:
             cmp:
               enabled: true
 
-            # 1) Download the AVP binary before repo-server starts
-            initContainers:
+            # 1) Download the AVP binary before the repo-server starts
+            extraInitContainers:
               - name: install-avp
                 image: alpine:3.19
                 command: ["/bin/sh","-c"]
@@ -3470,40 +3470,39 @@ write_files:
                   - name: custom-tools
                     mountPath: /custom
 
-              # 2) Share it with the repo-server container
-            volumes:
+            # 2) Share that binary directory with the main container
+            extraVolumes:
               - name: custom-tools
                 emptyDir: {}
 
-            containers:
-              - name: repo-server
-                # 3) Tell ArgoCD to hand off to CMP
-                args:
-                  - /usr/local/bin/argocd-repo-server
-                  - --plugin-use-manifest-generate-paths
-                volumeMounts:
-                  - name: custom-tools
-                    mountPath: /usr/local/bin/argocd-vault-plugin
-                    subPath: argocd-vault-plugin
+            # 3) Mount the binary into $PATH so ArgoCD can exec it
+            extraVolumeMounts:
+              - name: custom-tools
+                mountPath: /usr/local/bin/argocd-vault-plugin
+                subPath: argocd-vault-plugin
 
-            # 5) Configure AVP via environment
-            env:
+            # 4) Tell repo-server to hand off manifest generation to CMP
+            extraArgs:
+              - --plugin-use-manifest-generate-paths
+
+            # 5) Pass your Vault-plugin config via environment
+            extraEnv:
               - name: AVP_AUTH_TYPE
-                value: "k8s"
+                value: k8s
               - name: AVP_K8S_ROLE
-                value: "argocd"
+                value: argocd
               - name: AVP_K8S_MOUNT_PATH
-                value: "auth/kubernetes"
+                value: auth/kubernetes
               - name: AVP_VAULT_ADDR
-                value: "http://vault.vault.svc.cluster.local:8200"
+                value: http://vault.vault.svc.cluster.local:8200
               - name: VAULT_ADDR
-                value: "http://vault.vault.svc.cluster.local:8200"
+                value: http://vault.vault.svc.cluster.local:8200
               - name: AVP_KV_VERSION
                 value: "2"
               - name: AVP_TYPE
-                value: "vault"
+                value: vault
               - name: AVP_MOUNT_PATH
-                value: "secret"
+                value: secret
                 
           configs:
             params:
