@@ -1357,35 +1357,19 @@ write_files:
       value: github
       EOF
 
-      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-      NAMESPACE="cattle-system"
-      WEBHOOK_NAME="rancher-webhook"
-
       echo "⏳ Waiting for Rancher webhook to become healthy..."
 
       while true; do
-        # Check endpoint has at least one IP
-        ENDPOINT_READY=$(sudo kubectl -n "$NAMESPACE" get endpoints "$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)
-
-        # Check if all pods with app=rancher-webhook are Running and Ready
-        POD_STATUS_OK=true
-        PODS=$(sudo kubectl -n "$NAMESPACE" get pods -l app="$WEBHOOK_NAME" --kubeconfig="$KUBECONFIG" --no-headers 2>/dev/null)
-        while read -r line; do
-          STATUS=$(echo "$line" | awk '{print $3}')
-          READY=$(echo "$line" | awk '{print $2}')
-          if [[ "$STATUS" != "Running" || "$READY" != */1 ]]; then
-            POD_STATUS_OK=false
-            break
-          fi
-        done <<< "$PODS"
-
-        if [[ -n "$ENDPOINT_READY" && "$POD_STATUS_OK" == true ]]; then
+        if ! sudo kubectl -n cattle-system get endpoints rancher-webhook --kubeconfig=/etc/rancher/rke2/rke2.yaml &>/dev/null; then
+          echo "🔄 Endpoint not found yet..."
+        elif sudo kubectl -n cattle-system get endpoints rancher-webhook --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+                -o jsonpath="{.subsets[*].addresses[*].ip}" | grep -qE '([0-9]{1,3}\.){3}[0-9]{1,3}'; then
           echo "✅ Rancher webhook is ready"
           break
         else
-          echo "🔄 Waiting... (Endpoints: $ENDPOINT_READY, Pods OK: $POD_STATUS_OK)"
-          sleep 3
+          echo "🔄 Endpoint exists but has no ready IPs yet..."
         fi
+        sleep 60
       done
 
       sudo kubectl annotate namespace metallb-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
