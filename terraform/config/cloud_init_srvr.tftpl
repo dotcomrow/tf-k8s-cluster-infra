@@ -1,14 +1,6 @@
 #cloud-config
 hostname: ${hostname}
 
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    eth0:
-      dhcp4: true
-      mtu: 9000
-      
 users:
   - name: ubuntu
     sudo:
