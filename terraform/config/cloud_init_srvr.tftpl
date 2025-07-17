@@ -1393,16 +1393,17 @@ write_files:
       )
 
       # Build JSON patch
-      PATCHES=()
-      for entry in "${WEBHOOKS[@]}"; do
+      PATCHES=""
+      SEP=""
+      for entry in "$WEBHOOKS[@]"; do
         index=$(echo "$entry" | grep -oP '^\[\K[0-9]+')
         name=$(echo "$entry" | cut -d' ' -f2-)
         echo "  → Patching webhook [$index]: $name"
-        PATCHES+=("{\"op\": \"replace\", \"path\": \"/webhooks/$index/timeoutSeconds\", \"value\": 30}")
+        PATCHES="$PATCHES$SEP{\"op\": \"replace\", \"path\": \"/webhooks/$index/timeoutSeconds\", \"value\": 30}"
+        SEP=","
       done
 
-      # Join into a JSON array and apply the patch
-      PATCH_JSON="[$(IFS=,; echo "${PATCHES[*]}")]"
+      PATCH_JSON="[$PATCHES]"
 
       # Apply the patch
       sudo kubectl patch validatingwebhookconfiguration rancher.cattle.io \
