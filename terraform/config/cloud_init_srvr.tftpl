@@ -3494,27 +3494,7 @@ write_files:
                   - name: avp-bin
                     mountPath: /custom
 
-            # 2) Share that binary with the main container
-            volumes:
-              - name: avp-bin
-                emptyDir: {}
-              - name: cmp-plugins
-                emptyDir: {}
-
-            # 3) Mount it both in the PATH and in CMP’s plugin folder
-            volumeMounts:
-              - name: avp-bin
-                mountPath: /usr/local/bin/argocd-vault-plugin
-                subPath: argocd-vault-plugin
-              - name: avp-bin
-                mountPath: /home/argocd/cmp-server/plugins/avp/avp
-                subPath: argocd-vault-plugin
-
-            # 4) Tell argocd-repo-server to hand off manifest generation
-            extraArgs:
-              - --plugin-use-manifest-generate-paths
-
-            # share binary, socket-dir, tmp and config
+            # 2) Define all four shared volumes here
             extraVolumes:
               - name: avp-bin
                 emptyDir: {}
@@ -3526,7 +3506,7 @@ write_files:
                 configMap:
                   name: avp-plugin-config
 
-            # mount into repo-server *and* sidecar
+            # 3) Mount those volumes into the repo-server container
             extraVolumeMounts:
               - name: avp-bin
                 mountPath: /custom
@@ -3538,7 +3518,11 @@ write_files:
                 mountPath: /home/argocd/cmp-server/config/plugin.yaml
                 subPath: plugin.yaml
 
-            # spawn the CMP “server” sidecar
+            # 4) Tell repo-server to hand off to CMP
+            extraArgs:
+              - --plugin-use-manifest-generate-paths
+
+            # 5) Spawn the CMP sidecar alongside repo-server
             extraContainers:
               - name: avp-sidecar
                 image: argoproj/argocd:v3.0.1
@@ -3558,7 +3542,7 @@ write_files:
                     mountPath: /home/argocd/cmp-server/config/plugin.yaml
                     subPath: plugin.yaml
 
-            # 5) Configure AVP via environment
+            # 6) And finally pass your Vault config bits in ENV
             extraEnv:
               - name: AVP_AUTH_TYPE
                 value: "k8s"
