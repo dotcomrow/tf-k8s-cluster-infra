@@ -3426,6 +3426,30 @@ write_files:
       stringData:
         dex.github.clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
       ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: avp-plugin-config
+        namespace: argocd
+      data:
+        plugin.yaml: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: ConfigManagementPlugin
+          metadata:
+            name: avp
+          spec:
+            version: v1
+            init:
+              command: ["/bin/sh","-c"]
+              args: ["test -x /custom/argocd-vault-plugin"]
+            generate:
+              command: ["/custom/argocd-vault-plugin"]
+              args: ["generate","./"]
+            discover:
+              fileName: "*.yaml"
+            provideGitCreds: true
+            preserveFileMode: false
+      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
@@ -3490,20 +3514,49 @@ write_files:
             extraArgs:
               - --plugin-use-manifest-generate-paths
 
+            # share binary, socket-dir, tmp and config
+            extraVolumes:
+              - name: avp-bin
+                emptyDir: {}
+              - name: cmp-plugins
+                emptyDir: {}
+              - name: cmp-tmp
+                emptyDir: {}
+              - name: plugin-config
+                configMap:
+                  name: avp-plugin-config
+
+            # mount into repo-server *and* sidecar
+            extraVolumeMounts:
+              - name: avp-bin
+                mountPath: /custom
+              - name: cmp-plugins
+                mountPath: /home/argocd/cmp-server/plugins
+              - name: cmp-tmp
+                mountPath: /tmp
+              - name: plugin-config
+                mountPath: /home/argocd/cmp-server/config/plugin.yaml
+                subPath: plugin.yaml
+
+            # spawn the CMP “server” sidecar
             extraContainers:
-              - name: avp
-                image: alpine:3.19
+              - name: avp-sidecar
+                image: argoproj/argocd:v3.0.1
                 command:
-                  - /usr/local/bin/argocd-vault-plugin
-                  - serve
-                  - --socket
-                  - /home/argocd/cmp-server/plugins/avp.sock
+                  - /var/run/argocd/argocd-cmp-server
+                securityContext:
+                  runAsNonRoot: true
+                  runAsUser: 999
                 volumeMounts:
                   - name: avp-bin
-                    mountPath: /usr/local/bin/argocd-vault-plugin
-                    subPath: argocd-vault-plugin
+                    mountPath: /custom
                   - name: cmp-plugins
                     mountPath: /home/argocd/cmp-server/plugins
+                  - name: cmp-tmp
+                    mountPath: /tmp
+                  - name: plugin-config
+                    mountPath: /home/argocd/cmp-server/config/plugin.yaml
+                    subPath: plugin.yaml
 
             # 5) Configure AVP via environment
             extraEnv:
