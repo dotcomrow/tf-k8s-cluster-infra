@@ -3456,7 +3456,7 @@ write_files:
               enabled: true
 
             # 1) Download the AVP binary before repo-server starts
-            extraInitContainers:
+            initContainers:
               - name: install-avp
                 image: alpine:3.19
                 command: ["/bin/sh","-c"]
@@ -3471,21 +3471,41 @@ write_files:
                     mountPath: /custom
 
             # 2) Share that binary with the main container
-            extraVolumes:
+            volumes:
               - name: avp-bin
                 emptyDir: {}
+              - name: cmp-plugins
+                emptyDir: {}
 
-            # 3) Mount it on the repo-server $PATH so ArgoCD will exec it
-            extraVolumeMounts:
+            # 3) Mount it both in the PATH and in CMP’s plugin folder
+            volumeMounts:
               - name: avp-bin
                 mountPath: /usr/local/bin/argocd-vault-plugin
                 subPath: argocd-vault-plugin
+              - name: avp-bin
+                mountPath: /home/argocd/cmp-server/plugins/avp/avp
+                subPath: argocd-vault-plugin
 
-            # 4) Tell repo-server to hand off manifest generation to CMP
+            # 4) Tell argocd-repo-server to hand off manifest generation
             extraArgs:
               - --plugin-use-manifest-generate-paths
 
-            # 5) Pass your Vault-plugin config via environment
+            extraContainers:
+              - name: avp
+                image: alpine:3.19
+                command:
+                  - /usr/local/bin/argocd-vault-plugin
+                  - serve
+                  - --socket
+                  - /home/argocd/cmp-server/plugins/avp.sock
+                volumeMounts:
+                  - name: avp-bin
+                    mountPath: /usr/local/bin/argocd-vault-plugin
+                    subPath: argocd-vault-plugin
+                  - name: cmp-plugins
+                    mountPath: /home/argocd/cmp-server/plugins
+
+            # 5) Configure AVP via environment
             extraEnv:
               - name: AVP_AUTH_TYPE
                 value: "k8s"
