@@ -3426,30 +3426,6 @@ write_files:
       stringData:
         dex.github.clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
       ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: avp-plugin-config
-        namespace: argocd
-      data:
-        plugin.yaml: |
-          apiVersion: argoproj.io/v1alpha1
-          kind: ConfigManagementPlugin
-          metadata:
-            name: avp
-          spec:
-            version: v1
-            init:
-              command: ["/bin/sh","-c"]
-              args: ["test -x /custom/argocd-vault-plugin"]
-            generate:
-              command: ["/custom/argocd-vault-plugin"]
-              args: ["generate","./"]
-            discover:
-              fileName: "*.yaml"
-            provideGitCreds: true
-            preserveFileMode: false
-      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:
@@ -3474,76 +3450,27 @@ write_files:
               enabled: false
 
           repoServer:
+            image:
+              repository: ghcr.io/dotcomrow/argocd-repo-server-avp
+              tag: 448b62e1ce08d396ab1450f07ecd911f56a731b7
+
             automountServiceAccountToken: true
-            enablePlugins: true
-            cmp:
-              enabled: true
 
-            # 1) Download the AVP binary before repo-server starts
-            initContainers:
-              - name: install-avp
-                image: alpine:3.19
-                command: ["/bin/sh","-c"]
-                args:
-                  - |
-                    apk add --no-cache curl
-                    curl -L https://github.com/argoproj-labs/argocd-vault-plugin/releases/download/v1.15.0/argocd-vault-plugin_1.15.0_linux_amd64 \
-                      -o /custom/argocd-vault-plugin
-                    chmod +x /custom/argocd-vault-plugin
-                volumeMounts:
-                  - name: avp-bin
-                    mountPath: /custom
+            podSecurityContext:
+              fsGroup: 999
 
-            # 2) Define all four shared volumes here
-            extraVolumes:
-              - name: avp-bin
-                emptyDir: {}
-              - name: cmp-plugins
-                emptyDir: {}
-              - name: cmp-tmp
-                emptyDir: {}
-              - name: plugin-config
+            volumes:
+              - name: vault-config
                 configMap:
-                  name: avp-plugin-config
+                  name: avp-vault-config
 
-            # 3) Mount those volumes into the repo-server container
-            extraVolumeMounts:
-              - name: avp-bin
-                mountPath: /custom
-              - name: cmp-plugins
-                mountPath: /home/argocd/cmp-server/plugins
-              - name: cmp-tmp
-                mountPath: /tmp
-              - name: plugin-config
-                mountPath: /home/argocd/cmp-server/config/plugin.yaml
-                subPath: plugin.yaml
+            volumeMounts:
+              - name: vault-config
+                mountPath: /home/argocd/cmp-server/config/vault-config.yaml
+                subPath: vault-config.yaml
 
-            # 4) Tell repo-server to hand off to CMP
-            extraArgs:
-              - --plugin-use-manifest-generate-paths
-
-            # 5) Spawn the CMP sidecar alongside repo-server
-            extraContainers:
-              - name: avp-sidecar
-                image: argoproj/argocd:v3.0.1
-                command:
-                  - /var/run/argocd/argocd-cmp-server
-                securityContext:
-                  runAsNonRoot: true
-                  runAsUser: 999
-                volumeMounts:
-                  - name: avp-bin
-                    mountPath: /custom
-                  - name: cmp-plugins
-                    mountPath: /home/argocd/cmp-server/plugins
-                  - name: cmp-tmp
-                    mountPath: /tmp
-                  - name: plugin-config
-                    mountPath: /home/argocd/cmp-server/config/plugin.yaml
-                    subPath: plugin.yaml
-
-            # 6) And finally pass your Vault config bits in ENV
-            extraEnv:
+            # 6) Vault-plugin ENV configuration
+            env:
               - name: AVP_AUTH_TYPE
                 value: "k8s"
               - name: AVP_K8S_ROLE
@@ -3560,7 +3487,7 @@ write_files:
                 value: "vault"
               - name: AVP_MOUNT_PATH
                 value: "secret"
-                
+
           configs:
             params:
               server.insecure: true
@@ -3579,19 +3506,23 @@ write_files:
                         - name: ${GITHUB_ORG}
               application.namespaces: |
                 - argocd
-                - logging-and-monitoring
               application.namespaceResourceBlacklist: |
                 - group: ""
                   kind: Namespace
               configManagementPlugins: |-
-                - name: avp
-                  init:
-                    command: ["/bin/sh","-c"]
-                    args: ["test -x /usr/local/bin/argocd-vault-plugin"]
+                - name: avp-v1
+                  allowConcurrency: true
+                  discover:
+                    fileName: "*.yaml"
                   generate:
-                    command: ["/usr/local/bin/argocd-vault-plugin"]
-                    args: ["generate","./"]
-                  allowOverrides: true
+                    command:
+                      - /usr/local/bin/argocd-vault-plugin
+                    args:
+                      - generate
+                      - .
+                  provideGitCreds: true
+                  preserveFileMode: false
+
             rbac:
               policy.csv: |
                 p, role:admin, applications, *, *, allow
