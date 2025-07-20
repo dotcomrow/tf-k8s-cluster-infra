@@ -35,24 +35,24 @@ growpart:
   devices: ["/"]
 
 write_files:
-  - path: /etc/systemd/system/post-setup-reboot.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Reboot after initial setup
-      Wants=initial-setup.service
-      After=initial-setup.service \
-            setup-docker.service \
-            setup-nvidia.service \
-            setup-fluentbit.service \
-            setup-rke2.service
+  # - path: /etc/systemd/system/post-setup-reboot.service
+  #   permissions: '0644'
+  #   content: |
+  #     [Unit]
+  #     Description=Reboot after initial setup
+  #     Wants=initial-setup.service
+  #     After=initial-setup.service \
+  #           setup-docker.service \
+  #           setup-nvidia.service \
+  #           setup-fluentbit.service \
+  #           setup-rke2.service
 
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/bin/reboot
+  #     [Service]
+  #     Type=oneshot
+  #     ExecStart=/usr/bin/reboot
 
-      [Install]
-      WantedBy=multi-user.target
+  #     [Install]
+  #     WantedBy=multi-user.target
 
   - path: /etc/systemd/system/initial-setup.service
     permissions: '0644'
@@ -110,8 +110,8 @@ write_files:
       systemctl daemon-reload
       systemctl enable rke2-agent
       systemctl start rke2-agent
-      systemctl enable post-setup-reboot.service
-      systemctl start post-setup-reboot.service
+      # systemctl enable post-setup-reboot.service
+      # systemctl start post-setup-reboot.service
 
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
@@ -535,24 +535,43 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
+      set -e
+
       sudo apt-get install -y linux-headers-$(uname -r)
       ubuntu-drivers autoinstall
       ubuntu-drivers install --gpgpu nvidia:${NVIDIA_DRIVER}-server
       sudo apt-get install -y nvidia-utils-${NVIDIA_DRIVER}-server
       update-initramfs -u
-      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-        sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#" | \
-        tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+      # ─── HOT-RELOAD NVIDIA MODULES (no reboot) ────────────────────────────────────
+      echo "🔄 Unloading existing NVIDIA modules (if any)..."
+      sudo modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia || true
+
+      echo "🔄 Loading updated NVIDIA modules..."
+      sudo modprobe nvidia
+      sudo modprobe nvidia_uvm
+      sudo modprobe nvidia_modeset
+      sudo modprobe nvidia_drm
+
+      echo "✅ NVIDIA modules reloaded.  Verify with: nvidia-smi"
+      # ──────────────────────────────────────────────────────────────────────────────
+
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+        | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+        | sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#" \
+        | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
       wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
-      dpkg -i cuda-keyring_1.1-1_all.deb
+      sudo dpkg -i cuda-keyring_1.1-1_all.deb
       sudo apt-get update -y
       sudo apt-get install -y nvidia-container-toolkit nvidia-docker2
-      systemctl enable nvidia-persistenced
-      systemctl start nvidia-persistenced
-      modprobe nvidia nvidia-uvm nvidia-modeset
+
+      sudo systemctl enable nvidia-persistenced
+      sudo systemctl start  nvidia-persistenced
+
       nvidia-ctk runtime configure --runtime=containerd --set-as-default
-      nvidia-ctk runtime configure --runtime=docker --set-as-default
+      nvidia-ctk runtime configure --runtime=docker     --set-as-default
+
       sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
 
       CONTAINERD_CONFIG="/etc/containerd/config.toml"
@@ -590,8 +609,8 @@ write_files:
 
       echo "✅ Patch complete. Backup saved at $BACKUP_PATH"
 
-      systemctl restart docker
-      systemctl restart containerd
+      sudo systemctl restart docker
+      sudo systemctl restart containerd
 
   - path: /usr/local/bin/setup-rke2.sh
     permissions: '0755'
