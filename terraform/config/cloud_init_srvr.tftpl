@@ -1560,29 +1560,17 @@ write_files:
       cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
       collector:
         enabled: true
-        useOtel: true   
+        useOtel: true
         config:
           receivers:
             otlp:
               protocols:
                 grpc:
                   endpoint: 0.0.0.0:4317
+              # explicitly disable HTTP (even if unused)
+                http: null
             opencensus:
               endpoint: 0.0.0.0:55678
-          processors:
-            batch: {}
-            k8sattributes: {}
-          exporters:
-            jaeger:
-              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
-              tls:
-                insecure: true
-          service:
-            pipelines:
-              traces:
-                receivers: [otlp, opencensus]
-                processors: [batch, k8sattributes]
-                exporters: [jaeger]
       ui:
         tls:
           enabled: false
