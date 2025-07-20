@@ -3459,16 +3459,6 @@ write_files:
             podSecurityContext:
               fsGroup: 999
 
-            volumes:
-              - name: vault-config
-                configMap:
-                  name: avp-vault-config
-
-            volumeMounts:
-              - name: vault-config
-                mountPath: /home/argocd/cmp-server/config/vault-config.yaml
-                subPath: vault-config.yaml
-
             # 6) Vault-plugin ENV configuration
             env:
               - name: AVP_AUTH_TYPE
