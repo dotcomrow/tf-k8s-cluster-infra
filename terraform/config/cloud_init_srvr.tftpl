@@ -1565,7 +1565,8 @@ write_files:
           receivers:
             otlp:
               protocols:
-                grpc: {}
+                grpc:
+                  endpoint: 0.0.0.0:4317
             opencensus:
               endpoint: 0.0.0.0:55678
           processors:
