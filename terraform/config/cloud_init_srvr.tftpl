@@ -1539,8 +1539,8 @@ write_files:
         tracing:
           enabled: true
           collector:
-            otlp:
-              endpoint: "collector.linkerd-jaeger.svc.cluster.local:4317"
+            opencensus:
+              endpoint: collector.linkerd-jaeger.svc.cluster.local:55678
       proxy:
         telemetry:
           spans:
@@ -1563,10 +1563,6 @@ write_files:
         useOtel: true
         config:
           receivers:
-            otlp:
-              protocols:
-                grpc:
-                  endpoint: 0.0.0.0:4317
             opencensus:
               endpoint: 0.0.0.0:55678
           processors:
@@ -1580,7 +1576,7 @@ write_files:
           service:
             pipelines:
               traces:
-                receivers: [otlp, opencensus]
+                receivers: [opencensus]
                 processors: [batch, k8sattributes]
                 exporters: [jaeger]
       ui:
