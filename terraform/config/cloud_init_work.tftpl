@@ -537,24 +537,33 @@ write_files:
       #!/bin/bash
       set -e
 
-      sudo apt-get install -y linux-headers-$(uname -r)
+      sudo apt-get update
+      sudo apt-get install -y \
+          linux-headers-$(uname -r) \
+          linux-modules-extra-$(uname -r) \
+          build-essential \
+          dkms
       ubuntu-drivers autoinstall
       ubuntu-drivers install --gpgpu nvidia:${NVIDIA_DRIVER}-server
-      sudo apt-get install -y nvidia-utils-${NVIDIA_DRIVER}-server
-      update-initramfs -u
+      sudo apt-get install -y \
+        nvidia-utils-${NVIDIA_DRIVER}-server \
+        nvidia-dkms-${NVIDIA_DRIVER}-server \
+        nvidia-modprobe
 
-      # ─── HOT-RELOAD NVIDIA MODULES (no reboot) ────────────────────────────────────
-      echo "🔄 Unloading existing NVIDIA modules (if any)..."
-      sudo modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia || true
+      sudo dkms autoinstall
 
-      echo "🔄 Loading updated NVIDIA modules..."
-      sudo modprobe nvidia
-      sudo modprobe nvidia_uvm
-      sudo modprobe nvidia_modeset
-      sudo modprobe nvidia_drm
+      # 5) Refresh deps and hot-reload the modules in the right order
+      sudo depmod -a
+      for m in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
+        sudo modprobe -r $m 2>/dev/null || true
+        sudo modprobe $m
+      done
+      sudo nvidia-modprobe -u -c=0
 
-      echo "✅ NVIDIA modules reloaded.  Verify with: nvidia-smi"
-      # ──────────────────────────────────────────────────────────────────────────────
+      # 6) Enable and start persistence daemon so the card stays powered
+      sudo systemctl enable --now nvidia-persistenced
+
+      sudo update-initramfs -u
 
       curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
         | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
@@ -571,6 +580,9 @@ write_files:
 
       nvidia-ctk runtime configure --runtime=containerd --set-as-default
       nvidia-ctk runtime configure --runtime=docker     --set-as-default
+
+      # 7. Finally, check:
+      nvidia-smi
 
       sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
 
