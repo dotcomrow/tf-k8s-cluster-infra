@@ -1537,7 +1537,7 @@ write_files:
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379" \
         --set-string global.tracing.enabled=true \
         --set-string proxy.tracing.enabled=true \
-        --set-string proxy.tracing.opencensus.endpoint="collector.linkerd-jaeger.svc.cluster.local:55678" \
+        --set-string proxy.tracing.otlp.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
         --set-string proxy.telemetry.spans.enabled=true \
         --set-string proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
@@ -1552,8 +1552,12 @@ write_files:
         useOtel: true
         config:
           receivers:
-            opencensus:
-              endpoint: 0.0.0.0:55678
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+                http:
+                  endpoint: 0.0.0.0:4318  # optional, safe to keep
           processors:
             batch: {}
             k8sattributes: {}
@@ -1565,7 +1569,7 @@ write_files:
           service:
             pipelines:
               traces:
-                receivers: [opencensus]
+                receivers: [otlp]
                 processors: [batch, k8sattributes]
                 exporters: [jaeger]
       ui:
