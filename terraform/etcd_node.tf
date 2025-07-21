@@ -45,7 +45,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   machine  = "q35"   # ✅ Enables PCIe support
 
   startup {
-    up_delay   = "120"
+    up_delay   = "200"
   }
   
   efi_disk {
