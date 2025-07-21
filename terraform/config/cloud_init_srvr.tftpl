@@ -1535,9 +1535,11 @@ write_files:
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379" \
-        --set proxy.tracing.enabled=true \
-        --set proxy.tracing.collector.endpoint="collector.linkerd-jaeger.svc.cluster.local:55678" \
-        --set proxy.tracing.collector.scheme="opencensus" \
+        --set-string global.tracing.enabled=true \
+        --set-string proxy.tracing.enabled=true \
+        --set-string proxy.tracing.opencensus.endpoint="collector.linkerd-jaeger.svc.cluster.local:55678" \
+        --set-string proxy.telemetry.spans.enabled=true \
+        --set-string proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 4) Wait for Linkerd to come up
