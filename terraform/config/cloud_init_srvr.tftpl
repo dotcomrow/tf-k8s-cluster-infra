@@ -1556,16 +1556,14 @@ write_files:
               protocols:
                 grpc:
                   endpoint: 0.0.0.0:4317
-                http:
-                  endpoint: 0.0.0.0:4318 
-          processors:
-            batch: {}
-            k8sattributes: {}
           exporters:
             jaeger:
               endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
               tls:
                 insecure: true
+          processors:
+            batch: {}
+            k8sattributes: {}
           service:
             pipelines:
               traces:
