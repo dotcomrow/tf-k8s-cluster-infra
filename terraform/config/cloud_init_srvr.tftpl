@@ -1537,6 +1537,7 @@ write_files:
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379" \
         --set global.tracing.enabled=true \
         --set global.tracing.collector.opencensus.endpoint="collector.linkerd-jaeger.svc.cluster.local:55678" \
+        --set global.tracing.collector.otlp.endpoint="" \
         --set proxy.telemetry.spans.enabled=true \
         --set proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
