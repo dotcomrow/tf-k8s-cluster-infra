@@ -7,61 +7,23 @@ locals {
   }
 }
 
-resource "google_pubsub_topic" "eventarc_trigger_topic" {
-  for_each = local.secret_event_methods
-
-  name    = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-topic"
-  project = google_project.infra.project_id
-}
-
-resource "google_logging_project_sink" "eventarc_sink" {
-  for_each = local.secret_event_methods
-
-  name        = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-sink"
-  project     = google_project.infra.project_id
-  destination = "pubsub.googleapis.com/${google_pubsub_topic.eventarc_trigger_topic[each.key].id}"
-
-  filter = <<EOT
-resource.type="audited_resource"
-protoPayload.serviceName="secretmanager.googleapis.com"
-protoPayload.methodName="${each.value}"
-EOT
-
-  unique_writer_identity = true
-
-  depends_on = [google_eventarc_trigger.vault_secret_events]
-}
-
-resource "google_pubsub_topic_iam_member" "eventarc_sink_publisher" {
-  for_each = google_logging_project_sink.eventarc_sink
-
-  project = google_project.infra.project_id
-  topic   = google_pubsub_topic.eventarc_trigger_topic[each.key].name
-
-  role   = "roles/pubsub.publisher"
-  member = google_logging_project_sink.eventarc_sink[each.key].writer_identity
-}
-
+# Enable audit logging for Secret Manager
 resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
   project = google_project.infra.project_id
   service = "secretmanager.googleapis.com"
 
   audit_log_config {
-    log_type          = "ADMIN_READ"
-    exempted_members = []
+    log_type = "ADMIN_READ"
   }
-
   audit_log_config {
-    log_type          = "DATA_READ"
-    exempted_members = []
+    log_type = "DATA_READ"
   }
-
   audit_log_config {
-    log_type          = "DATA_WRITE"
-    exempted_members = []
+    log_type = "DATA_WRITE"
   }
 }
 
+# Eventarc triggers per Secret Manager method
 resource "google_eventarc_trigger" "vault_secret_events" {
   for_each = local.secret_event_methods
 
@@ -93,18 +55,20 @@ resource "google_eventarc_trigger" "vault_secret_events" {
 
   service_account = google_service_account.eventarc_service_account.email
 
-  transport {
-    pubsub {
-      topic = google_pubsub_topic.eventarc_trigger_topic[each.key].id
-    }
-  }
-
   depends_on = [
     google_project_service.project_service,
     google_cloud_run_v2_service.vault_sync_svc
   ]
 }
 
+# Service Account for Eventarc triggers
+resource "google_service_account" "eventarc_service_account" {
+  account_id   = "eventarc-vault-sync"
+  display_name = "Eventarc Trigger for Vault Sync"
+  project      = google_project.infra.project_id
+}
+
+# Allow Eventarc to invoke Cloud Run
 resource "google_cloud_run_service_iam_member" "allow_eventarc" {
   project  = google_project.infra.project_id
   location = var.region
@@ -113,32 +77,57 @@ resource "google_cloud_run_service_iam_member" "allow_eventarc" {
   member   = "serviceAccount:${google_service_account.eventarc_service_account.email}"
 }
 
-resource "google_service_account" "eventarc_service_account" {
-  account_id   = "eventarc-vault-sync"
-  display_name = "Eventarc Trigger for Vault Sync"
-  project      = google_project.infra.project_id
-}
-
-resource "google_project_iam_member" "eventarc_invoker" {
-  project = google_project.infra.project_id
-  role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_cloud_run_v2_service.vault_sync_svc.template[0].service_account}"
-}
-
-resource "google_project_iam_member" "pubsub_subscriber" {
-  project = google_project.infra.project_id
-  role    = "roles/pubsub.subscriber"
-  member  = "serviceAccount:${google_cloud_run_v2_service.vault_sync_svc.template[0].service_account}"
-}
-
+# Grant Eventarc access to receive audit logs
 resource "google_project_iam_member" "eventarc_receive_auditlog" {
   project = google_project.infra.project_id
   role    = "roles/eventarc.eventReceiver"
   member  = "serviceAccount:${google_service_account.eventarc_service_account.email}"
 }
 
+# Grant Eventarc access to read secrets (if needed inside Cloud Run)
 resource "google_project_iam_member" "cloud_run_secret_access" {
   project = google_project.infra.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${google_service_account.eventarc_service_account.email}"
+}
+
+# Optional: Allow your Cloud Run service account to receive triggers
+resource "google_project_iam_member" "eventarc_invoker" {
+  project = google_project.infra.project_id
+  role    = "roles/eventarc.eventReceiver"
+  member  = "serviceAccount:${google_cloud_run_v2_service.vault_sync_svc.template[0].service_account}"
+}
+
+# Optional: Monitoring logs via custom Pub/Sub topic + sink
+resource "google_pubsub_topic" "eventarc_trigger_topic" {
+  for_each = local.secret_event_methods
+
+  name    = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-topic"
+  project = google_project.infra.project_id
+}
+
+resource "google_logging_project_sink" "eventarc_sink" {
+  for_each = local.secret_event_methods
+
+  name        = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-sink"
+  project     = google_project.infra.project_id
+  destination = "pubsub.googleapis.com/${google_pubsub_topic.eventarc_trigger_topic[each.key].id}"
+
+  filter = <<EOT
+resource.type="audited_resource"
+protoPayload.serviceName="secretmanager.googleapis.com"
+protoPayload.methodName="${each.value}"
+EOT
+
+  unique_writer_identity = true
+}
+
+resource "google_pubsub_topic_iam_member" "eventarc_sink_publisher" {
+  for_each = google_logging_project_sink.eventarc_sink
+
+  project = google_project.infra.project_id
+  topic   = google_pubsub_topic.eventarc_trigger_topic[each.key].name
+
+  role   = "roles/pubsub.publisher"
+  member = google_logging_project_sink.eventarc_sink[each.key].writer_identity
 }
