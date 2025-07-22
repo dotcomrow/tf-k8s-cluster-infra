@@ -12,7 +12,12 @@ resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
   service = "secretmanager.googleapis.com"
 
   audit_log_config {
-    log_type          = "DATA_WRITE"
+    log_type          = "ADMIN_READ"
+    exempted_members = []
+  }
+
+  audit_log_config {
+    log_type          = "ADMIN_WRITE"
     exempted_members = []
   }
 
@@ -22,7 +27,7 @@ resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
   }
 
   audit_log_config {
-    log_type          = "ADMIN_READ"
+    log_type          = "DATA_WRITE"
     exempted_members = []
   }
 }
