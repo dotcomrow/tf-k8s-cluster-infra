@@ -49,11 +49,6 @@ resource "google_eventarc_trigger" "vault_secret_events" {
     value     = each.value
   }
 
-  matching_criteria {
-    attribute = "resourceType"
-    value     = "secretmanager.googleapis.com/Secret"
-  }
-
   destination {
     cloud_run_service {
       service = google_cloud_run_v2_service.vault_sync_svc.name

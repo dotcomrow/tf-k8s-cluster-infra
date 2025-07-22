@@ -1,6 +1,6 @@
+# 1. External data source fetches latest tag
 data "external" "ghcr_tag" {
   program = ["bash", "-c", <<-EOT
-    #!/usr/bin/env bash
     set -e
     TAG=$(curl -s \
       -H "Authorization: Bearer ${var.GHCR_PAT}" \
@@ -12,8 +12,15 @@ data "external" "ghcr_tag" {
   ]
 }
 
+# 2. Null resource tracks last synced tag and only runs when tag changes
+resource "null_resource" "vault_sync_tag_tracker" {
+  triggers = {
+    tag = data.external.ghcr_tag.result.tag
+  }
+}
+
 locals {
-  image_tag = data.external.ghcr_tag.result.tag
+  image_tag = null_resource.vault_sync_tag_tracker.triggers.tag
 }
 
 resource "google_project_service" "project_service" {
@@ -193,14 +200,16 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     EOT
   }
 
+  depends_on = [
+    google_artifact_registry_repository.vault_sync_repo,
+    null_resource.vault_sync_tag_tracker
+  ]
+  triggers = {
+    tag = null_resource.vault_sync_tag_tracker.triggers.tag
+  }
+
   lifecycle {
     create_before_destroy = true
   }
-
-  depends_on = [
-    google_artifact_registry_repository.vault_sync_repo,
-    null_resource.image_sync_complete,
-    data.external.ghcr_tag
-  ]
 }
 
