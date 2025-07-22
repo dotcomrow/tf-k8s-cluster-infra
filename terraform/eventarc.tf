@@ -7,10 +7,30 @@ locals {
   }
 }
 
+resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
+  project = google_project.infra.project_id
+  service = "secretmanager.googleapis.com"
+
+  audit_log_config {
+    log_type          = "DATA_WRITE"
+    exempted_members = []
+  }
+
+  audit_log_config {
+    log_type          = "DATA_READ"
+    exempted_members = []
+  }
+
+  audit_log_config {
+    log_type          = "ADMIN_READ"
+    exempted_members = []
+  }
+}
+
 resource "google_eventarc_trigger" "vault_secret_events" {
   for_each = local.secret_event_methods
 
-  name = "vault-${replace(each.key, "_", "-")}-trigger"
+  name     = "vault-${replace(each.key, "_", "-")}-trigger"
   location = var.region
   project  = google_project.infra.project_id
 
@@ -29,6 +49,11 @@ resource "google_eventarc_trigger" "vault_secret_events" {
     value     = each.value
   }
 
+  matching_criteria {
+    attribute = "resourceType"
+    value     = "secretmanager.googleapis.com/Secret"
+  }
+
   destination {
     cloud_run_service {
       service = google_cloud_run_v2_service.vault_sync_svc.name
@@ -42,6 +67,14 @@ resource "google_eventarc_trigger" "vault_secret_events" {
     google_project_service.project_service,
     google_cloud_run_v2_service.vault_sync_svc
   ]
+}
+
+resource "google_cloud_run_service_iam_member" "allow_eventarc" {
+  project  = google_project.infra.project_id
+  location = var.region
+  service  = google_cloud_run_v2_service.vault_sync_svc.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.eventarc_service_account.email}"
 }
 
 resource "google_service_account" "eventarc_service_account" {
