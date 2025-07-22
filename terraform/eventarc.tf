@@ -17,11 +17,6 @@ resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
   }
 
   audit_log_config {
-    log_type          = "ADMIN_WRITE"
-    exempted_members = []
-  }
-
-  audit_log_config {
     log_type          = "DATA_READ"
     exempted_members = []
   }
