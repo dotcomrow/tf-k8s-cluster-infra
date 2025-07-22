@@ -7,6 +7,41 @@ locals {
   }
 }
 
+resource "google_pubsub_topic" "eventarc_trigger_topic" {
+  for_each = local.secret_event_methods
+
+  name    = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-topic"
+  project = google_project.infra.project_id
+}
+
+resource "google_logging_project_sink" "eventarc_sink" {
+  for_each = local.secret_event_methods
+
+  name        = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-sink"
+  project     = google_project.infra.project_id
+  destination = "pubsub.googleapis.com/${google_pubsub_topic.eventarc_trigger_topic[each.key].id}"
+
+  filter = <<EOT
+resource.type="audited_resource"
+protoPayload.serviceName="secretmanager.googleapis.com"
+protoPayload.methodName="${each.value}"
+EOT
+
+  unique_writer_identity = true
+
+  depends_on = [google_eventarc_trigger.vault_secret_events]
+}
+
+resource "google_pubsub_topic_iam_member" "eventarc_sink_publisher" {
+  for_each = google_logging_project_sink.eventarc_sink
+
+  project = google_project.infra.project_id
+  topic   = google_pubsub_topic.eventarc_trigger_topic[each.key].name
+
+  role   = "roles/pubsub.publisher"
+  member = google_logging_project_sink.eventarc_sink[each.key].writer_identity
+}
+
 resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
   project = google_project.infra.project_id
   service = "secretmanager.googleapis.com"
@@ -57,6 +92,12 @@ resource "google_eventarc_trigger" "vault_secret_events" {
   }
 
   service_account = google_service_account.eventarc_service_account.email
+
+  transport {
+    pubsub {
+      topic = google_pubsub_topic.eventarc_trigger_topic[each.key].id
+    }
+  }
 
   depends_on = [
     google_project_service.project_service,
