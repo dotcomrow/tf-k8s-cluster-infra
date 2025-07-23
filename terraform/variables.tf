@@ -274,18 +274,6 @@ variable "VAULT_ADDRESS" {
   nullable = false
 }
 
-variable "VAULT_ROLE_ID" {
-  description = "Vault role id"
-  type        = string
-  default     = "value"
-}
-
-variable "VAULT_SECRET_ID" {
-  description = "Vault secret id"
-  type        = string
-  default     = "value"
-}
-
 variable "apis" {
   description = "The list of apis to enable"  
   type        = list(string)

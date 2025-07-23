@@ -78,16 +78,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
         name  = "VAULT_ADDR"
         value = var.VAULT_ADDRESS
       }
-
-      env {
-        name  = "VAULT_ROLE_ID"
-        value = var.VAULT_ROLE_ID
-      }
-
-      env {
-        name  = "VAULT_SECRET_ID"
-        value = var.VAULT_SECRET_ID
-      }
     }
   }
 
