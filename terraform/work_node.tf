@@ -8,6 +8,17 @@ variable "work_cpu_sockets" {
   default = 2
 }
 
+resource "random_integer" "delay_seconds_work" {
+  min = 121
+  max = 240
+}
+
+resource "null_resource" "delay_before_vm_work" {
+  provisioner "local-exec" {
+    command = "echo Sleeping for ${random_integer.delay_seconds.result} seconds... && sleep ${random_integer.delay_seconds.result}"
+  }
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "work_cloud_init_config" {
   content_type = "snippets"
@@ -41,10 +52,6 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   node_name = var.node_name
   stop_on_destroy = false
   on_boot = true
-
-  startup {
-    up_delay   = "240"
-  }
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
@@ -129,5 +136,8 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     user_data_file_id = proxmox_virtual_environment_file.work_cloud_init_config.id
   }
 
-  depends_on = [ proxmox_virtual_environment_vm.srvr_rancher_vm ]
+  depends_on = [ 
+    proxmox_virtual_environment_vm.srvr_rancher_vm,
+    delay_before_vm_work
+  ]
 }

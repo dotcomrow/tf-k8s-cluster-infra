@@ -43,10 +43,6 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-
-  startup {
-    up_delay   = "200"
-  }
   
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
@@ -113,5 +109,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     user_data_file_id = proxmox_virtual_environment_file.etcd_cloud_init_config.id
   }
 
-  depends_on = [ proxmox_virtual_environment_vm.srvr_rancher_vm ]
+  depends_on = [ 
+    proxmox_virtual_environment_vm.srvr_rancher_vm
+  ]
 }
