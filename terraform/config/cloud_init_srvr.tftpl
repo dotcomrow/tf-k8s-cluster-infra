@@ -3303,7 +3303,7 @@ write_files:
                     image: hashicorp/vault:1.15.4  # or your version
                     command: ["/bin/sh", "-c"]
                     args:
-                      - cp /usr/bin/vault /vault-bin/vault && chmod +x /vault-bin/vault
+                      - cp /bin/vault /vault-bin/vault && chmod +x /vault-bin/vault
                     volumeMounts:
                       - name: vault-bin
                         mountPath: /vault-bin
