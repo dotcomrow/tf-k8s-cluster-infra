@@ -3145,6 +3145,9 @@ write_files:
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
           echo >> /vault/creds-data/secret_id.txt
 
+          jq -r '.root_token' /vault/data/init.json > /vault/creds-data/root_token.txt
+          echo >> /vault/creds-data/root_token.txt
+
           # GCP identifiers
           cat /config/gcp-project-id/PROJECT_ID > /vault/creds-data/project_id.txt
           cat /config/gcp-project-region/PROJECT_REGION > /vault/creds-data/region.txt
