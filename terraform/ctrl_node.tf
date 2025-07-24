@@ -11,11 +11,20 @@ variable "ctrl_cpu_sockets" {
 resource "random_integer" "delay_seconds_ctrl" {
   min = 120
   max = 180
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "null_resource" "delay_before_vm_ctrl" {
   provisioner "local-exec" {
     command = "echo Sleeping for ${random_integer.delay_seconds_ctrl.result} seconds... && sleep ${random_integer.delay_seconds_ctrl.result}"
+  }
+
+  triggers = {
+    always_run = timestamp()
+    delay_val  = random_integer.delay_seconds_ctrl.result
   }
 }
 
