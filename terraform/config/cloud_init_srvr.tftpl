@@ -3329,8 +3329,6 @@ write_files:
 
                         echo "🔐 Configuring Vault DB secrets engine..."
 
-                        VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=yugabyte-db database
-
                         VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/config/yugabyte \
                           plugin_name=postgresql-database-plugin \
                           allowed_roles="readonly,readwrite,admin" \
