@@ -3262,9 +3262,17 @@ write_files:
 
           # Wait for Yugabyte to be reachable
           echo "⏳ Waiting for YugabyteDB to be reachable on port 5433..."
-          until nc -z yb-tserver-service.yugabyte.svc.cluster.local 5433; do
-            sleep 300
+          while ! getent hosts yb-tserver-service.yugabyte.svc.cluster.local >/dev/null; do
+            echo "🔄 Waiting for DNS to resolve yb-tserver-service..."
+            sleep 60
           done
+
+          # Once DNS resolves, check port
+          until nc -z yb-tserver-service.yugabyte.svc.cluster.local 5433; do
+            echo "🔄 Waiting for YugabyteDB to accept connections..."
+            sleep 15
+          done
+          sleep 30 # Allow some time for YugabyteDB to stabilize
 
           echo "✅ YugabyteDB is available. Proceeding with Vault DB secrets engine setup..."
 
@@ -3276,7 +3284,7 @@ write_files:
           kind: Job
           metadata:
             name: create-vaultadmin-user
-            namespace: yugabyte
+            namespace: vault
           spec:
             backoffLimit: 1
             template:
@@ -3311,7 +3319,7 @@ write_files:
                         cp /vault-bin/vault /usr/bin/vault && chmod +x /usr/bin/vault
                         
                         echo "📌 Creating 'vaultadmin' role in Yugabyte..."
-                        STRONG_PWD=\$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 24)
+                        STRONG_PWD=\$(head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 24)
                         echo "Generating Yugabyte Vault admin account password as \$STRONG_PWD"
 
                         ysqlsh -h yb-tserver-service.yugabyte.svc.cluster.local -p 5433 -U yugabyte -d yugabyte <<EOF
