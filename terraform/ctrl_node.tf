@@ -9,8 +9,8 @@ variable "ctrl_cpu_sockets" {
 }
 
 resource "random_integer" "delay_seconds_ctrl" {
-  min = 60
-  max = 120
+  min = 120
+  max = 180
 }
 
 resource "null_resource" "delay_before_vm_ctrl" {

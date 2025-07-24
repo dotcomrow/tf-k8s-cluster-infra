@@ -9,7 +9,7 @@ variable "work_cpu_sockets" {
 }
 
 resource "random_integer" "delay_seconds_work" {
-  min = 121
+  min = 181
   max = 240
 }
 
