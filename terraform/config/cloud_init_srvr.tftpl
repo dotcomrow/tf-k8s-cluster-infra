@@ -3323,8 +3323,8 @@ write_files:
                         cp /vault-bin/vault /usr/bin/vault && chmod +x /usr/bin/vault
                         
                         echo "📌 Creating 'vaultadmin' role in Yugabyte..."
-                        STRONG_PWD=\$(head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 24)
-                        echo "Generating Yugabyte Vault admin account password as \$STRONG_PWD"
+                        STRONG_PWD="$(head -c 64 /dev/urandom | tr -dc 'A-Za-z0-9' | head -c 24)"
+                        echo "Generating Yugabyte Vault admin account password as $STRONG_PWD"
 
                         ysqlsh -h yb-tserver-service.yugabyte.svc.cluster.local -p 5433 -U yugabyte -d yugabyte <<EOF
                         CREATE ROLE vaultadmin WITH LOGIN PASSWORD '\$STRONG_PWD';
@@ -3333,20 +3333,20 @@ write_files:
 
                         echo "🔐 Configuring Vault DB secrets engine..."
 
-                        VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/config/yugabyte \
+                        VAULT_TOKEN="$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/config/yugabyte \
                           plugin_name=postgresql-database-plugin \
                           allowed_roles="readonly,readwrite,admin" \
                           connection_url="postgresql://{{username}}:{{password}}@yb-tserver-service.yugabyte.svc.cluster.local:5433/yugabyte?sslmode=disable" \
                           username="vaultadmin" \
-                          password="\$STRONG_PWD"
+                          password="$STRONG_PWD"
 
-                        VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/roles/readonly \
+                        VAULT_TOKEN="$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/roles/readonly \
                           db_name=yugabyte \
                           creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT CONNECT ON DATABASE yugabyte TO \"{{name}}\"; GRANT USAGE ON SCHEMA public TO \"{{name}}\"; GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
                           default_ttl="1h" \
                           max_ttl="24h"
 
-                        VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/roles/readwrite \
+                        VAULT_TOKEN="$(jq -r '.root_token' /vault/data/init.json)" vault write yugabyte-db/roles/readwrite \
                           db_name=yugabyte \
                           creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}'; GRANT CONNECT ON DATABASE yugabyte TO \"{{name}}\"; GRANT USAGE ON SCHEMA public TO \"{{name}}\"; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"{{name}}\";" \
                           default_ttl="1h" \
