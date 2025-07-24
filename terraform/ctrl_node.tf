@@ -15,6 +15,8 @@ resource "random_integer" "delay_seconds_ctrl" {
   lifecycle {
     create_before_destroy = true
   }
+
+  depends_on = [proxmox_virtual_environment_vm.srvr_rancher_vm]
 }
 
 resource "null_resource" "delay_before_vm_ctrl" {
