@@ -15,7 +15,7 @@ resource "random_integer" "delay_seconds_work" {
 
 resource "null_resource" "delay_before_vm_work" {
   provisioner "local-exec" {
-    command = "echo Sleeping for ${random_integer.delay_seconds.result} seconds... && sleep ${random_integer.delay_seconds.result}"
+    command = "echo Sleeping for ${random_integer.delay_seconds_work.result} seconds... && sleep ${random_integer.delay_seconds_work.result}"
   }
 }
 
@@ -138,6 +138,6 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
 
   depends_on = [ 
     proxmox_virtual_environment_vm.srvr_rancher_vm,
-    delay_before_vm_work
+    null_resource.delay_before_vm_work
   ]
 }
