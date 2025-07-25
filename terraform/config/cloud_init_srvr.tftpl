@@ -3399,6 +3399,15 @@ write_files:
           name: default  # or a dedicated SA your Vault pod uses
           namespace: vault
       ---
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: rancher-delegated
+        namespace: vault
+      spec:
+        ca:
+          secretName: tls-rancher 
+      ---
       # Certificate for Vault Agent Injector webhook
       apiVersion: cert-manager.io/v1
       kind: Certificate
@@ -3407,9 +3416,9 @@ write_files:
         namespace: vault
       spec:
         secretName: vault-agent-injector-tls
-        issuerRef:
-          name: rancher
-          kind: ClusterIssuer
+      issuerRef:
+        name: rancher-delegated
+        kind: Issuer
         commonName: vault-agent-injector.vault.svc
         dnsNames:
           - vault-agent-injector.vault.svc
