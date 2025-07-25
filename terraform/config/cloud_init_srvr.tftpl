@@ -2695,13 +2695,7 @@ write_files:
         archiveOnDelete: "true"
       reclaimPolicy: Retain
       volumeBindingMode: Immediate
-      EOF
-      # End NFS install
-
-      VAULT_OIDC_SECRET=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)
-
-      # installing vault
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      ---
       # Vault namespace
       apiVersion: v1
       kind: Namespace
@@ -2712,7 +2706,17 @@ write_files:
         annotations:
           field.cattle.io/projectId: local:infrastructure
           scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
-      ---
+      EOF
+      # End NFS install
+
+      VAULT_OIDC_SECRET=$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)
+
+      sudo kubectl get secret tls-rancher --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system -o yaml | \
+        sed 's/namespace: cattle-system/namespace: vault/' | \
+        sudo kubectl apply --kubeconfig=/etc/rancher/rke2/rke2.yaml -f -
+
+      # installing vault
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Secret
       metadata:
@@ -3416,9 +3420,9 @@ write_files:
         namespace: vault
       spec:
         secretName: vault-agent-injector-tls
-      issuerRef:
-        name: rancher-delegated
-        kind: Issuer
+        issuerRef:
+          name: rancher-delegated
+          kind: Issuer
         commonName: vault-agent-injector.vault.svc
         dnsNames:
           - vault-agent-injector.vault.svc
