@@ -3409,7 +3409,7 @@ write_files:
         secretName: vault-agent-injector-tls
         issuerRef:
           name: rancher
-          kind: Issuer
+          kind: ClusterIssuer
         commonName: vault-agent-injector.vault.svc
         dnsNames:
           - vault-agent-injector.vault.svc
