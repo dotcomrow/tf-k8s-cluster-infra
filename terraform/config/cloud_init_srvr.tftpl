@@ -3398,6 +3398,105 @@ write_files:
         - kind: ServiceAccount
           name: default  # or a dedicated SA your Vault pod uses
           namespace: vault
+      ---
+      # Certificate for Vault Agent Injector webhook
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: vault-agent-injector-tls
+        namespace: vault
+      spec:
+        secretName: vault-agent-injector-tls
+        issuerRef:
+          name: rancher
+          kind: Issuer
+          namespace: cattle-system
+        commonName: vault-agent-injector.vault.svc
+        dnsNames:
+          - vault-agent-injector.vault.svc
+          - vault-agent-injector.vault.svc.cluster.local
+        usages:
+          - digital signature
+          - key encipherment
+          - server auth
+      ---
+      # Vault Agent Injector Deployment
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: vault-agent-injector
+        namespace: vault
+        labels:
+          app: vault-agent-injector
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: vault-agent-injector
+        template:
+          metadata:
+            labels:
+              app: vault-agent-injector
+          spec:
+            containers:
+              - name: injector
+                image: hashicorp/vault-k8s:1.3.0
+                args:
+                  - "injector"
+                  - "-log-level=info"
+                volumeMounts:
+                  - name: tls
+                    mountPath: /tls
+                    readOnly: true
+                env:
+                  - name: VAULT_INJECTOR_TLS_CERT_FILE
+                    value: "/tls/tls.crt"
+                  - name: VAULT_INJECTOR_TLS_KEY_FILE
+                    value: "/tls/tls.key"
+            volumes:
+              - name: tls
+                secret:
+                  secretName: vault-agent-injector-tls
+      ---
+      # Vault Agent Injector Service
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: vault-agent-injector
+        namespace: vault
+      spec:
+        selector:
+          app: vault-agent-injector
+        ports:
+          - name: https
+            port: 443
+            targetPort: 8080
+      ---
+      # Mutating Webhook Configuration for Vault Agent Injector
+      apiVersion: admissionregistration.k8s.io/v1
+      kind: MutatingWebhookConfiguration
+      metadata:
+        name: vault-agent-injector-cfg
+        labels:
+          app: vault-agent-injector
+      webhooks:
+        - name: vault.hashicorp.com
+          sideEffects: None
+          admissionReviewVersions: ["v1"]
+          clientConfig:
+            service:
+              name: vault-agent-injector
+              namespace: vault
+              path: "/mutate"
+              port: 443
+            caBundle: ""  # Populated automatically by cert-manager
+          rules:
+            - operations: ["CREATE"]
+              apiGroups: [""]
+              apiVersions: ["v1"]
+              resources: ["pods"]
+          failurePolicy: Ignore
+          namespaceSelector: {}
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
