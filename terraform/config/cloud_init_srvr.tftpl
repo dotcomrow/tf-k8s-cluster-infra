@@ -3454,7 +3454,9 @@ write_files:
                 args:
                   - "agent-inject"
                   - "-log-level=info"
-                  - "--config=/etc/vault/config/config.hcl"
+                  - "-vault-address=http://vault.vault.svc.cluster.local:8200"
+                  - "-tls-cert-file=/tls/tls.crt"
+                  - "-tls-key-file=/tls/tls.key"
                 volumeMounts:
                   - name: config
                     mountPath: /etc/vault/config
