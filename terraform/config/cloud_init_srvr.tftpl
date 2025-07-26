@@ -3450,6 +3450,7 @@ write_files:
             labels:
               app: vault-agent-injector
           spec:
+            serviceAccountName: vault-agent-injector
             containers:
               - name: injector
                 image: hashicorp/vault-k8s:1.3.0
@@ -3465,6 +3466,8 @@ write_files:
                     value: "/tls/tls.crt"
                   - name: VAULT_INJECTOR_TLS_KEY_FILE
                     value: "/tls/tls.key"
+                  - name: VAULT_ADDR
+                    value: "http://vault.vault.svc.cluster.local:8200"
             volumes:
               - name: tls
                 secret:
