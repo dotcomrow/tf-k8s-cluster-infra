@@ -35,25 +35,6 @@ growpart:
   devices: ["/"]
 
 write_files:
-  # - path: /etc/systemd/system/post-setup-reboot.service
-  #   permissions: '0644'
-  #   content: |
-  #     [Unit]
-  #     Description=Reboot after initial setup
-  #     Wants=initial-setup.service
-  #     After=initial-setup.service \
-  #           setup-docker.service \
-  #           setup-nvidia.service \
-  #           setup-fluentbit.service \
-  #           setup-rke2.service
-
-  #     [Service]
-  #     Type=oneshot
-  #     ExecStart=/usr/bin/reboot
-
-  #     [Install]
-  #     WantedBy=multi-user.target
-
   - path: /etc/systemd/system/initial-setup.service
     permissions: '0644'
     content: |
