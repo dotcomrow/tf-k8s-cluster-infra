@@ -25,6 +25,7 @@ packages:
   - lsb-release
   - nftables
   - dnsmasq
+  - ethtool
 
 growpart:
   mode: auto
@@ -83,11 +84,13 @@ write_files:
       echo "🔧 Applying performance tuning..."
       
       # CPU Governor
-      echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+      for CPU in /sys/devices/system/cpu/cpu[0-9]*; do
+        echo performance > "$CPU/cpufreq/scaling_governor" 2>/dev/null || true
+      done
       
       # Scheduler tuning for SSDs
       for dev in /sys/block/sd*/queue/scheduler; do
-        echo none > "$dev"
+        echo mq-deadline > "$dev"
       done
 
       systemctl disable apt-daily.timer
@@ -109,11 +112,6 @@ write_files:
       EOF
       
       sysctl --system
-
-      # 1) Install ethtool if missing
-      if ! command -v ethtool &>/dev/null; then
-        apt-get update && apt-get install -y ethtool
-      fi
 
       # 2) Pick all “large-MTU” interfaces automatically
       #    (adjust the grep if your jumbo-MTU devices have a different naming scheme)
@@ -163,7 +161,21 @@ write_files:
       EOF
 
       # Install the same script to /usr/local/bin and make it executable
-      install -m755 "$0" /usr/local/bin/network-tweaks.sh
+            cat <<'EOF' >/usr/local/bin/network-tweaks.sh
+      #!/bin/bash
+      set -e
+      for IF in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(eth|vtnet)'); do
+        CURRENT_MTU=$(ip -o link show "$IF" | awk '{print $4}')
+        if [ "$CURRENT_MTU" != "9000" ]; then
+          ip link set dev "$IF" mtu 9000
+        fi
+        ethtool -K $IF gro on gso on tso on rx on tx on
+        ip link set dev $IF txqueuelen 10000
+      done
+      EOF
+
+      chmod +x /usr/local/bin/network-tweaks.sh
+
       systemctl daemon-reload
       systemctl enable network-tweaks
 
@@ -203,7 +215,6 @@ write_files:
 
       # sudo chmod +x /etc/profile.d/http_proxy.sh
       
-      systemctl daemon-reexec
       systemctl daemon-reload
 
   - path: /etc/sysctl.d/99-disable-ipv6.conf
