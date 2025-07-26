@@ -3509,13 +3509,14 @@ write_files:
             port: 443
             targetPort: 8080
       ---
-      # Mutating Webhook Configuration for Vault Agent Injector
       apiVersion: admissionregistration.k8s.io/v1
       kind: MutatingWebhookConfiguration
       metadata:
         name: vault-agent-injector-cfg
         labels:
           app: vault-agent-injector
+        annotations:
+          cert-manager.io/inject-ca-from: vault/vault-agent-injector-tls
       webhooks:
         - name: vault.hashicorp.com
           sideEffects: None
@@ -3526,7 +3527,7 @@ write_files:
               namespace: vault
               path: "/mutate"
               port: 443
-            caBundle: ""  # Populated automatically by cert-manager
+            caBundle: null  # Automatically populated
           rules:
             - operations: ["CREATE"]
               apiGroups: [""]
