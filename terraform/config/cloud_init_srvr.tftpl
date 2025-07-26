@@ -3430,6 +3430,28 @@ write_files:
             log_level = "info"
           }
       ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: vault-agent-injector-role
+      rules:
+        - apiGroups: ["admissionregistration.k8s.io"]
+          resources: ["mutatingwebhookconfigurations"]
+          verbs: ["get", "list", "watch", "patch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: vault-agent-injector-binding
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: vault-agent-injector-role
+      subjects:
+        - kind: ServiceAccount
+          name: vault-agent-injector
+          namespace: vault
+      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -3464,11 +3486,7 @@ write_files:
                   - name: tls
                     mountPath: /tls
                     readOnly: true
-                env:
-                  - name: VAULT_INJECTOR_TLS_CERT_FILE
-                    value: "/tls/tls.crt"
-                  - name: VAULT_INJECTOR_TLS_KEY_FILE
-                    value: "/tls/tls.key"
+
             volumes:
               - name: config
                 configMap:
