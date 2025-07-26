@@ -91,8 +91,6 @@ write_files:
       systemctl daemon-reload
       systemctl enable rke2-agent
       systemctl start rke2-agent
-      # systemctl enable post-setup-reboot.service
-      # systemctl start post-setup-reboot.service
 
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
