@@ -3432,6 +3432,12 @@ write_files:
           - key encipherment
           - server auth
       ---
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-agent-injector
+        namespace: vault
+      ---
       # Vault Agent Injector Deployment
       apiVersion: apps/v1
       kind: Deployment
