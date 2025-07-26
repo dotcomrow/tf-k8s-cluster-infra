@@ -3430,7 +3430,6 @@ write_files:
             log_level = "info"
           }
       ---
-      # Vault Agent Injector Deployment
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -3449,32 +3448,32 @@ write_files:
               app: vault-agent-injector
           spec:
             serviceAccountName: vault-agent-injector
-          containers:
-            - name: injector
-              image: hashicorp/vault-k8s:1.3.0
-              args:
-                - "agent-inject"
-                - "-log-level=info"
-                - "--config=/etc/vault/config/config.hcl"
-              volumeMounts:
-                - name: config
-                  mountPath: /etc/vault/config
-                  readOnly: true
-                - name: tls
-                  mountPath: /tls
-                  readOnly: true
-              env:
-                - name: VAULT_INJECTOR_TLS_CERT_FILE
-                  value: "/tls/tls.crt"
-                - name: VAULT_INJECTOR_TLS_KEY_FILE
-                  value: "/tls/tls.key"
-          volumes:
-            - name: config
-              configMap:
-                name: vault-agent-injector-config
-            - name: tls
-              secret:
-                secretName: vault-agent-injector-tls
+            containers:
+              - name: injector
+                image: hashicorp/vault-k8s:1.3.0
+                args:
+                  - "agent-inject"
+                  - "-log-level=info"
+                  - "--config=/etc/vault/config/config.hcl"
+                volumeMounts:
+                  - name: config
+                    mountPath: /etc/vault/config
+                    readOnly: true
+                  - name: tls
+                    mountPath: /tls
+                    readOnly: true
+                env:
+                  - name: VAULT_INJECTOR_TLS_CERT_FILE
+                    value: "/tls/tls.crt"
+                  - name: VAULT_INJECTOR_TLS_KEY_FILE
+                    value: "/tls/tls.key"
+            volumes:
+              - name: config
+                configMap:
+                  name: vault-agent-injector-config
+              - name: tls
+                secret:
+                  secretName: vault-agent-injector-tls
       ---
       # Vault Agent Injector Service
       apiVersion: v1
