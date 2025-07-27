@@ -3537,6 +3537,32 @@ write_files:
           namespaceSelector: {}
       EOF
 
+      echo "🏗️ Installing Stakater..."
+      RETRIES=5
+      DELAY=3
+
+      for i in $(seq 1 $RETRIES); do
+        echo "Attempt $i to add Helm repo..."
+        sudo helm repo add stakater https://stakater.github.io/stakater-charts --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+        echo "Failed to add repo, retrying in $DELAY seconds..."
+        sleep $DELAY
+      done
+
+      # Optionally fail hard if all retries exhausted
+      if [[ $i -eq $RETRIES ]]; then
+        echo "Failed to add Helm repo after $RETRIES attempts" >&2
+        exit 1
+      fi
+
+      sudo helm repo update
+
+      sudo helm --kubeconfig=/etc/rancher/rke2/rke2.yaml install reloader stakater/reloader \
+        --namespace reloader \
+        --create-namespace
+
+      sudo kubectl annotate namespace reloader field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace reloader scheduler.alpha.kubernetes.io/node-selector=dedicated=srvr-node --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
