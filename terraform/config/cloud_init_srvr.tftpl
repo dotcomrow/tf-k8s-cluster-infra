@@ -1595,7 +1595,7 @@ write_files:
             serviceAccountName: otelcol
             containers:
               - name: otelcol
-                image: otel/opentelemetry-collector-contrib:0.130.1
+                image: otel/opentelemetry-collector:0.130.1
                 args: ["--config=/conf/otel-collector-config.yaml"]
                 volumeMounts:
                   - name: config-vol
