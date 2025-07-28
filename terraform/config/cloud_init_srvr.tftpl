@@ -1485,8 +1485,45 @@ write_files:
 
       export HOME=/home/ubuntu
 
-      curl -sL https://run.linkerd.io/install | sh -s -- --version version-2.18
-      sudo cp ~/.linkerd2/bin/linkerd /usr/local/bin/
+      LINKERD_VERSION="stable-2.18.0"  # or "edge-25.7.5", "version-2.18", etc.
+      MAX_RETRIES=5
+      SLEEP_BETWEEN_RETRIES=5
+      LINKERD_CLI_PATH="$HOME/.linkerd2/bin/linkerd"
+
+      echo "🔄 Installing Linkerd CLI ($LINKERD_VERSION)..."
+
+      for attempt in $(seq 1 "$MAX_RETRIES"); do
+        echo "🔁 Attempt $attempt to download Linkerd CLI..."
+        if curl -sL https://run.linkerd.io/install | sh -s -- --version "$LINKERD_VERSION"; then
+          echo "✅ Linkerd CLI download succeeded"
+          break
+        else
+          echo "⚠️  Download failed (attempt $attempt)"
+          if [ "$attempt" -eq "$MAX_RETRIES" ]; then
+            echo "❌ Linkerd CLI download failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+          sleep "$SLEEP_BETWEEN_RETRIES"
+        fi
+      done
+
+      if [ -f "$LINKERD_CLI_PATH" ]; then
+        echo "📦 Found Linkerd CLI at $LINKERD_CLI_PATH"
+        sudo cp "$LINKERD_CLI_PATH" /usr/local/bin/
+        echo "✅ Linkerd CLI installed to /usr/local/bin"
+      else
+        echo "❌ Linkerd CLI binary not found at $LINKERD_CLI_PATH"
+        exit 1
+      fi
+
+      # Optional: Verify
+      if ! command -v linkerd >/dev/null; then
+        echo "❌ Linkerd CLI not found in PATH after installation"
+        exit 1
+      fi
+
+      echo "🎉 Linkerd CLI is ready:"
+      linkerd version
 
       # Wait for the deployment to appear
       until sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get deployment rancher-webhook -n cattle-system >/dev/null 2>&1; do
