@@ -214,6 +214,25 @@ write_files:
       # EOF
 
       # sudo chmod +x /etc/profile.d/http_proxy.sh
+
+      # Unbind kernel workqueues from specific CPUs (recommended on NUMA/multicore systems)
+      if [ -e /sys/module/workqueue/parameters/disable_bound ]; then
+        echo y > /sys/module/workqueue/parameters/disable_bound
+        echo "✅ Enabled unbound kernel workqueues for better scalability"
+      fi
+
+      # 6) Add GRUB performance kernel parameters
+      echo "✅ Adding performance kernel parameters to GRUB..."
+      GRUB_CONFIG_FILE="/etc/default/grub"
+
+      # Append only if not already present
+      if ! grep -q "workqueue.disable_bound=1" "$GRUB_CONFIG_FILE"; then
+        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="workqueue.disable_bound=1 intel_pstate=disable processor.max_cstate=1 idle=poll transparent_hugepage=never mitigations=off /' "$GRUB_CONFIG_FILE"
+        update-grub
+        echo "✅ GRUB updated. Kernel parameters will apply on next boot."
+      else
+        echo "⚠️ GRUB already configured. Skipping update."
+      fi
       
       systemctl daemon-reload
 
