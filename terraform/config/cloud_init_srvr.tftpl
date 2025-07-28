@@ -1541,8 +1541,6 @@ write_files:
       # 4) Wait for Linkerd to come up
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-
-
       cat <<EOF | sudo tee /tmp/otelcol.yaml
       apiVersion: v1
       kind: ServiceAccount
