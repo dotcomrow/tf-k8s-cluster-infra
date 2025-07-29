@@ -117,9 +117,15 @@ write_files:
       echo "🔧 Applying performance tuning..."
       
       # CPU Governor
-      for CPU in /sys/devices/system/cpu/cpu[0-9]*; do
-        echo performance > "$CPU/cpufreq/scaling_governor" 2>/dev/null || true
-      done
+      GOVERNOR_PATH="/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
+      if [ -f "$GOVERNOR_PATH" ]; then
+        for CPU in /sys/devices/system/cpu/cpu[0-9]*; do
+          echo performance > "$CPU/cpufreq/scaling_governor" 2>/dev/null || true
+        done
+        echo "✅ CPU governors set to performance"
+      else
+        echo "⚠️ CPU frequency scaling not available — skipping governor tuning"
+      fi
       
       # Scheduler tuning for SSDs
       for dev in /sys/block/sd*/queue/scheduler; do
