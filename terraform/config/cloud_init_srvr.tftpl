@@ -1809,26 +1809,13 @@ write_files:
         exit 1
       fi
 
-      echo "📦 Adding Helm repos for APISIX and Bitnami..."
+      echo "📦 Adding Helm repos for APISIX..."
       RETRIES=5
       DELAY=3
 
       for i in $(seq 1 $RETRIES); do
         echo "Attempt $i to add Helm repo..."
         sudo helm repo add apisix https://charts.apiseven.com --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
-        echo "Failed to add repo, retrying in $DELAY seconds..."
-        sleep $DELAY
-      done
-
-      # Optionally fail hard if all retries exhausted
-      if [[ $i -eq $RETRIES ]]; then
-        echo "Failed to add Helm repo after $RETRIES attempts" >&2
-        exit 1
-      fi
-      
-      for i in $(seq 1 $RETRIES); do
-        echo "Attempt $i to add Helm repo..."
-        sudo helm repo add bitnami https://charts.bitnami.com/bitnami --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
         echo "Failed to add repo, retrying in $DELAY seconds..."
         sleep $DELAY
       done
@@ -3076,10 +3063,10 @@ write_files:
               fsGroup: 1000
             initContainers:
               - name: install-utils
-                image: bitnami/kubectl:latest
+                image: rancher/kubectl:v1.32.7
                 command: ["sh", "-c"]
                 args:
-                  - cp /opt/bitnami/kubectl/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
+                  - cp /bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
                 volumeMounts:
                   - name: shared-utils
                     mountPath: /shared
@@ -3329,10 +3316,10 @@ write_files:
 
                 initContainers:
                   - name: load-kubectl
-                    image: bitnami/kubectl:latest
+                    image: rancher/kubectl:v1.32.7
                     command: ["sh", "-c"]
                     args:
-                      - cp /opt/bitnami/kubectl/bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl
+                      - cp /bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl
                     volumeMounts:
                       - name: kubectl-bin
                         mountPath: /kubectl-bin
