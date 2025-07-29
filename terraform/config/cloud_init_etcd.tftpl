@@ -206,16 +206,22 @@ write_files:
       cat <<EOF > /etc/systemd/system/containerd.service.d/override.conf
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
       EOF
       
       cat <<EOF > /etc/systemd/system/rke2-server.service.d/override.conf
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
       EOF
       
       cat <<EOF > /etc/systemd/system/rke2-agent.service.d/override.conf
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
       EOF
 
       # cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
@@ -756,18 +762,24 @@ write_files:
     content: |
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
 
   - path: /etc/systemd/system/rke2-server.service.d/override.conf
     permissions: '0644'
     content: |
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
 
   - path: /etc/systemd/system/rke2-agent.service.d/override.conf
     permissions: '0644'
     content: |
       [Service]
       LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
 
 runcmd:
   - systemctl daemon-reexec
