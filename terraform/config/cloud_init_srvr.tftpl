@@ -1607,8 +1607,8 @@ write_files:
             batch:
 
           exporters:
-            jaeger:
-              endpoint: jaeger-collector.linkerd-jaeger.svc.cluster.local:14250
+            zipkin:
+              endpoint: "http://jaeger-collector.linkerd-jaeger.svc.cluster.local:9411/api/v2/spans"
               tls:
                 insecure: true
 
@@ -1617,7 +1617,7 @@ write_files:
               traces:
                 receivers: [otlp]
                 processors: [batch]
-                exporters: [jaeger]
+                exporters: [zipkin]
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -1690,7 +1690,7 @@ write_files:
       sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Wait for rollout to complete after patch
-      sudo kubectl rollout status deploy/jaeger -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
+      sudo kubectl rollout status deploy/otelcol -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       sudo linkerd jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
