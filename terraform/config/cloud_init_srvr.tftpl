@@ -1601,6 +1601,7 @@ write_files:
             otlp:
               protocols:
                 grpc:
+                  endpoint: 0.0.0.0:4317
                 http:
 
           processors:
@@ -1685,7 +1686,7 @@ write_files:
 
       webhook:
         collectorTraceProtocol: opentelemetry
-        collectorSvcAddr: otelcol.linkerd-jaeger:4317
+        collectorSvcAddr: otelcol.linkerd-jaeger.svc.cluster.local:4317
         collectorSvcAccount: otelcol
       EOF
 
