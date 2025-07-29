@@ -1361,7 +1361,7 @@ write_files:
       done
 
       echo "🔧 Patching all Rancher webhooks with timeoutSeconds=30..."
-
+      sudo apt install yq jq -y
       # Extract webhook indices and names using jq
       mapfile -t WEBHOOKS < <(
         sudo kubectl get validatingwebhookconfiguration rancher.cattle.io \
@@ -1850,7 +1850,6 @@ write_files:
         --set extraEnv[0].value="false" \
         --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
 
-      sudo apt install yq jq -y
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
       KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
