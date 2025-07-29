@@ -1680,6 +1680,11 @@ write_files:
         collectorTraceProtocol: opentelemetry
         collectorSvcAddr: otelcol.linkerd-jaeger:4317
         collectorSvcAccount: otelcol
+      ui:
+        tls:
+          enabled: false
+        auth:
+          enabled: false
       EOF
 
       # After generating the Jaeger manifest
