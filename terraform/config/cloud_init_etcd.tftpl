@@ -493,8 +493,12 @@ write_files:
     permissions: '0755'
     content: |
       #!/bin/bash
+      set -e
+      echo "📦 Configuring Fluent Bit for GCP logging..."
+
       mkdir -p /etc/google-cloud-ops-agent
       echo "${GCP_LOGGING_KEY}" | base64 -d > /etc/google-cloud-ops-agent/logging-key.json
+
       mkdir -p /usr/share/keyrings
       KEYRING_PATH="/usr/share/keyrings/fluent-bit-archive-keyring.gpg"
 
@@ -521,62 +525,17 @@ write_files:
 
       cat <<EOF > /etc/td-agent-bit/td-agent-bit.conf
       [SERVICE]
-          Flush         1
-          Daemon        Off
-          Log_Level     info
-          Plugins_File  plugins.conf
-          Parsers_File  parsers.conf
-          HTTP_Server   Off
-          HTTP_Listen   0.0.0.0
-          HTTP_Port     2020
+          flush         1
+          daemon        Off
+          log_level     info
+          plugins_file  plugins.conf
+          parsers_file  parsers.conf
+          http_server   Off
+          http_listen   0.0.0.0
+          http_port     2020
           storage.metrics on
 
       @INCLUDE /etc/td-agent-bit/conf.d/*.conf
-
-      [INPUT]
-          Name               tail
-          Mem_Buf_Limit     10MB
-          Path               /var/log/cloud-init*.log
-          Tag                cloudinit
-          Read_from_Head     Off
-          DB                 /var/log/flb_cloudinit.db
-          DB.Sync            normal
-          Skip_Long_Lines    On
-
-      [FILTER]
-          Name      parser
-          Match     cloudinit
-          Key_Name  log
-          Parser    cloudinit_parser
-          Reserve_Data true
-          Preserve_Key true
-
-      [FILTER]
-          Name   modify
-          Match  cloudinit
-          Rename message textPayload
-          Rename process process
-          Rename pid pid
-          Rename timestamp timestamp
-
-      [FILTER]
-          Name    nest
-          Match   cloudinit
-          Operation nest
-          Wildcard process
-          Wildcard pid
-          Wildcard timestamp
-          Nested_under logging.googleapis.com/labels
-
-      [OUTPUT]
-          Name  stackdriver
-          Match cloudinit
-          google_service_credentials /etc/google-cloud-ops-agent/logging-key.json
-          resource ${MONITORED_RESOURCE_TYPE}
-          location ${MONITORED_RESOURCE_LOCATION}
-          namespace ${MONITORED_RESOURCE_NAMESPACE}
-          node_id ${MONITORED_RESOURCE_NODE_ID}
-          log_name_key cloudinit
       EOF
 
       # cloud-init logs
@@ -645,14 +604,14 @@ write_files:
           Preserve_Key true
 
       [FILTER]
-          Name   modify
-          Match  journal.*
-          Rename message textPayload
-
-      [FILTER]
           Name modify
           Match journal.*
           Add logName systemd-journal
+
+      [FILTER]
+          Name   modify
+          Match  journal.*
+          Rename message textPayload
 
       [FILTER]
           Name    nest
@@ -748,8 +707,9 @@ write_files:
           Time_Format %Y-%m-%dT%H:%M:%S.%L%z
       EOF
 
+      systemctl daemon-reload
       systemctl enable td-agent-bit
-      systemctl start td-agent-bit
+      systemctl restart td-agent-bit
 
   - path: /usr/local/bin/setup-rke2.sh
     permissions: '0755'
