@@ -28,7 +28,6 @@ packages:
   - dnsmasq
   - ethtool
   - jq
-  - yq
 
 growpart:
   mode: auto
@@ -1363,7 +1362,6 @@ write_files:
       done
 
       echo "🔧 Patching all Rancher webhooks with timeoutSeconds=30..."
-      sudo apt install yq jq -y
       # Extract webhook indices and names using jq
       mapfile -t WEBHOOKS < <(
         sudo kubectl get validatingwebhookconfiguration rancher.cattle.io \
