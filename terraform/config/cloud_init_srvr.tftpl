@@ -1675,13 +1675,6 @@ write_files:
       collector:
         enabled: true
         useOtel: false
-        resources:
-          limits:
-            cpu: "10m"
-            memory: "32Mi"
-          requests:
-            cpu: "5m"
-            memory: "16Mi"
         config: {}  # ignored if useOtel is false
 
       ui:
@@ -1699,6 +1692,13 @@ write_files:
       # After generating the Jaeger manifest
       sudo linkerd jaeger install -f /tmp/linkerd-jaeger-values.yaml \
         --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
+
+      sudo yq -i '
+        (. | select(.kind == "Deployment" and .metadata.name == "collector") |
+          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled" |
+        (. | select(.kind == "Deployment" and .metadata.name == "jaeger") |
+          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled"
+      ' /tmp/jaeger-install.yaml
 
       # Apply the patched manifest
       sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
