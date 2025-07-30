@@ -18,6 +18,11 @@ variable "admin_ssh_public_key" {
   type        = string
 }
 
+variable "k8s_base_version" {
+  default = "1.31.4"
+  type    = string
+}
+
 variable "RKE2_VERSION" {
   default = "v1.31.4+rke2r1"  
 }

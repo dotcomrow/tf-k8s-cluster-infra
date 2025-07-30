@@ -3075,10 +3075,10 @@ write_files:
               fsGroup: 1000
             initContainers:
               - name: install-utils
-                image: rancher/kubectl:v1.32.7
+                image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
                 command: ["sh", "-c"]
                 args:
-                  - cp /bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
+                  - cp /usr/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
                 volumeMounts:
                   - name: shared-utils
                     mountPath: /shared
@@ -3328,10 +3328,10 @@ write_files:
 
                 initContainers:
                   - name: load-kubectl
-                    image: rancher/kubectl:v1.32.7
+                    image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
                     command: ["sh", "-c"]
                     args:
-                      - cp /bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl
+                      - cp /usr/bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl
                     volumeMounts:
                       - name: kubectl-bin
                         mountPath: /kubectl-bin
