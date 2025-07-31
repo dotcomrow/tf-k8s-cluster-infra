@@ -89,7 +89,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
 
   numa {
     device     = "numa0"
-    cpus       = "0-11"
+    cpus       = "0-9"
     memory     = 102400  # 100 GiB
     hostnodes  = "3"
     policy     = "bind"
