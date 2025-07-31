@@ -1,6 +1,6 @@
 variable "srvr_cpu_cores" {
   type    = number
-  default = 12
+  default = 10
 }
 
 variable "srvr_cpu_sockets" {
