@@ -111,7 +111,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     interface    = "scsi0"            # ✅ More efficient than virtio0
     iothread     = true               # ✅ Enable I/O thread for this disk
     discard      = "on"              # ✅ TRIM support
-    size         = 1175
+    size         = 1075
     file_format  = "raw"              # ✅ Raw for speed
     cache     = "unsafe"
   }
