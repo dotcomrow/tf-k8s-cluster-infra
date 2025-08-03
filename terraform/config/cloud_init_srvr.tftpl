@@ -831,6 +831,9 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
+      # Generate containerd config and configure registry mirrors
+      containerd config default > /etc/containerd/config.toml
+      
       sudo apt install python3-pip -y
       sudo pip install tomlkit
       sudo python3 /usr/local/bin/patch.py
