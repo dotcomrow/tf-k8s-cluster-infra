@@ -831,32 +831,66 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
-      # Configure containerd to use Harbor proxy cache
-      echo "🐳 Configuring containerd registry mirrors for Harbor proxy cache..."
-      mkdir -p /etc/containerd
-      
-      # Check if already configured to avoid duplicates
-      if [ -f /etc/containerd/config.toml ] && grep -q "utility-node.internal.lan" /etc/containerd/config.toml; then
-        echo "Registry mirrors already configured, skipping..."
-      else
-        # Create containerd config with Harbor registry mirrors
-        containerd config default > /etc/containerd/config.toml
-        
-        # Add registry mirrors using printf to avoid heredoc issues
-        printf '\n[plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]\n' >> /etc/containerd/config.toml
-        printf '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/quay"]\n' >> /etc/containerd/config.toml
-        printf '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/gcr"]\n' >> /etc/containerd/config.toml
-        printf '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]\n' >> /etc/containerd/config.toml
-        printf '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]\n' >> /etc/containerd/config.toml
-        printf '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]\n  endpoint = ["http://utility-node.internal.lan/v2/ghcr"]\n' >> /etc/containerd/config.toml
-        printf '\n[plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]\n  insecure_skip_verify = true\n' >> /etc/containerd/config.toml
-        
-        echo "✅ Registry mirrors configured successfully"
-      fi
+            CONFIG_FILE="/etc/containerd/config.toml"
+      BACKUP_FILE="/etc/containerd/config.toml.bak"
 
-      # Restart containerd to apply configuration
+      echo "📁 Backing up config to $BACKUP_FILE..."
+      cp "$CONFIG_FILE" "$BACKUP_FILE"
+
+      echo "🔍 Removing existing empty [registry.mirrors] section if present..."
+      # Remove the empty [mirrors] block
+      sed -i '/^\[plugins."io.containerd.grpc.v1.cri".registry.mirrors\]$/,/^\s*$/d' "$CONFIG_FILE"
+
+      echo "➕ Inserting new mirrors configuration..."
+      # Add new mirrors configuration after [plugins."io.containerd.grpc.v1.cri".registry.headers]
+      awk '
+        {
+          print
+          if ($0 ~ /^\[plugins."io.containerd.grpc.v1.cri".registry.headers\]/) {
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]"
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/quay\"]"
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]"
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]"
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]"
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]"
+            print "  endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]"
+            print ""
+          }
+        }
+      ' "$BACKUP_FILE" > "$CONFIG_FILE.tmp"
+
+      echo "➕ Appending TLS skip verification under registry.configs..."
+      awk '
+        {
+          print
+          if ($0 ~ /^\[plugins."io.containerd.grpc.v1.cri".registry.configs\]/) {
+            print ""
+            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]"
+            print "  insecure_skip_verify = true"
+            print ""
+          }
+        }
+      ' "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
+
+      rm "$CONFIG_FILE.tmp"
+
+      echo "✅ Configuration updated successfully."
+
+      echo "🔁 Restarting containerd..."
       systemctl restart containerd
-      systemctl enable containerd
+
+      echo "✅ Done."
 
       # sudo mkdir -p /etc/systemd/system/docker.service.d
       # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
@@ -949,35 +983,6 @@ write_files:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
-
-      # ────────────────────────────────────────────────────────────────────────
-      # RKE2 Registry Mirrors Configuration - Harbor Proxy Cache
-      # ────────────────────────────────────────────────────────────────────────
-
-      mirrors:
-        docker.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/dockerhub"
-        quay.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/quay"
-        gcr.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/gcr"
-        k8s.gcr.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/k8s-gcr"
-        registry.k8s.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/registry-k8s"
-        ghcr.io:
-          endpoint:
-            - "https://utility-node.internal.lan/v2/ghcr"
-
-      configs:
-        "utility-node.internal.lan":
-          tls:
-            insecure_skip_verify: true
       EOF
 
       systemctl enable rke2-server
