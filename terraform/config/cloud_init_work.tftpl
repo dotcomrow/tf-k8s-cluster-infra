@@ -523,36 +523,39 @@ write_files:
       # Backup original config
       cp "$CONFIG_FILE" "$BACKUP_FILE"
 
-      # Check if registry section already has mirrors configured
-      if grep -q '\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]' "$CONFIG_FILE"; then
+      # Check if registry mirrors are already configured
+      if grep -q "utility-node.internal.lan" "$CONFIG_FILE"; then
         echo "Registry mirrors already configured, skipping..."
         exit 0
       fi
 
-      # Find the registry section and add our mirrors
-      awk '
-      /^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/ {
-        print $0
-        print "    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/quay\"]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]"
-        print "        endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]"
-        print "    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs]"
-        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]"
-        print "        insecure_skip_verify = true"
-        next
-      }
-      { print }
-      ' "$BACKUP_FILE" > "$CONFIG_FILE"
+      # Use sed to replace the entire registry section with our configuration
+      sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/,/^\[/ {
+        /^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/!{
+          /^\[/!d
+        }
+      }' "$CONFIG_FILE"
+
+      # Insert our complete registry configuration
+      sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/a\
+      \
+        [plugins."io.containerd.grpc.v1.cri".registry.mirrors]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/quay"]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/gcr"]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]\
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]\
+            endpoint = ["http://utility-node.internal.lan/v2/ghcr"]\
+      \
+        [plugins."io.containerd.grpc.v1.cri".registry.configs]\
+          [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]\
+            insecure_skip_verify = true' "$CONFIG_FILE"
 
       echo "✅ Registry mirrors configured successfully"
       MERGE_SCRIPT
