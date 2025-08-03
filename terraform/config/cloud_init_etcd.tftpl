@@ -457,70 +457,9 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
-      CONFIG_FILE="/etc/containerd/config.toml"
-      BACKUP_FILE="/etc/containerd/config.toml.bak"
-
-      echo "📦 Generating full default config.toml..."
-      containerd config default | sudo tee "$CONFIG_FILE" >/dev/null
-
-      echo "📁 Backing up config to $BACKUP_FILE..."
-      cp "$CONFIG_FILE" "$BACKUP_FILE"
-
-      echo "🔍 Removing existing empty [registry.mirrors] section if present..."
-      # Remove the empty [mirrors] block
-      sed -i '/^\[plugins."io.containerd.grpc.v1.cri".registry.mirrors\]$/,/^\s*$/d' "$CONFIG_FILE"
-
-      echo "➕ Inserting new mirrors configuration..."
-      # Add new mirrors configuration after [plugins."io.containerd.grpc.v1.cri".registry.headers]
-      awk '
-        {
-          print
-          if ($0 ~ /^\[plugins."io.containerd.grpc.v1.cri".registry.headers\]/) {
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]"
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/quay\"]"
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]"
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]"
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]"
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]"
-            print "  endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]"
-            print ""
-          }
-        }
-      ' "$BACKUP_FILE" > "$CONFIG_FILE.tmp"
-
-      echo "➕ Appending TLS skip verification under registry.configs..."
-      awk '
-        {
-          print
-          if ($0 ~ /^\[plugins."io.containerd.grpc.v1.cri".registry.configs\]/) {
-            print ""
-            print "[plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]"
-            print "  insecure_skip_verify = true"
-            print ""
-          }
-        }
-      ' "$CONFIG_FILE.tmp" > "$CONFIG_FILE"
-
-      rm "$CONFIG_FILE.tmp"
-
-      echo "✅ Configuration updated successfully."
-
-      echo "🔁 Restarting containerd..."
-      systemctl restart containerd
-
-      echo "✅ Done."
-
+      sudo apt install python3-pip
+      sudo pip install tomlkit
+      sudo python3 /usr/local/bin/patch.py
       # sudo mkdir -p /etc/systemd/system/docker.service.d
       # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
       # [Service]
@@ -532,6 +471,79 @@ write_files:
       # [Service]
       # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
       # EOF
+
+  - path: /usr/local/bin/patch.py
+    permissions: '0755'
+    content: |
+      from pathlib import Path
+      from tomlkit import parse, dumps, table
+      import re
+
+      TOML_PATH = "config.toml"
+
+      # Load TOML and parse
+      doc = parse(Path(TOML_PATH).read_text())
+
+      # Registry section
+      cri_registry = doc["plugins"]["io.containerd.grpc.v1.cri"]["registry"]
+
+      # Configs
+      configs = cri_registry.get("configs", table())
+      if "utility-node.internal.lan" not in configs:
+          configs["utility-node.internal.lan"] = table()
+      configs["utility-node.internal.lan"]["tls"] = {"insecure_skip_verify": True}
+      cri_registry["configs"] = configs
+
+      # Mirrors
+      mirrors = cri_registry.get("mirrors", table())
+      mirror_map = {
+          "docker.io": "dockerhub",
+          "quay.io": "quay",
+          "gcr.io": "gcr",
+          "k8s.gcr.io": "k8s-gcr",
+          "registry.k8s.io": "registry-k8s",
+          "ghcr.io": "ghcr"
+      }
+      for registry, mirror_name in mirror_map.items():
+          mirrors[registry] = {
+              "endpoint": [f"http://utility-node.internal.lan/v2/{mirror_name}"]
+          }
+
+      cri_registry["mirrors"] = mirrors
+      doc["plugins"]["io.containerd.grpc.v1.cri"]["registry"] = cri_registry
+
+      # Dump raw TOML
+      raw_toml = dumps(doc)
+
+      # Fix indentation: match just the affected lines and re-indent
+      def indent_cri_registry_values(toml_str: str) -> str:
+          output = []
+          indent = None
+          in_target_section = False
+
+          for line in toml_str.splitlines():
+              # Detect target section
+              if re.match(r'\s*\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\..*]', line):
+                  in_target_section = True
+                  output.append(line)
+                  continue
+              # Stop when out of section
+              elif re.match(r'\s*\[.*]', line):
+                  in_target_section = False
+                  output.append(line)
+                  continue
+
+              # Indent values under the target section
+              if in_target_section and "=" in line.strip():
+                  output.append("      " + line.strip())
+              else:
+                  output.append(line)
+
+          return "\n".join(output)
+
+      # Write patched file
+      Path(TOML_PATH).write_text(indent_cri_registry_values(raw_toml))
+      print("✅ containerd config patched with consistent indentation.")
 
   - path: /usr/local/bin/setup-nfs-modules.sh
     permissions: '0755'
