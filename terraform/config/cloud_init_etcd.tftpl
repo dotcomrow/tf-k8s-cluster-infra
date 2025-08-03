@@ -457,8 +457,11 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
-            CONFIG_FILE="/etc/containerd/config.toml"
+      CONFIG_FILE="/etc/containerd/config.toml"
       BACKUP_FILE="/etc/containerd/config.toml.bak"
+
+      echo "📦 Generating full default config.toml..."
+      containerd config default | sudo tee "$CONFIG_FILE" >/dev/null
 
       echo "📁 Backing up config to $BACKUP_FILE..."
       cp "$CONFIG_FILE" "$BACKUP_FILE"
