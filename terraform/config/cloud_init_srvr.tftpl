@@ -845,32 +845,19 @@ write_files:
         # Backup original config
         cp /etc/containerd/config.toml /etc/containerd/config.toml.backup
         
-        # Remove existing registry section content (keep only the header)
-        sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/,/^\[/ {
-          /^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/!{
-            /^\[/!d
-          }
-        }' /etc/containerd/config.toml
+        # Insert our registry mirrors directly into the existing sections
+        # Find the existing registry.mirrors section and add our entries after it
+        MIRRORS_LINE=$(grep -n 'registry\.mirrors\]' /etc/containerd/config.toml | head -1 | cut -d: -f1)
+        if [ -n "$MIRRORS_LINE" ]; then
+          # Add our registry mirrors after the existing mirrors section
+          sed -i "${MIRRORS_LINE}a\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/quay\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]" /etc/containerd/config.toml
+        fi
         
-        # Append our registry configuration
-        echo "" >> /etc/containerd/config.toml
-        echo '  [plugins."io.containerd.grpc.v1.cri".registry.mirrors]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/quay"]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/gcr"]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]' >> /etc/containerd/config.toml
-        echo '      endpoint = ["http://utility-node.internal.lan/v2/ghcr"]' >> /etc/containerd/config.toml
-        echo "" >> /etc/containerd/config.toml
-        echo '  [plugins."io.containerd.grpc.v1.cri".registry.configs]' >> /etc/containerd/config.toml
-        echo '    [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]' >> /etc/containerd/config.toml
-        echo '      insecure_skip_verify = true' >> /etc/containerd/config.toml
+        # Find the existing registry.configs section and add our TLS config
+        CONFIGS_LINE=$(grep -n 'registry\.configs\]' /etc/containerd/config.toml | head -1 | cut -d: -f1)
+        if [ -n "$CONFIGS_LINE" ]; then
+          sed -i "${CONFIGS_LINE}a\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]\\      insecure_skip_verify = true" /etc/containerd/config.toml
+        fi
         
         echo "✅ Registry mirrors configured successfully"
       fi
