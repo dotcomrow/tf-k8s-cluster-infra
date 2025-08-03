@@ -464,11 +464,8 @@ write_files:
       # Generate containerd config with Harbor registry mirrors
       containerd config default > /etc/containerd/config.toml
       
-      # Add registry mirror configuration for Harbor proxy cache
-      cat >> /etc/containerd/config.toml << 'CONTAINERD_EOF'
-
-      # Harbor proxy cache configuration
-      [plugins."io.containerd.grpc.v1.cri".registry]
+      # Create a temporary config with our registry mirrors
+      cat > /tmp/registry-config.toml << 'REGISTRY_EOF'
         [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
           [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
             endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]
@@ -485,7 +482,14 @@ write_files:
         [plugins."io.containerd.grpc.v1.cri".registry.configs]
           [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]
             insecure_skip_verify = true
-      CONTAINERD_EOF
+      REGISTRY_EOF
+      
+      # Insert the registry configuration into the existing config
+      # Find the line with [plugins."io.containerd.grpc.v1.cri".registry] and insert our mirrors after it
+      sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/r /tmp/registry-config.toml' /etc/containerd/config.toml
+      
+      # Clean up temporary file
+      rm -f /tmp/registry-config.toml
 
       # Restart containerd to apply configuration
       systemctl restart containerd
