@@ -548,12 +548,18 @@ write_files:
         ghcr.io:
           endpoint:
             - "http://utility-node.internal.lan/v2/ghcr"
+        "nvidia":
+          endpoint:
+            - "http://utility-node.internal.lan/v2/nvidia"
+        "nvcr.io":
+          endpoint:
+            - "http://utility-node.internal.lan/v2/nvidia"
 
       configs:
         utility-node.internal.lan:
           tls:
             insecure_skip_verify: true
-            
+
   - path: /usr/local/bin/patch.py
     permissions: '0755'
     content: |
@@ -584,7 +590,9 @@ write_files:
           "gcr.io": "gcr",
           "k8s.gcr.io": "k8s-gcr",
           "registry.k8s.io": "registry-k8s",
-          "ghcr.io": "ghcr"
+          "ghcr.io": "ghcr",
+          "nvidia": "nvidia",
+          "nvcr.io": "nvidia"
       }
       for registry, mirror_name in mirror_map.items():
           mirrors[registry] = {
