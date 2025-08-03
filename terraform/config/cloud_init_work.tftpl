@@ -529,33 +529,40 @@ write_files:
         exit 0
       fi
 
-      # Use sed to replace the entire registry section with our configuration
+      # Create temporary registry config
+      cat > /tmp/registry-config.toml << 'REGISTRY_EOF'
+
+        [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/quay"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/gcr"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/ghcr"]
+
+        [plugins."io.containerd.grpc.v1.cri".registry.configs]
+          [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]
+            insecure_skip_verify = true
+      REGISTRY_EOF
+
+      # Remove existing registry content and insert our config
       sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/,/^\[/ {
         /^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/!{
           /^\[/!d
         }
       }' "$CONFIG_FILE"
 
-      # Insert our complete registry configuration
-      sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/a\
-      \
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/quay"]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/gcr"]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]\
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]\
-            endpoint = ["http://utility-node.internal.lan/v2/ghcr"]\
-      \
-        [plugins."io.containerd.grpc.v1.cri".registry.configs]\
-          [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]\
-            insecure_skip_verify = true' "$CONFIG_FILE"
+      # Insert our registry config after the registry section header
+      sed -i '/^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/r /tmp/registry-config.toml' "$CONFIG_FILE"
+
+      # Clean up temp file
+      rm -f /tmp/registry-config.toml
 
       echo "✅ Registry mirrors configured successfully"
       MERGE_SCRIPT
