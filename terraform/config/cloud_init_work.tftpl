@@ -526,6 +526,34 @@ write_files:
       # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
       # EOF
 
+  - path: /etc/rancher/rke2/registries.yaml
+    permissions: '0755'
+    content: |
+      mirrors:
+        docker.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/dockerhub"
+        quay.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/quay"
+        gcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/gcr"
+        k8s.gcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/k8s-gcr"
+        registry.k8s.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/registry-k8s"
+        ghcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/ghcr"
+
+      configs:
+        utility-node.internal.lan:
+          tls:
+            insecure_skip_verify: true
+            
   - path: /usr/local/bin/patch.py
     permissions: '0755'
     content: |

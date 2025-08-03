@@ -816,6 +816,34 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /etc/rancher/rke2/registries.yaml
+    permissions: '0755'
+    content: |
+      mirrors:
+        docker.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/dockerhub"
+        quay.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/quay"
+        gcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/gcr"
+        k8s.gcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/k8s-gcr"
+        registry.k8s.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/registry-k8s"
+        ghcr.io:
+          endpoint:
+            - "http://utility-node.internal.lan/v2/ghcr"
+
+      configs:
+        utility-node.internal.lan:
+          tls:
+            insecure_skip_verify: true
+
   - path: /usr/local/bin/30-setup-runtime.sh
     permissions: '0755'
     content: |
