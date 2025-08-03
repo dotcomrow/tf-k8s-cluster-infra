@@ -479,7 +479,7 @@ write_files:
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
       sudo apt install python3-pip -y
-      sudo pip install tomlkit -y
+      sudo pip install tomlkit
       sudo python3 /usr/local/bin/patch.py
 
       # sudo mkdir -p /etc/systemd/system/docker.service.d
