@@ -503,7 +503,7 @@ write_files:
         # Find the existing registry.configs section and add our TLS config
         CONFIGS_LINE=$(grep -n 'registry\.configs\]' /etc/containerd/config.toml | head -1 | cut -d: -f1)
         if [ -n "$CONFIGS_LINE" ]; then
-          sed -i "${CONFIGS_LINE}a\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]\\      insecure_skip_verify = true" /etc/containerd/config.toml
+          sed -i "$CONFIGS_LINEa\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]\\      insecure_skip_verify = true" /etc/containerd/config.toml
         fi
         
         echo "✅ Registry mirrors configured successfully"
