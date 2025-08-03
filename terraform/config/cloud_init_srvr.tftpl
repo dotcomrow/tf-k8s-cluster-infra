@@ -831,6 +831,40 @@ write_files:
       sudo apt update
       DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
 
+      # Configure containerd to use Harbor proxy cache
+      echo "🐳 Configuring containerd registry mirrors for Harbor proxy cache..."
+      mkdir -p /etc/containerd
+      
+      # Generate containerd config with Harbor registry mirrors
+      containerd config default > /etc/containerd/config.toml
+      
+      # Add registry mirror configuration for Harbor proxy cache
+      cat >> /etc/containerd/config.toml << 'CONTAINERD_EOF'
+
+      # Harbor proxy cache configuration
+      [plugins."io.containerd.grpc.v1.cri".registry]
+        [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/quay"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/gcr"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
+            endpoint = ["http://utility-node.internal.lan/v2/ghcr"]
+        [plugins."io.containerd.grpc.v1.cri".registry.configs]
+          [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]
+            insecure_skip_verify = true
+      CONTAINERD_EOF
+
+      # Restart containerd to apply configuration
+      systemctl restart containerd
+      systemctl enable containerd
+
       # sudo mkdir -p /etc/systemd/system/docker.service.d
       # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
       # [Service]
@@ -922,6 +956,35 @@ write_files:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
+
+      # ────────────────────────────────────────────────────────────────────────
+      # RKE2 Registry Mirrors Configuration - Harbor Proxy Cache
+      # ────────────────────────────────────────────────────────────────────────
+
+      mirrors:
+        docker.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/dockerhub"
+        quay.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/quay"
+        gcr.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/gcr"
+        k8s.gcr.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/k8s-gcr"
+        registry.k8s.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/registry-k8s"
+        ghcr.io:
+          endpoint:
+            - "https://utility-node.internal.lan/v2/ghcr"
+
+      configs:
+        "utility-node.internal.lan":
+          tls:
+            insecure_skip_verify: true
       EOF
 
       systemctl enable rke2-server
