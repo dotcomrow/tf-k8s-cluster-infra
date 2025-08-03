@@ -497,13 +497,13 @@ write_files:
         MIRRORS_LINE=$(grep -n 'registry\.mirrors\]' /etc/containerd/config.toml | head -1 | cut -d: -f1)
         if [ -n "$MIRRORS_LINE" ]; then
           # Add our registry mirrors after the existing mirrors section
-          sed -i "$MIRRORS_LINEa\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/quay\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]\\      endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]" /etc/containerd/config.toml
+          sed -i "$MIRRORS_LINE"'a\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]\      endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]\      endpoint = ["http://utility-node.internal.lan/v2/quay"]\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]\      endpoint = ["http://utility-node.internal.lan/v2/gcr"]\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]\      endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]\      endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]\    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]\      endpoint = ["http://utility-node.internal.lan/v2/ghcr"]' /etc/containerd/config.toml
         fi
         
         # Find the existing registry.configs section and add our TLS config
         CONFIGS_LINE=$(grep -n 'registry\.configs\]' /etc/containerd/config.toml | head -1 | cut -d: -f1)
         if [ -n "$CONFIGS_LINE" ]; then
-          sed -i "$CONFIGS_LINEa\\    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]\\      insecure_skip_verify = true" /etc/containerd/config.toml
+          sed -i "$CONFIGS_LINE"'a\    [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]\      insecure_skip_verify = true' /etc/containerd/config.toml
         fi
         
         echo "✅ Registry mirrors configured successfully"
