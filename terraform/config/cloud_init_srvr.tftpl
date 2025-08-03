@@ -833,10 +833,13 @@ write_files:
 
       # Generate containerd config and configure registry mirrors
       containerd config default > /etc/containerd/config.toml
-      
+
       sudo apt install python3-pip -y
       sudo pip install tomlkit
       sudo python3 /usr/local/bin/patch.py
+
+      systemctl restart containerd
+      systemctl enable containerd
       # sudo mkdir -p /etc/systemd/system/docker.service.d
       # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
       # [Service]
