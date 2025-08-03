@@ -509,44 +509,57 @@ write_files:
       echo "🐳 Configuring containerd registry mirrors for Harbor proxy cache..."
       mkdir -p /etc/containerd
       
-      # Generate containerd config with Harbor registry mirrors
+      # Generate containerd config and configure registry mirrors
       containerd config default > /etc/containerd/config.toml
       
-      # Create a temporary config with our registry mirrors
-      cat > /tmp/registry-config.toml << 'REGISTRY_EOF'
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/dockerhub"]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/quay"]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."gcr.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/gcr"]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."k8s.gcr.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/k8s-gcr"]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.k8s.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/registry-k8s"]
-        [plugins."io.containerd.grpc.v1.cri".registry.mirrors."ghcr.io"]
-          endpoint = ["http://utility-node.internal.lan/v2/ghcr"]
-      [plugins."io.containerd.grpc.v1.cri".registry.configs]
-        [plugins."io.containerd.grpc.v1.cri".registry.configs."utility-node.internal.lan".tls]
-          insecure_skip_verify = true
-      REGISTRY_EOF
-      
-      # Insert the registry configuration into the existing config
-      # Find the line with [plugins."io.containerd.grpc.v1.cri".registry] and insert our mirrors after it
-      sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/r /tmp/registry-config.toml' /etc/containerd/config.toml
-      
-      # Clean up temporary file
-      rm -f /tmp/registry-config.toml
+      # Create a script to properly merge the configuration
+      cat > /tmp/merge-containerd-config.sh << 'MERGE_SCRIPT'
+      #!/bin/bash
+      set -e
 
-      # Restart containerd to apply configuration
-      systemctl restart containerd
-      systemctl enable containerd
-      # Find the line with [plugins."io.containerd.grpc.v1.cri".registry] and insert our mirrors after it
-      sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/r /tmp/registry-config.toml' /etc/containerd/config.toml
-      
-      # Clean up temporary file
-      rm -f /tmp/registry-config.toml
+      CONFIG_FILE="/etc/containerd/config.toml"
+      BACKUP_FILE="/etc/containerd/config.toml.backup"
+
+      # Backup original config
+      cp "$CONFIG_FILE" "$BACKUP_FILE"
+
+      # Check if registry section already has mirrors configured
+      if grep -q '\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]' "$CONFIG_FILE"; then
+        echo "Registry mirrors already configured, skipping..."
+        exit 0
+      fi
+
+      # Find the registry section and add our mirrors
+      awk '
+      /^\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/ {
+        print $0
+        print "    [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"docker.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/dockerhub\"]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"quay.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/quay\"]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"gcr.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/gcr\"]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"k8s.gcr.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/k8s-gcr\"]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"registry.k8s.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/registry-k8s\"]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"ghcr.io\"]"
+        print "        endpoint = [\"http://utility-node.internal.lan/v2/ghcr\"]"
+        print "    [plugins.\"io.containerd.grpc.v1.cri\".registry.configs]"
+        print "      [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"utility-node.internal.lan\".tls]"
+        print "        insecure_skip_verify = true"
+        next
+      }
+      { print }
+      ' "$BACKUP_FILE" > "$CONFIG_FILE"
+
+      echo "✅ Registry mirrors configured successfully"
+      MERGE_SCRIPT
+
+      chmod +x /tmp/merge-containerd-config.sh
+      /tmp/merge-containerd-config.sh
+      rm -f /tmp/merge-containerd-config.sh
 
       # Restart containerd to apply configuration
       systemctl restart containerd
