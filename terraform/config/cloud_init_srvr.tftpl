@@ -1872,7 +1872,7 @@ write_files:
       sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Wait for rollout to complete after patch
-      sudo kubectl rollout status deploy/otelcol -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
+      # sudo kubectl rollout status deploy/otelcol -n linkerd-jaeger --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       sudo linkerd jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
