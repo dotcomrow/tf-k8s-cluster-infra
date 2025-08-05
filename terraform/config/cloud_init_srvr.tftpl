@@ -1623,7 +1623,7 @@ write_files:
 
       export HOME=/home/ubuntu
 
-      LINKERD_VERSION="stable-2.18.0"  # or "edge-25.7.5", "version-2.18", etc.
+      LINKERD_VERSION="edge-25.8.1"  # "stable-2.18.0", "edge-25.7.5", "version-2.18", etc.
       MAX_RETRIES=5
       SLEEP_BETWEEN_RETRIES=5
       LINKERD_CLI_PATH="$HOME/.linkerd2/bin/linkerd"
@@ -1708,7 +1708,7 @@ write_files:
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379" \
         --set-string global.tracing.enabled=true \
         --set-string proxy.tracing.enabled=true \
-        --set-string proxy.tracing.otlp.endpoint="otelcol.linkerd-jaeger.svc.cluster.local:4317" \
+        --set-string proxy.tracing.otlp.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
         --set-string proxy.telemetry.spans.enabled=true \
         --set-string proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
@@ -1716,112 +1716,145 @@ write_files:
       # 4) Wait for Linkerd to come up
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-      cat <<EOF | sudo tee /tmp/otelcol.yaml
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: otelcol
-        namespace: linkerd-jaeger
-      ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: otelcol-cfg
-        namespace: linkerd-jaeger
-      data:
-        otel-collector-config: |
-          receivers:
-            otlp:
-              protocols:
-                grpc:
-                  endpoint: 0.0.0.0:4317
-                http:
-                  endpoint: 0.0.0.0:4318
+      # cat <<EOF | sudo tee /tmp/otelcol.yaml
+      # apiVersion: v1
+      # kind: ServiceAccount
+      # metadata:
+      #   name: otelcol
+      #   namespace: linkerd-jaeger
+      # ---
+      # apiVersion: v1
+      # kind: ConfigMap
+      # metadata:
+      #   name: otelcol-cfg
+      #   namespace: linkerd-jaeger
+      # data:
+      #   otel-collector-config: |
+      #     receivers:
+      #       otlp:
+      #         protocols:
+      #           grpc:
+      #             endpoint: 0.0.0.0:4317
+      #           http:
+      #             endpoint: 0.0.0.0:4318
 
-          processors:
-            batch:
+      #     processors:
+      #       batch:
 
-          exporters:
-            zipkin:
-              endpoint: "http://jaeger-collector.linkerd-jaeger.svc.cluster.local:9411/api/v2/spans"
-              tls:
-                insecure: true
+      #     exporters:
+      #       zipkin:
+      #         endpoint: "http://jaeger-collector.linkerd-jaeger.svc.cluster.local:9411/api/v2/spans"
+      #         tls:
+      #           insecure: true
 
-          service:
-            pipelines:
-              traces:
-                receivers: [otlp]
-                processors: [batch]
-                exporters: [zipkin]
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: otelcol
-        namespace: linkerd-jaeger
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: otelcol
-        template:
-          metadata:
-            labels:
-              app: otelcol
-          spec:
-            serviceAccountName: otelcol
-            containers:
-              - name: otelcol
-                image: otel/opentelemetry-collector:0.130.1
-                args: ["--config=/conf/otel-collector-config.yaml"]
-                volumeMounts:
-                  - name: config-vol
-                    mountPath: /conf
-            volumes:
-              - name: config-vol
-                configMap:
-                  name: otelcol-cfg
-                  items:
-                    - key: otel-collector-config
-                      path: otel-collector-config.yaml
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: otelcol
-        namespace: linkerd-jaeger
-      spec:
-        selector:
-          app: otelcol
-        ports:
-          - name: grpc-otlp
-            port: 4317
-            targetPort: 4317
-          - name: http-otlp
-            port: 4318
-            targetPort: 4318
-      EOF
+      #     service:
+      #       pipelines:
+      #         traces:
+      #           receivers: [otlp]
+      #           processors: [batch]
+      #           exporters: [zipkin]
+      # ---
+      # apiVersion: apps/v1
+      # kind: Deployment
+      # metadata:
+      #   name: otelcol
+      #   namespace: linkerd-jaeger
+      # spec:
+      #   replicas: 1
+      #   selector:
+      #     matchLabels:
+      #       app: otelcol
+      #   template:
+      #     metadata:
+      #       labels:
+      #         app: otelcol
+      #     spec:
+      #       serviceAccountName: otelcol
+      #       containers:
+      #         - name: otelcol
+      #           image: otel/opentelemetry-collector:0.130.1
+      #           args: ["--config=/conf/otel-collector-config.yaml"]
+      #           volumeMounts:
+      #             - name: config-vol
+      #               mountPath: /conf
+      #       volumes:
+      #         - name: config-vol
+      #           configMap:
+      #             name: otelcol-cfg
+      #             items:
+      #               - key: otel-collector-config
+      #                 path: otel-collector-config.yaml
+      # ---
+      # apiVersion: v1
+      # kind: Service
+      # metadata:
+      #   name: otelcol
+      #   namespace: linkerd-jaeger
+      # spec:
+      #   selector:
+      #     app: otelcol
+      #   ports:
+      #     - name: grpc-otlp
+      #       port: 4317
+      #       targetPort: 4317
+      #     - name: http-otlp
+      #       port: 4318
+      #       targetPort: 4318
+      # EOF
 
-      # Apply
-      sudo kubectl apply -f /tmp/otelcol.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      # # Apply
+      # sudo kubectl apply -f /tmp/otelcol.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      # # Install Jaeger extension with collector config
+      # cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
+      # collector:
+      #   enabled: true
+      #   useOtel: false
+      #   config: {}  # ignored if useOtel is false
+
+      # ui:
+      #   tls:
+      #     enabled: false
+      #   auth:
+      #     enabled: false
+
+      # webhook:
+      #   collectorTraceProtocol: opentelemetry
+      #   collectorSvcAddr: otelcol.linkerd-jaeger.svc.cluster.local:4317
+      #   collectorSvcAccount: otelcol
+      # EOF
 
       # Install Jaeger extension with collector config
       cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
       collector:
         enabled: true
-        useOtel: false
-        config: {}  # ignored if useOtel is false
-
+        useOtel: true   
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc: {}
+            opencensus:
+              endpoint: 0.0.0.0:55678
+          processors:
+            batch: {}
+            k8sattributes: {}
+          exporters:
+            jaeger:
+              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp, opencensus]
+                processors: [batch, k8sattributes]
+                exporters: [jaeger]
       ui:
         tls:
           enabled: false
         auth:
           enabled: false
-
-      webhook:
-        collectorTraceProtocol: opentelemetry
-        collectorSvcAddr: otelcol.linkerd-jaeger.svc.cluster.local:4317
-        collectorSvcAccount: otelcol
       EOF
 
       # After generating the Jaeger manifest
