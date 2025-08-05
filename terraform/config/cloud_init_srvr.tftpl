@@ -1895,21 +1895,27 @@ write_files:
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       cat >/tmp/apisix-plugins.yaml <<'YAML'
-      plugins:
-        - api-breaker
-        - authz-keycloak
-        - cors
-        - echo
-        - openid-connect
-        - opentelemetry
-        - prometheus
-        - proxy-rewrite
-        - real-ip
+      apisix:
+        enableIPv6: false
 
-      plugin_attr:
-        opentelemetry:
-          collector:
-            address: http://collector.linkerd-jaeger.svc.cluster.local:4318
+        # Explicitly enable the plugins you want available
+        plugins:
+          - api-breaker
+          - authz-keycloak
+          - cors
+          - echo
+          - openid-connect
+          - opentelemetry
+          - prometheus
+          - proxy-rewrite
+          - real-ip
+
+        # Per-plugin settings
+        pluginAttrs:
+          opentelemetry:
+            collector:
+              # OTLP/HTTP endpoint on your Linkerd Jaeger collector
+              address: http://collector.linkerd-jaeger.svc.cluster.local:4318
       YAML
 
       echo "🚀 Installing APISIX Gateway and Dashboard..."
