@@ -847,6 +847,9 @@ write_files:
         "cr.l5d.io":
           endpoint:
             - "http://utility-node.internal.lan/v2/linkerd"
+        "reg.kyverno.io":
+          endpoint:
+            - "http://utility-node.internal.lan/v2/kyverno"
 
       configs:
         utility-node.internal.lan:
@@ -1826,9 +1829,11 @@ write_files:
 
       # Install Jaeger extension with collector config
       cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
+      webhook:
+        collectorTraceProtocol: opentelemetry  # tell proxies to use OTLP
+
       collector:
         enabled: true
-        useOtel: true   
         config:
           receivers:
             otlp:
@@ -1850,6 +1855,7 @@ write_files:
                 receivers: [otlp, opencensus]
                 processors: [batch, k8sattributes]
                 exporters: [jaeger]
+
       ui:
         tls:
           enabled: false
@@ -2017,7 +2023,7 @@ write_files:
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,prometheus,proxy-rewrite,real-ip}"
+        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,opentelemetry,prometheus,proxy-rewrite,real-ip}"
 
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
@@ -2133,6 +2139,29 @@ write_files:
               recursive: true                
               trusted_addresses:
                 - "10.0.0.0/24"              
+      EOF
+
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixGlobalRule
+      metadata:
+        name: opentelemetry-global
+        namespace: apisix
+      spec:
+        plugins:
+          - name: opentelemetry
+            enable: true
+            config:
+              # Always sample while you validate. You can switch to trace_id_ratio later.
+              sampler:
+                name: always_on
+              # Point at your Linkerd Jaeger collector (OTLP/HTTP).
+              collector:
+                address: collector.linkerd-jaeger.svc.cluster.local:4318
+              # Optional but helpful: add resource attributes so traces are labeled nicely.
+              resource:
+                service.name: apisix-gateway
+                service.namespace: apisix
       EOF
 
   - path: /etc/systemd/system/install-apisix-rancher.service
