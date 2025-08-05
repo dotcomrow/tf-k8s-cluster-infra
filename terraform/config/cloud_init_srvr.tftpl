@@ -1731,11 +1731,31 @@ write_files:
             otlp:
               protocols:
                 grpc: {}
+                http: {}           # keep if you use 4318
             opencensus:
               endpoint: 0.0.0.0:55678
           processors:
+            k8sattributes:
+              extract:
+                metadata:
+                  - k8s.namespace.name
+                  - k8s.pod.name
+                labels:
+                  - from: pod
+                    key: app.kubernetes.io/name
+                  - from: pod
+                    key: app
+            # Option A: simple mapping from a label -> service.name
+            resource:
+              attributes:
+                - key: service.name
+                  from_attribute: app.kubernetes.io/name
+                  action: upsert
+                # Fallback if the label doesn't exist:
+                - key: service.name
+                  from_attribute: k8s.pod.name
+                  action: insert
             batch: {}
-            k8sattributes: {}
           exporters:
             jaeger:
               endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
@@ -1745,7 +1765,8 @@ write_files:
             pipelines:
               traces:
                 receivers: [otlp, opencensus]
-                processors: [batch, k8sattributes]
+                # Order matters: enrich with k8s -> rewrite service.name -> batch -> export
+                processors: [k8sattributes, resource, batch]
                 exporters: [jaeger]
 
       ui:
