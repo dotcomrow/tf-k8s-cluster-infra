@@ -2023,7 +2023,16 @@ write_files:
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set config.plugins="{api-breaker,authz-keycloak,cors,echo,openid-connect,opentelemetry,prometheus,proxy-rewrite,real-ip}"
+        --set-string config.plugins[0]=api-breaker \
+        --set-string config.plugins[1]=authz-keycloak \
+        --set-string config.plugins[2]=cors \
+        --set-string config.plugins[3]=echo \
+        --set-string config.plugins[4]=openid-connect \
+        --set-string config.plugins[5]=opentelemetry \
+        --set-string config.plugins[6]=prometheus \
+        --set-string config.plugins[7]=proxy-rewrite \
+        --set-string config.plugins[8]=real-ip \
+        --set-string config.plugin_attr.opentelemetry.collector.address=http://collector.linkerd-jaeger.svc.cluster.local:4318
 
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
