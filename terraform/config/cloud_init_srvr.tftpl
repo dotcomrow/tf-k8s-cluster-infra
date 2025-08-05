@@ -2004,12 +2004,32 @@ write_files:
       sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      cat >/tmp/apisix-plugins.yaml <<'YAML'
+      plugins:
+        - api-breaker
+        - authz-keycloak
+        - cors
+        - echo
+        - openid-connect
+        - opentelemetry
+        - prometheus
+        - proxy-rewrite
+        - real-ip
+
+      plugin_attr:
+        opentelemetry:
+          collector:
+            address: http://collector.linkerd-jaeger.svc.cluster.local:4318
+      YAML
+
     
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace apisix \
+        -f /tmp/apisix-plugins.yaml \
         --set service.type=NodePort \
         --set ingress-controller.enabled=true \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
@@ -2022,17 +2042,7 @@ write_files:
         --set-string config.nginx_config.stream_proxy.tcp="[]" \
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false" \
-        --set-string config.plugins[0]=api-breaker \
-        --set-string config.plugins[1]=authz-keycloak \
-        --set-string config.plugins[2]=cors \
-        --set-string config.plugins[3]=echo \
-        --set-string config.plugins[4]=openid-connect \
-        --set-string config.plugins[5]=opentelemetry \
-        --set-string config.plugins[6]=prometheus \
-        --set-string config.plugins[7]=proxy-rewrite \
-        --set-string config.plugins[8]=real-ip \
-        --set-string config.plugin_attr.opentelemetry.collector.address=http://collector.linkerd-jaeger.svc.cluster.local:4318
+        --set extraEnv[0].value="false"
 
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
