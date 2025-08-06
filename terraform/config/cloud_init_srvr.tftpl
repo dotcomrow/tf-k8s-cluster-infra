@@ -1731,11 +1731,13 @@ write_files:
             otlp:
               protocols:
                 grpc: {}
-                http: {}           # keep if you use 4318
+                http: {}                 # 4318
             opencensus:
               endpoint: 0.0.0.0:55678
           processors:
             k8sattributes:
+              # be explicit about how pods are matched to connection/source
+              passthrough: false
               extract:
                 metadata:
                   - k8s.namespace.name
@@ -1745,28 +1747,44 @@ write_files:
                     key: app.kubernetes.io/name
                   - from: pod
                     key: app
-            # Option A: simple mapping from a label -> service.name
-            resource:
-              attributes:
-                - key: service.name
-                  from_attribute: app.kubernetes.io/name
-                  action: upsert
-                # Fallback if the label doesn't exist:
-                - key: service.name
-                  from_attribute: k8s.pod.name
-                  action: insert
+              # Prefer matching by connection, then by resource attributes if present
+              pod_association:
+                - sources:
+                    - from: connection
+                - sources:
+                    - from: resource_attribute
+                      name: k8s.pod.ip
+                - sources:
+                    - from: resource_attribute
+                      name: net.host.ip
+            transform:
+              error_mode: ignore
+              traces:
+                - context: resource
+                  # only rewrite Linkerd proxy spans
+                  conditions:
+                    - 'attributes["service.name"] == "linkerd-proxy"'
+                  statements:
+                    # Try app.kubernetes.io/name first
+                    - set(attributes["service.name"], attributes["app.kubernetes.io/name"])
+                    # Fallbacks if that label isn't present
+                    - set(attributes["service.name"], attributes["app"]) where IsEmpty(attributes["service.name"])
+                    - set(attributes["service.name"],
+                          Concat(
+                            Coalesce(attributes["k8s.namespace.name"], "default"),
+                            "/",
+                            Coalesce(attributes["k8s.pod.name"], "unknown")))
+                      where IsEmpty(attributes["service.name"])
             batch: {}
           exporters:
             jaeger:
               endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
-              tls:
-                insecure: true
+              tls: { insecure: true }
           service:
             pipelines:
               traces:
                 receivers: [otlp, opencensus]
-                # Order matters: enrich with k8s -> rewrite service.name -> batch -> export
-                processors: [k8sattributes, resource, batch]
+                processors: [k8sattributes, transform, batch]
                 exporters: [jaeger]
 
       ui:
