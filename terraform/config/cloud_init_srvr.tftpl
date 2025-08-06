@@ -1754,25 +1754,40 @@ write_files:
                 - context: resource
                   statements:
                     # <ns>-<app.kubernetes.io/name>
-                    - set(attributes["service.name"],
-                          attributes["k8s.namespace.name"] + "-" + attributes["app.kubernetes.io/name"])
+                    - set(
+                        attributes["service.name"],
+                        Concat(
+                          Concat(attributes["k8s.namespace.name"], "-"),
+                          attributes["app.kubernetes.io/name"]
+                        )
+                      )
                       where attributes["service.name"] == "linkerd-proxy" and
-                            attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
-                            attributes["app.kubernetes.io/name"] != nil and attributes["app.kubernetes.io/name"] != ""
+                            IsMatch(attributes["k8s.namespace.name"], ".+") and
+                            IsMatch(attributes["app.kubernetes.io/name"], ".+")
 
                     # <ns>-<app>
-                    - set(attributes["service.name"],
-                          attributes["k8s.namespace.name"] + "-" + attributes["app"])
+                    - set(
+                        attributes["service.name"],
+                        Concat(
+                          Concat(attributes["k8s.namespace.name"], "-"),
+                          attributes["app"]
+                        )
+                      )
                       where attributes["service.name"] == "linkerd-proxy" and
-                            attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
-                            attributes["app"] != nil and attributes["app"] != ""
+                            IsMatch(attributes["k8s.namespace.name"], ".+") and
+                            IsMatch(attributes["app"], ".+")
 
                     # <ns>-<pod>
-                    - set(attributes["service.name"],
-                          attributes["k8s.namespace.name"] + "-" + attributes["k8s.pod.name"])
+                    - set(
+                        attributes["service.name"],
+                        Concat(
+                          Concat(attributes["k8s.namespace.name"], "-"),
+                          attributes["k8s.pod.name"]
+                        )
+                      )
                       where attributes["service.name"] == "linkerd-proxy" and
-                            attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
-                            attributes["k8s.pod.name"] != nil and attributes["k8s.pod.name"] != ""
+                            IsMatch(attributes["k8s.namespace.name"], ".+") and
+                            IsMatch(attributes["k8s.pod.name"], ".+")
 
             batch: {}
 
