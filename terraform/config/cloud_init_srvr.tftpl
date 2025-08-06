@@ -1737,57 +1737,39 @@ write_files:
 
           processors:
             k8sattributes:
-              auth_type: serviceAccount
               extract:
-                metadata:
-                  - k8s.namespace.name
-                  - k8s.pod.name
+                metadata: [k8s.namespace.name, k8s.pod.name]
                 labels:
                   - from: pod
                     key: app.kubernetes.io/name
                   - from: pod
                     key: app
-
             transform:
               error_mode: ignore
               trace_statements:
                 - context: resource
                   statements:
-                    # <namespace>-<app.kubernetes.io/name>
                     - set(
                         attributes["service.name"],
-                        Combine(
-                          [attributes["k8s.namespace.name"], attributes["app.kubernetes.io/name"]],
-                          "-"
-                        )
+                        Concat([attributes["k8s.namespace.name"], attributes["app.kubernetes.io/name"]], "-")
                       )
-                      where attributes["service.name"] == "linkerd-proxy" and
-                            IsMatch(attributes["k8s.namespace.name"], ".+") and
-                            IsMatch(attributes["app.kubernetes.io/name"], ".+")
-
-                    # <namespace>-<app>
+                      where attributes["service.name"] == "linkerd-proxy"
+                        and IsMatch(attributes["k8s.namespace.name"], ".+")
+                        and IsMatch(attributes["app.kubernetes.io/name"], ".+")
                     - set(
                         attributes["service.name"],
-                        Combine(
-                          [attributes["k8s.namespace.name"], attributes["app"]],
-                          "-"
-                        )
+                        Concat([attributes["k8s.namespace.name"], attributes["app"]], "-")
                       )
-                      where attributes["service.name"] == "linkerd-proxy" and
-                            IsMatch(attributes["k8s.namespace.name"], ".+") and
-                            IsMatch(attributes["app"], ".+")
-
-                    # <namespace>-<pod>
+                      where attributes["service.name"] == "linkerd-proxy"
+                        and IsMatch(attributes["k8s.namespace.name"], ".+")
+                        and IsMatch(attributes["app"], ".+")
                     - set(
                         attributes["service.name"],
-                        Combine(
-                          [attributes["k8s.namespace.name"], attributes["k8s.pod.name"]],
-                          "-"
-                        )
+                        Concat([attributes["k8s.namespace.name"], attributes["k8s.pod.name"]], "-")
                       )
-                      where attributes["service.name"] == "linkerd-proxy" and
-                            IsMatch(attributes["k8s.namespace.name"], ".+") and
-                            IsMatch(attributes["k8s.pod.name"], ".+")
+                      where attributes["service.name"] == "linkerd-proxy"
+                        and IsMatch(attributes["k8s.namespace.name"], ".+")
+                        and IsMatch(attributes["k8s.pod.name"], ".+")
 
             batch: {}
 
