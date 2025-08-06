@@ -1756,7 +1756,7 @@ write_files:
                     # <namespace>-<app.kubernetes.io/name>
                     - set(
                         attributes["service.name"],
-                        concat(
+                        Concat(
                           attributes["k8s.namespace.name"],
                           "-",
                           attributes["app.kubernetes.io/name"]
@@ -1769,7 +1769,7 @@ write_files:
                     # <namespace>-<app>
                     - set(
                         attributes["service.name"],
-                        concat(
+                        Concat(
                           attributes["k8s.namespace.name"],
                           "-",
                           attributes["app"]
@@ -1782,7 +1782,7 @@ write_files:
                     # <namespace>-<pod>
                     - set(
                         attributes["service.name"],
-                        concat(
+                        Concat(
                           attributes["k8s.namespace.name"],
                           "-",
                           attributes["k8s.pod.name"]
