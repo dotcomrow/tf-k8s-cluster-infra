@@ -1753,37 +1753,40 @@ write_files:
               trace_statements:
                 - context: resource
                   statements:
-                    # <ns>-<app.kubernetes.io/name>
+                    # <namespace>-<app.kubernetes.io/name>
                     - set(
                         attributes["service.name"],
-                        Concat([
-                          Concat([attributes["k8s.namespace.name"], "-"]),
+                        concat(
+                          attributes["k8s.namespace.name"],
+                          "-",
                           attributes["app.kubernetes.io/name"]
-                        ])
+                        )
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
                             IsMatch(attributes["app.kubernetes.io/name"], ".+")
 
-                    # <ns>-<app>
+                    # <namespace>-<app>
                     - set(
                         attributes["service.name"],
-                        Concat([
-                          Concat([attributes["k8s.namespace.name"], "-"]),
+                        concat(
+                          attributes["k8s.namespace.name"],
+                          "-",
                           attributes["app"]
-                        ])
+                        )
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
                             IsMatch(attributes["app"], ".+")
 
-                    # <ns>-<pod>
+                    # <namespace>-<pod>
                     - set(
                         attributes["service.name"],
-                        Concat([
-                          Concat([attributes["k8s.namespace.name"], "-"]),
+                        concat(
+                          attributes["k8s.namespace.name"],
+                          "-",
                           attributes["k8s.pod.name"]
-                        ])
+                        )
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
