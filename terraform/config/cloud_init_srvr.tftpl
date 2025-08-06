@@ -1756,10 +1756,10 @@ write_files:
                     # <ns>-<app.kubernetes.io/name>
                     - set(
                         attributes["service.name"],
-                        Concat(
-                          Concat(attributes["k8s.namespace.name"], "-"),
+                        Concat([
+                          Concat([attributes["k8s.namespace.name"], "-"]),
                           attributes["app.kubernetes.io/name"]
-                        )
+                        ])
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
@@ -1768,10 +1768,10 @@ write_files:
                     # <ns>-<app>
                     - set(
                         attributes["service.name"],
-                        Concat(
-                          Concat(attributes["k8s.namespace.name"], "-"),
+                        Concat([
+                          Concat([attributes["k8s.namespace.name"], "-"]),
                           attributes["app"]
-                        )
+                        ])
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
@@ -1780,10 +1780,10 @@ write_files:
                     # <ns>-<pod>
                     - set(
                         attributes["service.name"],
-                        Concat(
-                          Concat(attributes["k8s.namespace.name"], "-"),
+                        Concat([
+                          Concat([attributes["k8s.namespace.name"], "-"]),
                           attributes["k8s.pod.name"]
-                        )
+                        ])
                       )
                       where attributes["service.name"] == "linkerd-proxy" and
                             IsMatch(attributes["k8s.namespace.name"], ".+") and
