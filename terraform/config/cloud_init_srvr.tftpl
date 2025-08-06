@@ -1747,17 +1747,19 @@ write_files:
                     key: app.kubernetes.io/name
                   - from: pod
                     key: app
+
             transform:
               error_mode: ignore
               trace_statements:
                 - context: resource
                   statements:
-                    # If the service is linkerd-proxy and the app label exists, use that as the new service.name
+                    # If the service is linkerd-proxy and the k8s app label is present, use it
                     - set(attributes["service.name"], attributes["app.kubernetes.io/name"])
-                      where attributes["service.name"] == "linkerd-proxy" and IsSet(attributes["app.kubernetes.io/name"])
-                    # Otherwise, if the "app" label exists, use it
+                      where attributes["service.name"] == "linkerd-proxy" and attributes["app.kubernetes.io/name"] != nil and attributes["app.kubernetes.io/name"] != ""
+                    # Otherwise, fall back to the legacy "app" label if present
                     - set(attributes["service.name"], attributes["app"])
-                      where attributes["service.name"] == "linkerd-proxy" and IsSet(attributes["app"])
+                      where attributes["service.name"] == "linkerd-proxy" and attributes["app"] != nil and attributes["app"] != ""
+
             batch: {}
 
           exporters:
