@@ -1753,12 +1753,23 @@ write_files:
               trace_statements:
                 - context: resource
                   statements:
-                    # If the service is linkerd-proxy and the k8s app label is present, use it
-                    - set(attributes["service.name"], attributes["app.kubernetes.io/name"])
-                      where attributes["service.name"] == "linkerd-proxy" and attributes["app.kubernetes.io/name"] != nil and attributes["app.kubernetes.io/name"] != ""
-                    # Otherwise, fall back to the legacy "app" label if present
-                    - set(attributes["service.name"], attributes["app"])
-                      where attributes["service.name"] == "linkerd-proxy" and attributes["app"] != nil and attributes["app"] != ""
+                    # Prefer app.kubernetes.io/name -> service.name = "<ns>-<app.kubernetes.io/name>"
+                    - set(attributes["service.name"],
+                          Concat([attributes["k8s.namespace.name"], "-", attributes["app.kubernetes.io/name"]]))
+                      where attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
+                            attributes["app.kubernetes.io/name"] != nil and attributes["app.kubernetes.io/name"] != ""
+
+                    # Fallback to legacy "app" label -> service.name = "<ns>-<app>"
+                    - set(attributes["service.name"],
+                          Concat([attributes["k8s.namespace.name"], "-", attributes["app"]]))
+                      where attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
+                            attributes["app"] != nil and attributes["app"] != ""
+
+                    # Last resort: use pod name -> service.name = "<ns>-<pod>"
+                    - set(attributes["service.name"],
+                          Concat([attributes["k8s.namespace.name"], "-", attributes["k8s.pod.name"]]))
+                      where attributes["k8s.namespace.name"] != nil and attributes["k8s.namespace.name"] != "" and
+                            attributes["k8s.pod.name"] != nil and attributes["k8s.pod.name"] != ""
 
             batch: {}
 
