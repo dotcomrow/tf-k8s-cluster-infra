@@ -3949,24 +3949,6 @@ write_files:
                 p, role:admin, projects, *, *, allow
                 g, ${GITHUB_ORG}:ARGOCD_ADMINS, role:admin
               policy.default: role:readonly
-      ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: argocd-route
-        namespace: argocd
-      spec:
-        ingressClassName: apisix
-        http:
-          - name: argocd
-            match:
-              hosts:
-                - argocd.${RANCHER_DOMAIN}
-              paths:
-                - "/*"
-            backends:
-              - serviceName: argocd-server
-                servicePort: 80
       EOF
 
       KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
