@@ -3047,14 +3047,13 @@ write_files:
         namespace: vault
       data:
         config.docker.yaml: |
-          issuer: https://vault.app.suncoast.systems/dex
+          issuer: https://vault-dex.app.suncoast.systems
           storage:
             type: kubernetes
             config:
               inCluster: true
           web:
             http: 0.0.0.0:5556
-            prefix: /dex
 
           staticClients:
           - id: "vault"
@@ -3070,7 +3069,7 @@ write_files:
             config:
               clientID: ${VAULT_OIDC_CLIENT_ID}
               clientSecret: ${VAULT_OIDC_CLIENT_SECRET}
-              redirectURI: https://vault.app.suncoast.systems/dex/callback
+              redirectURI: https://vault-dex.app.suncoast.systems/callback
               orgs:
               - name: dotcomrow
                 teams:
@@ -3143,9 +3142,9 @@ write_files:
         - name: dex-gui
           match:
             hosts:
-            - "vault.app.suncoast.systems"
+            - "vault-dex.app.suncoast.systems"
             paths:
-            - /dex/*
+            - /*
           backends:
             - serviceName: dex
               servicePort: http
@@ -3415,7 +3414,7 @@ write_files:
 
           # OIDC setup
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/oidc/config \
-            oidc_discovery_url="https://vault.app.suncoast.systems/dex" \
+            oidc_discovery_url="https://vault-dex.app.suncoast.systems" \
             oidc_client_id="\$(cat /etc/vault-oidc/client_id)" \
             oidc_client_secret="\$(cat /etc/vault-oidc/client_secret)" \
             default_role="default"
