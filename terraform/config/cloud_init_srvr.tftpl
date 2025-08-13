@@ -3590,6 +3590,9 @@ write_files:
                 selfHeal: true
           EOF
 
+          echo "Removing APISIX access route to move access to Teleport"
+          kubectl delete apisixroute vault-ui -n vault
+
           echo "✅ App of Apps applied."
       ---
       # Vault Service
