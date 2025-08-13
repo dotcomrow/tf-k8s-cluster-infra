@@ -3047,7 +3047,7 @@ write_files:
         namespace: vault
       data:
         config.docker.yaml: |
-          issuer: https://vault-dex.app.suncoast.systems
+          issuer: https://vault.app.suncoast.systems/dex
           storage:
             type: kubernetes
             config:
@@ -3131,24 +3131,24 @@ write_files:
           port: 5556
           targetPort: 5556
       ---
-      # # APISIXRoute for Dex (expose at /dex)
-      # apiVersion: apisix.apache.org/v2
-      # kind: ApisixRoute
-      # metadata:
-      #   name: dex-ui
-      #   namespace: vault
-      # spec:
-      #   ingressClassName: apisix
-      #   http:
-      #   - name: dex-gui
-      #     match:
-      #       hosts:
-      #       - "vault.app.suncoast.systems"
-      #       paths:
-      #       - /dex/*
-      #     backends:
-      #       - serviceName: dex
-      #         servicePort: http
+      # APISIXRoute for Dex (expose at /dex)
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: dex-ui
+        namespace: vault
+      spec:
+        ingressClassName: apisix
+        http:
+        - name: dex-gui
+          match:
+            hosts:
+            - "vault.app.suncoast.systems"
+            paths:
+            - /dex/*
+          backends:
+            - serviceName: dex
+              servicePort: http
       ---
       # Vault production config
       apiVersion: v1
@@ -3415,7 +3415,7 @@ write_files:
 
           # OIDC setup
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/oidc/config \
-            oidc_discovery_url="https://vault-dex.app.suncoast.systems" \
+            oidc_discovery_url="https://vault.app.suncoast.systems/dex" \
             oidc_client_id="\$(cat /etc/vault-oidc/client_id)" \
             oidc_client_secret="\$(cat /etc/vault-oidc/client_secret)" \
             default_role="default"
@@ -3608,24 +3608,24 @@ write_files:
           port: 8200
           targetPort: vault
       ---
-      # # APISIXRoute for Vault UI
-      # apiVersion: apisix.apache.org/v2
-      # kind: ApisixRoute
-      # metadata:
-      #   name: vault-ui
-      #   namespace: vault
-      # spec:
-      #   ingressClassName: apisix
-      #   http:
-      #   - name: vault-ui
-      #     match:
-      #       hosts:
-      #       - "vault.app.suncoast.systems"
-      #       paths:
-      #       - /*
-      #     backends:
-      #       - serviceName: vault
-      #         servicePort: vault
+      # APISIXRoute for Vault UI
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixRoute
+      metadata:
+        name: vault-ui
+        namespace: vault
+      spec:
+        ingressClassName: apisix
+        http:
+        - name: vault-ui
+          match:
+            hosts:
+            - "vault.app.suncoast.systems"
+            paths:
+            - /*
+          backends:
+            - serviceName: vault
+              servicePort: vault
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: Role
