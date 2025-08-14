@@ -3125,6 +3125,8 @@ write_files:
       spec:
         selector:
           app: dex
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.122
         ports:
         - name: http
           port: 5556
