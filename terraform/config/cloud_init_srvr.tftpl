@@ -2454,7 +2454,7 @@ write_files:
                   - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
                   - --client-id=${JAEGER_CLIENT_ID}
                   - --client-secret=${JAEGER_CLIENT_SECRET}
-                  - --redirect-url=https://jaeger.${RANCHER_DOMAIN}/oauth2/callback
+                  - --redirect-url=https://jaeger.app.${RANCHER_DOMAIN}/oauth2/callback
                   - --scope=user:email,read:org
                   - --cookie-secure=true
                   - --set-authorization-header=true
@@ -2504,7 +2504,7 @@ write_files:
                   - --cookie-secret=${LINKERD_OAUTH2_PROXY_COOKIE_SECRET}
                   - --client-id=${LINKERD_CLIENT_ID}
                   - --client-secret=${LINKERD_CLIENT_SECRET}
-                  - --redirect-url=https://linkerd.${RANCHER_DOMAIN}/oauth2/callback
+                  - --redirect-url=https://linkerd.app.${RANCHER_DOMAIN}/oauth2/callback
                   - --scope=user:email,read:org
                   - --cookie-secure=true
                   - --set-authorization-header=true
@@ -2524,91 +2524,91 @@ write_files:
             port: 80
             targetPort: 4180
       ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: jaeger-ui
-        namespace: linkerd-jaeger
-        annotations:
-          apisix.apache.org/timeout: "900"
-          apisix.apache.org/websocket: "true"
-          apisix.apache.org/enable-cors: "true"
-      spec:
-        ingressClassName: apisix
-        http:
-          - name: jaeger-auth
-            match:
-              hosts:
-                - jaeger.${RANCHER_DOMAIN}
-              paths:
-                - "/"
-                - "/oauth2/*"
-                - "/jaeger/*"
-            backends:
-              - serviceName: oauth2-proxy-jaeger
-                servicePort: 80
-          - name: jaeger-websocket
-            websocket: true
-            match:
-              hosts:
-                - jaeger.${RANCHER_DOMAIN}
-              paths:
-                - "/api/*"
-                - "/metrics/*"
-            backends:
-              - serviceName: jaeger
-                servicePort: 16686
+      # apiVersion: apisix.apache.org/v2
+      # kind: ApisixRoute
+      # metadata:
+      #   name: jaeger-ui
+      #   namespace: linkerd-jaeger
+      #   annotations:
+      #     apisix.apache.org/timeout: "900"
+      #     apisix.apache.org/websocket: "true"
+      #     apisix.apache.org/enable-cors: "true"
+      # spec:
+      #   ingressClassName: apisix
+      #   http:
+      #     - name: jaeger-auth
+      #       match:
+      #         hosts:
+      #           - jaeger.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/"
+      #           - "/oauth2/*"
+      #           - "/jaeger/*"
+      #       backends:
+      #         - serviceName: oauth2-proxy-jaeger
+      #           servicePort: 80
+      #     - name: jaeger-websocket
+      #       websocket: true
+      #       match:
+      #         hosts:
+      #           - jaeger.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/api/*"
+      #           - "/metrics/*"
+      #       backends:
+      #         - serviceName: jaeger
+      #           servicePort: 16686
       ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: linkerd-dashboard
-        namespace: linkerd-viz
-        annotations:
-          apisix.apache.org/timeout: "900"
-          apisix.apache.org/websocket: "true"
-          apisix.apache.org/enable-cors: "true"
-      spec:
-        ingressClassName: apisix
-        http:
-          - name: protected-ui
-            match:
-              hosts:
-                - linkerd.${RANCHER_DOMAIN}
-              paths:
-                - "/"
-                - "/oauth2/*"
-                - "/dist/*"
-            backends:
-              - serviceName: oauth2-proxy
-                servicePort: 80
-            plugins:
-              - name: proxy-rewrite
-                enable: true
-                config:
-                  host: web.linkerd-viz.svc.cluster.local
-          - name: direct-linkerd
-            websocket: true
-            match:
-              hosts:
-                - linkerd.${RANCHER_DOMAIN}
-              paths:
-                - "/api/*"
-                - "/metrics/*"
-                - "/ws/*"
-                - "/tap/*"
-                - "/profiles/*"
-                - "/routes/*"
-            backends:
-              - serviceName: linkerd-web-proxy
-                servicePort: 80
-            plugins:
-              - name: proxy-rewrite
-                enable: true
-                config:
-                  host: web.linkerd-viz.svc.cluster.local
-                  headers:
-                    set: '{"Origin": "http://localhost"}'
+      # apiVersion: apisix.apache.org/v2
+      # kind: ApisixRoute
+      # metadata:
+      #   name: linkerd-dashboard
+      #   namespace: linkerd-viz
+      #   annotations:
+      #     apisix.apache.org/timeout: "900"
+      #     apisix.apache.org/websocket: "true"
+      #     apisix.apache.org/enable-cors: "true"
+      # spec:
+      #   ingressClassName: apisix
+      #   http:
+      #     - name: protected-ui
+      #       match:
+      #         hosts:
+      #           - linkerd.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/"
+      #           - "/oauth2/*"
+      #           - "/dist/*"
+      #       backends:
+      #         - serviceName: oauth2-proxy
+      #           servicePort: 80
+      #       plugins:
+      #         - name: proxy-rewrite
+      #           enable: true
+      #           config:
+      #             host: web.linkerd-viz.svc.cluster.local
+      #     - name: direct-linkerd
+      #       websocket: true
+      #       match:
+      #         hosts:
+      #           - linkerd.${RANCHER_DOMAIN}
+      #         paths:
+      #           - "/api/*"
+      #           - "/metrics/*"
+      #           - "/ws/*"
+      #           - "/tap/*"
+      #           - "/profiles/*"
+      #           - "/routes/*"
+      #       backends:
+      #         - serviceName: linkerd-web-proxy
+      #           servicePort: 80
+      #       plugins:
+      #         - name: proxy-rewrite
+      #           enable: true
+      #           config:
+      #             host: web.linkerd-viz.svc.cluster.local
+      #             headers:
+      #               set: '{"Origin": "http://localhost"}'
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2701,23 +2701,23 @@ write_files:
             port: 80
             targetPort: 80
       ---
-      apiVersion: apisix.apache.org/v2
-      kind: ApisixRoute
-      metadata:
-        name: kyverno-ui
-        namespace: policy-reporter
-      spec:
-        ingressClassName: apisix
-        http:
-          - name: ui
-            match:
-              hosts:
-                - policy-reporter.${RANCHER_DOMAIN}
-              paths:
-                - /*
-            backends:
-              - serviceName: policy-reporter-ui
-                servicePort: 8080
+      # apiVersion: apisix.apache.org/v2
+      # kind: ApisixRoute
+      # metadata:
+      #   name: kyverno-ui
+      #   namespace: policy-reporter
+      # spec:
+      #   ingressClassName: apisix
+      #   http:
+      #     - name: ui
+      #       match:
+      #         hosts:
+      #           - policy-reporter.${RANCHER_DOMAIN}
+      #         paths:
+      #           - /*
+      #       backends:
+      #         - serviceName: policy-reporter-ui
+      #           servicePort: 8080
       EOF
       # end apisix routes for linkerd and jaeger
 
