@@ -3591,6 +3591,7 @@ write_files:
 
           echo "Removing APISIX access route to move access to Teleport"
           kubectl delete apisixroute vault-ui -n vault
+          kubectl delete apisixroute dex-ui -n vault
 
           echo "✅ App of Apps applied."
       ---
