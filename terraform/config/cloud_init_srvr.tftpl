@@ -3201,14 +3201,14 @@ write_files:
             labels:
               app: vault
           spec:
-            dnsPolicy: "None"                     
-            dnsConfig:                            
-              nameservers:
-                - 10.43.0.10
-                - 10.0.0.10                        
-              options:
-                - name: ndots
-                  value: "2"
+            # dnsPolicy: "None"                     
+            # dnsConfig:                            
+            #   nameservers:
+            #     - 10.43.0.10
+            #     - 10.0.0.10                        
+            #   options:
+            #     - name: ndots
+            #       value: "2"
             securityContext:
               fsGroup: 1000
             initContainers:
