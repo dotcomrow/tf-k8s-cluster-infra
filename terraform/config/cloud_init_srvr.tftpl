@@ -3414,7 +3414,7 @@ write_files:
 
           # OIDC setup
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/oidc/config \
-            oidc_discovery_url="http://dex.vault.svc.cluster.local:5556" \
+            oidc_discovery_url="https://vault-dex.app.suncoast.systems" \
             oidc_client_id="\$(cat /etc/vault-oidc/client_id)" \
             oidc_client_secret="\$(cat /etc/vault-oidc/client_secret)" \
             default_role="default"
