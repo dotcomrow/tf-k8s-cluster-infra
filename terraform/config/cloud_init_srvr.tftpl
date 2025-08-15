@@ -3597,7 +3597,7 @@ write_files:
 
           kubectl patch statefulset vault -n vault \
             --type='merge' \
-            -p '{"spec": {"template": {"spec": {"dnsPolicy": "None", "dnsConfig": {"nameservers": ["10.0.0.10", "10.43.0.10"], "options": [{"name": "ndots", "value": "2"}]}}}}}'
+            -p '{"spec": {"template": {"spec": {"dnsPolicy": "None", "dnsConfig": {"nameservers": ["10.43.0.10", "10.0.0.10"], "options": [{"name": "ndots", "value": "2"}]}}}}}'
 
           kubectl delete pod -l app=vault -n vault
           
