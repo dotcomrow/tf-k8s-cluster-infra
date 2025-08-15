@@ -3314,6 +3314,10 @@ write_files:
           VAULT_PID=\$!
           sleep 5
 
+          # setup external dns
+          mv /etc/resolv.conf /etc/resolv.conf.bak
+          echo "nameserver 10.0.0.10" > /etc/resolv.conf
+
           # Initialize if necessary
           if [ ! -f /vault/data/init.json ]; then
             vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /vault/data/init.json
@@ -3594,6 +3598,7 @@ write_files:
           echo "Removing APISIX access route to move access to Teleport"
           kubectl delete apisixroute vault-ui -n vault
           kubectl delete apisixroute dex-ui -n vault
+          kubectl delete pod vault-0 -n vault
 
           echo "✅ App of Apps applied."
       ---
