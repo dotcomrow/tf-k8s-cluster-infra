@@ -1173,8 +1173,8 @@ write_files:
         MANIFEST_DIR="/etc/rancher/rke2/server/manifests"
       elif [ -d "/var/lib/rancher/k3s/server/manifests" ]; then
         MANIFEST_DIR="/var/lib/rancher/k3s/server/manifests"
-      elif [ -d "/var/lib/rancher/rke2/server/manifests/" ]; then
-        MANIFEST_DIR="/var/lib/rancher/rke2/server/manifests/"
+      elif [ -d "/var/lib/rancher/rke2/server/manifests" ]; then
+        MANIFEST_DIR="/var/lib/rancher/rke2/server/manifests"
       else
         echo "❌ Could not detect RKE2 or K3s manifest directory."
         exit 1
@@ -1208,7 +1208,7 @@ write_files:
         valuesContent: |-
           servers:
             - zones:
-                - "."
+                - zone: .
               port: 53
               plugins:
                 - name: errors
@@ -1233,10 +1233,10 @@ write_files:
       # 5) Give the controller a moment, then verify it applied
       sleep 15
       echo "🔍 Checking Corefile for your upstream(s)..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get configmap coredns -o yaml | grep -A2 'forward \. ' || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get configmap rke2-coredns-rke2-coredns -o yaml | grep -A2 'forward \. ' || true
 
       # 6) (Optional) Nudge a rollout if you want it immediate:
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system rollout restart deploy/coredns
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system rollout restart deploy/rke2-coredns-rke2-coredns
 
       echo "✅ CoreDNS is patched and ready with persistent DNS fallback."
 
