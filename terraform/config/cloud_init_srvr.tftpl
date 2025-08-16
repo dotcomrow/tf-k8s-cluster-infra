@@ -1167,6 +1167,46 @@ write_files:
       CM_NAME="rke2-coredns-rke2-coredns"
       DEPLOYMENT_NAME="rke2-coredns-rke2-coredns"
       TMP_FILE="/tmp/coredns-patch.yaml"
+      MANIFEST="/var/lib/rancher/rke2/server/manifests/rke2-coredns.yaml"
+      TMPFILE="/tmp/rke2-coredns-values.yaml"
+
+      echo "🔍 Checking manifest file: $MANIFEST"
+      if [ ! -f "$MANIFEST" ]; then
+        echo "❌ ERROR: Manifest file not found: $MANIFEST"
+        exit 1
+      fi
+
+      echo "✅ Manifest file exists."
+
+      # Extract and decode chartContent
+      echo "⏳ Decoding chartContent to $TMPFILE ..."
+      sudo yq '.spec.chartContent' "$MANIFEST" | base64 -d | sudo gunzip > "$TMPFILE"
+
+      if [ ! -s "$TMPFILE" ]; then
+        echo "❌ ERROR: Decoded file is empty or failed to write: $TMPFILE"
+        exit 2
+      fi
+
+      echo "✅ Decoded file written: $TMPFILE"
+
+      # 2. Edit the forward plugin in the servers block (replace /etc/resolv.conf with your DNS, e.g., 10.0.0.10)
+      sudo sed -i 's/parameters: . \/etc\/resolv.conf/parameters: . 10.0.0.10/' /tmp/rke2-coredns-values.yaml
+
+      # Test for expected DNS forwarder (e.g., 10.0.0.10)
+      if grep -q 'parameters: . 10.0.0.10' "$TMPFILE"; then
+        echo "✅ DNS forwarder is set to 10.0.0.10"
+      else
+        echo "⚠️ WARNING: DNS forwarder is NOT set to 10.0.0.10"
+        grep 'parameters:' "$TMPFILE"
+      fi
+
+      echo "🏁 Done."
+
+      # 3. Re-encode the file: gzip, then base64
+      sudo gzip -c /tmp/rke2-coredns-values.yaml | sudo base64 > /tmp/rke2-coredns-chartContent.b64
+
+      # 4. Replace the chartContent in the manifest
+      sudo yq -i '.spec.chartContent = load_str("/tmp/rke2-coredns-chartContent.b64")' /var/lib/rancher/rke2/server/manifests/rke2-coredns.yaml
 
       echo "🔍 Fetching current CoreDNS config..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" get configmap "$CM_NAME" -o yaml > "$TMP_FILE"
@@ -1182,18 +1222,6 @@ write_files:
 
       echo "📦 Creating new CoreDNS ConfigMap..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" create -f "$TMP_FILE"
-
-      # 1. Decode the chartContent to a temp directory
-      sudo yq '.spec.chartContent' /var/lib/rancher/rke2/server/manifests/rke2-coredns.yaml | base64 -d | gunzip > /tmp/rke2-coredns-values.yaml
-
-      # 2. Edit the forward plugin in the servers block (replace /etc/resolv.conf with your DNS, e.g., 10.0.0.10)
-      sudo sed -i 's/parameters: . \/etc\/resolv.conf/parameters: . 10.0.0.10/' /tmp/rke2-coredns-values.yaml
-
-      # 3. Re-encode the file: gzip, then base64
-      gzip -c /tmp/rke2-coredns-values.yaml | base64 > /tmp/rke2-coredns-chartContent.b64
-
-      # 4. Replace the chartContent in the manifest
-      sudo yq -i '.spec.chartContent = load_str("/tmp/rke2-coredns-chartContent.b64")' /var/lib/rancher/rke2/server/manifests/rke2-coredns.yaml
 
       echo "🚀 Restarting CoreDNS deployment..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout restart deployment "$DEPLOYMENT_NAME"
