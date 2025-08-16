@@ -1168,9 +1168,6 @@ write_files:
       done
       sudo chmod +x /usr/local/bin/yq
 
-      # Define internal DNS IP(s)
-      INTERNAL_DNS="10.0.0.10"
-
       # Detect RKE2 or K3s
       if [ -d "/etc/rancher/rke2/server/manifests" ]; then
         MANIFEST_DIR="/etc/rancher/rke2/server/manifests"
@@ -1183,12 +1180,29 @@ write_files:
         exit 1
       fi
 
-      # Create HelmChartConfig for CoreDNS
-      cat <<EOF | sudo tee "$MANIFEST_DIR/coredns-config.yaml" >/dev/null
+      # 1) Ensure we’re on RKE2 and set the manifests dir
+      [ -d "$MANIFEST_DIR" ] || { echo "❌ $MANIFEST_DIR not found (is rke2-server installed on this node?)"; exit 1; }
+
+      # 2) Find the CoreDNS HelmChart name (typically rke2-coredns)
+      CHART_NAME="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get helmcharts.helm.cattle.io \
+        -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep -E '^rke2-coredns|^coredns$' | head -n1)"
+
+      if [ -z "$CHART_NAME" ]; then
+        echo "❌ Could not find CoreDNS HelmChart in kube-system. Run:
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get helmcharts.helm.cattle.io"
+        exit 1
+      fi
+      echo "🔎 CoreDNS HelmChart name: $CHART_NAME"
+
+      # 3) Set your internal DNS upstream(s)
+      INTERNAL_DNS="10.0.0.10"
+
+      # 4) Write the HelmChartConfig overlay
+      sudo tee "$MANIFEST_DIR/coredns-config.yaml" >/dev/null <<EOF
       apiVersion: helm.cattle.io/v1
       kind: HelmChartConfig
       metadata:
-        name: coredns
+        name: $CHART_NAME
         namespace: kube-system
       spec:
         valuesContent: |-
@@ -1201,7 +1215,7 @@ write_files:
                 - name: health
                 - name: ready
                 - name: kubernetes
-                  parameters: internal.lan in-addr.arpa ip6.arpa
+                  parameters: cluster.local in-addr.arpa ip6.arpa
                   configBlock: |
                     pods insecure
                     fallthrough in-addr.arpa ip6.arpa
@@ -1214,13 +1228,15 @@ write_files:
                 - name: loadbalance
       EOF
 
-      echo "✅ CoreDNS override manifest written to: $MANIFEST_DIR/coredns-config.yaml"
-      echo "⏳ Waiting 15 seconds for Rancher to reconcile CoreDNS..."
+      echo "✅ Wrote $MANIFEST_DIR/coredns-config.yaml"
 
+      # 5) Give the controller a moment, then verify it applied
       sleep 15
+      echo "🔍 Checking Corefile for your upstream(s)..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get configmap coredns -o yaml | grep -A2 'forward \. ' || true
 
-      echo "🔍 Verifying updated CoreDNS config..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system get configmap coredns -o yaml | grep -A10 'Corefile:' | grep "$INTERNAL_DNS" && echo "✅ Internal DNS ($INTERNAL_DNS) detected in CoreDNS config" || echo "⚠️ Internal DNS not yet applied"
+      # 6) (Optional) Nudge a rollout if you want it immediate:
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system rollout restart deploy/coredns
 
       echo "✅ CoreDNS is patched and ready with persistent DNS fallback."
 
