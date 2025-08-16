@@ -1176,6 +1176,8 @@ write_files:
         MANIFEST_DIR="/etc/rancher/rke2/server/manifests"
       elif [ -d "/var/lib/rancher/k3s/server/manifests" ]; then
         MANIFEST_DIR="/var/lib/rancher/k3s/server/manifests"
+      elif [ -d "/var/lib/rancher/rke2/server/manifests/" ]; then
+        MANIFEST_DIR="/var/lib/rancher/rke2/server/manifests/"
       else
         echo "❌ Could not detect RKE2 or K3s manifest directory."
         exit 1
