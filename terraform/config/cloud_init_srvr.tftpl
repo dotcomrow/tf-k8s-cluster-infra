@@ -1162,6 +1162,12 @@ write_files:
       #!/bin/bash
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
+      until sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq; do
+        echo "Retry on failed download of yq..."
+        sleep 5
+      done
+      sudo chmod +x /usr/local/bin/yq
+
       KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
       NS="kube-system"
       CM_NAME="rke2-coredns-rke2-coredns"
@@ -1662,12 +1668,6 @@ write_files:
 
       bash -c "sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io first-login --type='merge' -p '{\"value\": \"admin\"}'"
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rancher -n cattle-system
-
-      until sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq; do
-        echo "Retry on failed download of yq..."
-        sleep 5
-      done
-      sudo chmod +x /usr/local/bin/yq
 
       export HOME=/home/ubuntu
 
