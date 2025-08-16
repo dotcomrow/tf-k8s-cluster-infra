@@ -1204,7 +1204,7 @@ write_files:
                     pods insecure
                     fallthrough in-addr.arpa ip6.arpa
                 - name: forward
-                  parameters: . ${INTERNAL_DNS}
+                  parameters: . $INTERNAL_DNS
                 - name: cache
                   parameters: 30
                 - name: loop
