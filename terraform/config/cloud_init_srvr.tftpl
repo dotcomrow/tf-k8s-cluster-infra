@@ -1171,9 +1171,10 @@ write_files:
       echo "🔍 Fetching current CoreDNS config..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" get configmap "$CM_NAME" -o yaml > "$TMP_FILE"
 
-      echo "🛠 Patching CoreDNS ConfigMap to prioritize internal.lan..."
       # Replace the line with the kubernetes plugin configuration
+      echo "🛠 Patching CoreDNS ConfigMap to prioritize internal.lan..."
       sudo sed -i 's/kubernetes .*cluster.local/kubernetes internal.lan cluster.local/' "$TMP_FILE"
+      sudo sed -i 's|forward  \. /etc/resolv.conf|forward . 10.0.0.10|' "$TMP_FILE"
 
       echo "📦 Applying patched ConfigMap..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" apply -f "$TMP_FILE"
