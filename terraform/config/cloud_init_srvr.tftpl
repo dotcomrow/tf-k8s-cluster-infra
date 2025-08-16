@@ -1177,7 +1177,11 @@ write_files:
       sudo sed -i 's|forward  \. /etc/resolv.conf|forward . 10.0.0.10|' "$TMP_FILE"
 
       echo "📦 Applying patched ConfigMap..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" apply -f "$TMP_FILE"
+      echo "🗑️ Deleting old CoreDNS ConfigMap..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" delete configmap "$CM_NAME"
+
+      echo "📦 Creating new CoreDNS ConfigMap..."
+      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" create -f "$TMP_FILE"
 
       echo "🚀 Restarting CoreDNS deployment..."
       sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NS" rollout restart deployment "$DEPLOYMENT_NAME"
