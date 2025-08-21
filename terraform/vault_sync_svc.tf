@@ -112,7 +112,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
         name  = "VAULT_READ_TIMEOUT_MS"
         value = "2000"
       }
-
       env {
         name  = "VAULT_WAIT_FOR_TUNNEL_MS"
         value = "4000"
