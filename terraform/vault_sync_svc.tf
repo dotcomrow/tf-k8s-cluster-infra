@@ -90,11 +90,6 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
       name  = "app"
       image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
-      env {
-        name  = "PORT"
-        value = "8080"
-      }
-
       # Prefer Teleport tunnel, fallback direct
       env {
         name  = "VAULT_ADDRS"
