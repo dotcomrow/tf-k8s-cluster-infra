@@ -119,7 +119,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     # --- Sidecar: Teleport Machine ID (tbot) ---
     containers {
       name  = "tbot"
-      image = "public.ecr.aws/gravitational/tbot-distroless:18.1.5"
+      image = "us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/thirdparty/tbot-distroless:18.1.6"
       # tbot will read base64 config from TBOT_CONFIG and start.
       args  = ["start"]
       env {
