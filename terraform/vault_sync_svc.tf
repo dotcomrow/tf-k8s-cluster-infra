@@ -61,6 +61,7 @@ resource "google_artifact_registry_repository" "thirdparty" {
   repository_id = "thirdparty"
   format        = "DOCKER"
   description   = "Third-party sidecars and base images"
+  project            = google_project.infra.project_id
 }
 
 locals {
