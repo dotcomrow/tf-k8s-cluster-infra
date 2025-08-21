@@ -56,27 +56,53 @@ resource "google_project_iam_member" "secret_manager_grant" {
   member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
 }
 
+locals {
+  tbot_config_yaml = templatefile("${path.module}/tbot_config/vault_tbot_config.tftpl", {
+    proxy_server = "teleport.app.suncoast.systems:443"
+    token_name   = "vault-bot-gcp"     # must match your Teleport token resource name
+    app_name     = "vault"
+    listen_addr  = "tcp://127.0.0.1:8200"
+  })
+  tbot_config_b64 = base64encode(local.tbot_config_yaml)
+}
+
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
-  name     = "vault-sync-run-container"
-  location = var.region
-  ingress  = "INGRESS_TRAFFIC_ALL"
-  project  = google_project.infra.project_id
+  name               = "vault-sync-run-container"
+  location           = var.region
+  ingress            = "INGRESS_TRAFFIC_ALL"
+  project            = google_project.infra.project_id
   deletion_protection = false
 
   template {
+    # Use the Cloud Run execution identity that is allowed in your Teleport GCP join token
     service_account = google_service_account.eventarc_service_account.email
 
+    # --- Ingress container (your app) ---
     containers {
+      name  = "app"
       image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
-      env {
-        name  = "GCP_PROJECT_ID"
-        value = google_project.infra.project_id
-      }
+      # Cloud Run sets PORT automatically; set or read it in your app
+      env { name = "PORT"  value = "8080" }
 
+      # Prefer Teleport tunnel, fallback direct (your existing var)
+      env { name = "VAULT_ADDRS"               value = "http://127.0.0.1:8200,${var.VAULT_ADDRESS}" }
+      env { name = "GCP_PROJECT_ID"            value = google_project.infra.project_id }
+      env { name = "VAULT_CONNECT_TIMEOUT_MS"  value = "300" }
+      env { name = "VAULT_READ_TIMEOUT_MS"     value = "2000" }
+
+      ports { container_port = 8080 }
+    }
+
+    # --- Sidecar: Teleport Machine ID (tbot) ---
+    containers {
+      name  = "tbot"
+      image = "public.ecr.aws/gravitational/tbot-distroless:18.1.5"
+      # tbot will read base64 config from TBOT_CONFIG and start.
+      args  = ["start"]
       env {
-        name  = "VAULT_ADDR"
-        value = var.VAULT_ADDRESS
+        name  = "TBOT_CONFIG"
+        value = local.tbot_config_b64
       }
     }
   }
