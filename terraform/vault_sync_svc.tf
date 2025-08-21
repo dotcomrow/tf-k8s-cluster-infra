@@ -56,6 +56,13 @@ resource "google_project_iam_member" "secret_manager_grant" {
   member  = "serviceAccount:${data.google_compute_default_service_account.default.email}"
 }
 
+resource "google_artifact_registry_repository" "thirdparty" {
+  location      = var.region
+  repository_id = "thirdparty"
+  format        = "DOCKER"
+  description   = "Third-party sidecars and base images"
+}
+
 locals {
   tbot_config_yaml = templatefile("${path.module}/tbot_config/vault_tbot_config.tftpl", {
     proxy_server = "teleport.app.suncoast.systems:443"

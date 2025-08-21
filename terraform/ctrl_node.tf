@@ -20,14 +20,23 @@ resource "random_integer" "delay_seconds_ctrl" {
 }
 
 resource "null_resource" "delay_before_vm_ctrl" {
+  # Only changes if the random value changes (it won't) or srvr-node is replaced
+  triggers = {
+    delay_val = random_integer.delay_seconds_ctrl.result
+  }
+
   provisioner "local-exec" {
     command = "echo Sleeping for ${random_integer.delay_seconds_ctrl.result} seconds... && sleep ${random_integer.delay_seconds_ctrl.result}"
   }
 
-  triggers = {
-    always_run = timestamp()
-    delay_val  = random_integer.delay_seconds_ctrl.result
+  # Recreate this delay only when srvr-node VM is replaced
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_vm.srvr_rancher_vm
+    ]
   }
+
+  depends_on = [proxmox_virtual_environment_vm.srvr_rancher_vm]
 }
 
 # Upload cloud-init configuration to Proxmox as a snippet
