@@ -5,23 +5,27 @@ import fetch, { RequestInit, Response as FetchResponse } from 'node-fetch';
 
 const app = express();
 app.use(bodyParser.json());
-
 const client = new SecretManagerServiceClient();
 
-// ---------- Teleport-tunnel-first vault access ----------
+// ---------- Config ----------
 const ADDRS = (process.env.VAULT_ADDRS || process.env.VAULT_ADDR || '')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+
 if (ADDRS.length === 0) {
   throw new Error('Set VAULT_ADDRS (comma-separated) or VAULT_ADDR.');
 }
 
 const CONNECT_TIMEOUT_MS = parseInt(process.env.VAULT_CONNECT_TIMEOUT_MS || '300', 10);
 const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '2000', 10);
+const WAIT_FOR_TUNNEL_MS = parseInt(process.env.VAULT_WAIT_FOR_TUNNEL_MS || '4000', 10);
+const ENFORCE_TELEPORT   = (process.env.VAULT_ENFORCE_TELEPORT || 'false').toLowerCase() === 'true';
+
+const TUNNEL_BASE = 'http://127.0.0.1:8200';
 const RETRY_STATUSES = new Set([502, 503, 504]);
 
-function joinUrl(base: string, path: string): string {
+function joinUrl(base: string, path: string) {
   const b = base.endsWith('/') ? base.slice(0, -1) : base;
   const p = path.startsWith('/') ? path : `/${path}`;
   return `${b}${p}`;
@@ -37,57 +41,73 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<FetchR
   }
 }
 
-/**
- * Try each VAULT address in order. On network error or 502/503/504, try the next.
- * On 2xx/4xx (other than above), return the response from that address.
- */
+// ---------- Wait for Teleport tunnel on cold start ----------
+let tunnelReadyOnce = false;
+
+async function waitForTunnelReady(): Promise<boolean> {
+  if (tunnelReadyOnce) return true;
+  const deadline = Date.now() + WAIT_FOR_TUNNEL_MS;
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetchWithTimeout(joinUrl(TUNNEL_BASE, '/v1/sys/health'), { method: 'GET' });
+      if (r.ok || r.status === 429 || r.status === 503) { // Vault may return 429/503 when sealed/standby, but tunnel works
+        tunnelReadyOnce = true;
+        return true;
+      }
+    } catch (_) {
+      // ignore and retry quickly
+    }
+    await new Promise(res => setTimeout(res, 100));
+  }
+  return false;
+}
+
+// ---------- Vault request helper (tunnel-first, with optional enforcement) ----------
 async function vaultRequest(path: string, init?: RequestInit): Promise<{ res: FetchResponse; base: string }> {
+  // Try to bring up the tunnel quickly on cold starts
+  const tunnelUp = await waitForTunnelReady();
+
+  const candidates = ENFORCE_TELEPORT
+    ? [TUNNEL_BASE]
+    : (tunnelUp ? [TUNNEL_BASE, ...ADDRS.filter(a => a !== TUNNEL_BASE)] : ADDRS);
+
   let lastErr: any;
-  for (const base of ADDRS) {
+  for (const base of candidates) {
     const url = joinUrl(base, path);
     try {
       const res = await fetchWithTimeout(url, init);
       if (res.ok || !RETRY_STATUSES.has(res.status)) {
         return { res, base };
       }
-      // Retryable status — try next address
       lastErr = new Error(`HTTP ${res.status} from ${url}`);
-    } catch (e: any) {
-      // Connection/timeout — try next
+    } catch (e) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error('All VAULT_ADDRS failed');
+  throw lastErr || new Error('All VAULT endpoints failed');
 }
 
-async function vaultJson(path: string, init?: RequestInit): Promise<any> {
+async function vaultJson(path: string, init?: RequestInit) {
   const { res, base } = await vaultRequest(path, init);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
   }
   const ct = res.headers.get('content-type') || '';
-  if (!ct.includes('json')) return res.text();
-  return res.json();
+  return ct.includes('json') ? res.json() : res.text();
 }
 
-// ---------- Vault token (AppRole or static) ----------
+// ---------- Token (AppRole or static) ----------
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function getVaultToken(): Promise<string> {
   if (process.env.VAULT_TOKEN) return process.env.VAULT_TOKEN;
-
-  // Simple 5-minute client cache to reduce logins
   const now = Date.now();
-  if (cachedToken && now < cachedToken.expiresAt) {
-    return cachedToken.token;
-  }
+  if (cachedToken && now < cachedToken.expiresAt) return cachedToken.token;
 
   const roleId = process.env.VAULT_ROLE_ID;
   const secretId = process.env.VAULT_SECRET_ID;
-  if (!roleId || !secretId) {
-    throw new Error('Missing VAULT_ROLE_ID or VAULT_SECRET_ID');
-  }
+  if (!roleId || !secretId) throw new Error('Missing VAULT_ROLE_ID or VAULT_SECRET_ID');
 
   const json = await vaultJson('/v1/auth/approle/login', {
     method: 'POST',
@@ -97,36 +117,27 @@ async function getVaultToken(): Promise<string> {
 
   const token = json?.auth?.client_token as string | undefined;
   if (!token) throw new Error('Vault AppRole login failed');
-
   cachedToken = { token, expiresAt: now + 5 * 60_000 };
   return token;
 }
 
-// ---------- Helpers for KV v2 (paths you already use) ----------
+// ---------- KV helpers ----------
 async function writeToVault(dataPath: string, value: string): Promise<void> {
   const token = await getVaultToken();
-  const body = JSON.stringify({ data: { value } });
-
   await vaultJson(`/v1/${dataPath}`, {
     method: 'POST',
-    headers: {
-      'X-Vault-Token': token,
-      'Content-Type': 'application/json',
-    },
-    body,
+    headers: { 'X-Vault-Token': token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data: { value } }),
   });
-
   console.log('✅ Secret synced to Vault.');
 }
 
 async function deleteFromVault(metadataPath: string): Promise<void> {
   const token = await getVaultToken();
-
   await vaultJson(`/v1/${metadataPath}`, {
     method: 'DELETE',
     headers: { 'X-Vault-Token': token },
   });
-
   console.log('🗑️ Secret deleted from Vault.');
 }
 
@@ -135,7 +146,7 @@ function extractSecretName(versionPath: string): string {
   return parts[parts.indexOf('secrets') + 1];
 }
 
-// ---------- HTTP handlers ----------
+// ---------- Handlers (unchanged behavior) ----------
 app.post('/', async (req: Request, res: Response) => {
   try {
     const event = req.body;
@@ -143,7 +154,6 @@ app.post('/', async (req: Request, res: Response) => {
     let secretPath = event?.protoPayload?.resourceName;
     if (!secretPath) throw new Error('Missing secret path in event payload');
 
-    // Normalize to secret version if needed
     if (!secretPath.includes('/versions/') && methodName !== 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret') {
       secretPath = `${secretPath}/versions/latest`;
     }
@@ -156,29 +166,19 @@ app.post('/', async (req: Request, res: Response) => {
 
     switch (methodName) {
       case 'google.cloud.secretmanager.v1.SecretManagerService.CreateSecret':
-        console.log(`📁 Creating placeholder in Vault for new secret: ${vaultDataPath}`);
         await writeToVault(vaultDataPath, '__PLACEHOLDER__');
         break;
 
       case 'google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion':
       case 'google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret': {
-        console.log(`📥 Fetching secret version: ${secretPath}`);
-        let versionedSecretPath = secretPath;
-        if (!versionedSecretPath.includes('/versions/')) {
-          versionedSecretPath += '/versions/latest';
-        }
-
-        const [accessResponse] = await client.accessSecretVersion({ name: versionedSecretPath });
+        const [accessResponse] = await client.accessSecretVersion({ name: secretPath.includes('/versions/') ? secretPath : `${secretPath}/versions/latest` });
         const payload = accessResponse.payload?.data?.toString();
         if (!payload) throw new Error('Empty secret payload');
-
-        console.log(`🔐 Writing secret to Vault at: ${vaultDataPath}`);
         await writeToVault(vaultDataPath, payload);
         break;
       }
 
       case 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret':
-        console.log(`❌ Deleting secret from Vault at: ${vaultMetadataPath}`);
         await deleteFromVault(vaultMetadataPath);
         break;
 
@@ -213,14 +213,10 @@ app.post('/sync-all', async (req: Request, res: Response) => {
       const secretName = extractSecretName(latestVersion);
       const vaultDataPath = `secret/data/${secretName}`;
 
-      console.log(`Syncing ${vaultDataPath}`);
       const token = await getVaultToken();
       const { res: r, base } = await vaultRequest(`/v1/${vaultDataPath}`, {
         method: 'POST',
-        headers: {
-          'X-Vault-Token': token,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'X-Vault-Token': token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: { value: payload } }),
       });
 
@@ -239,6 +235,4 @@ app.post('/sync-all', async (req: Request, res: Response) => {
 });
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
-app.listen(PORT, () => {
-  console.log(`Sync service listening on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Sync service listening on port ${PORT}`));
