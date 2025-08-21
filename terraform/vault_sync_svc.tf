@@ -113,6 +113,11 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
         value = "2000"
       }
 
+      env {
+        name  = "VAULT_WAIT_FOR_TUNNEL_MS"
+        value = "4000"
+      }
+
       ports { container_port = 8080 }
     }
 
