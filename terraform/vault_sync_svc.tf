@@ -82,14 +82,28 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
       name  = "app"
       image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
-      # Cloud Run sets PORT automatically; set or read it in your app
-      env { name = "PORT"  value = "8080" }
+      env {
+        name  = "PORT"
+        value = "8080"
+      }
 
-      # Prefer Teleport tunnel, fallback direct (your existing var)
-      env { name = "VAULT_ADDRS"               value = "http://127.0.0.1:8200,${var.VAULT_ADDRESS}" }
-      env { name = "GCP_PROJECT_ID"            value = google_project.infra.project_id }
-      env { name = "VAULT_CONNECT_TIMEOUT_MS"  value = "300" }
-      env { name = "VAULT_READ_TIMEOUT_MS"     value = "2000" }
+      # Prefer Teleport tunnel, fallback direct
+      env {
+        name  = "VAULT_ADDRS"
+        value = "http://127.0.0.1:8200,${var.VAULT_ADDRESS}"
+      }
+      env {
+        name  = "GCP_PROJECT_ID"
+        value = google_project.infra.project_id
+      }
+      env {
+        name  = "VAULT_CONNECT_TIMEOUT_MS"
+        value = "300"
+      }
+      env {
+        name  = "VAULT_READ_TIMEOUT_MS"
+        value = "2000"
+      }
 
       ports { container_port = 8080 }
     }
