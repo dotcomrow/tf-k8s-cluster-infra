@@ -107,10 +107,11 @@ async function vaultJson<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
   }
+  if (res.status === 204) return {} as T; // no content
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('json')) {
     const text = await res.text();
-    throw new Error(`Expected JSON from Vault via ${base}, got "${ct}": ${text.slice(0, 200)}`);
+    throw new Error(`Expected JSON via ${base}, got "${ct}": ${text.slice(0,200)}`);
   }
   return res.json() as Promise<T>;
 }
