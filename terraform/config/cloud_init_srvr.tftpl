@@ -3126,6 +3126,27 @@ write_files:
 
           ui = true
       ---
+      # NEW: ServiceAccount used by Vault for token review
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-auth
+        namespace: vault
+      ---
+      # NEW: allow that SA to call the TokenReview API
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: vault-auth-delegator
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: system:auth-delegator
+      subjects:
+        - kind: ServiceAccount
+          name: vault-auth
+          namespace: vault
+      ---
       # Vault StatefulSet with OIDC enable
       apiVersion: apps/v1
       kind: StatefulSet
@@ -3145,6 +3166,7 @@ write_files:
             labels:
               app: vault
           spec:
+            serviceAccountName: vault-auth
             dnsPolicy: "None"                     
             dnsConfig:                            
               nameservers:
@@ -3295,6 +3317,7 @@ write_files:
             token_reviewer_jwt="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
             kubernetes_host="https://\$KUBERNETES_SERVICE_HOST:\$KUBERNETES_SERVICE_PORT_HTTPS" \
             kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            issuer="https://kubernetes.default.svc.cluster.local"
 
           # Enable KV secrets engine
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
