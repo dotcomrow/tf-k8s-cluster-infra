@@ -7,6 +7,11 @@ const app = express();
 app.use(bodyParser.json());
 const client = new SecretManagerServiceClient();
 
+// Cache for short-lived Vault token (in-memory, per instance)
+type CachedToken = { token: string; expiresAt: number };
+let cachedToken: CachedToken | null = null;
+
+
 // ---------- Config ----------
 const ADDRS = (process.env.VAULT_ADDRS || process.env.VAULT_ADDR || '')
   .split(',')
@@ -86,37 +91,62 @@ async function vaultRequest(path: string, init?: RequestInit): Promise<{ res: Fe
   }
   throw lastErr || new Error('All VAULT endpoints failed');
 }
+// 1) Add a type for the login response
+type VaultAppRoleLoginResp = {
+  auth?: {
+    client_token?: string;
+    lease_duration?: number;
+    renewable?: boolean;
+  };
+};
 
-async function vaultJson(path: string, init?: RequestInit) {
+// 2) Replace your vaultJson with a generic JSON-only version
+async function vaultJson<T>(path: string, init?: RequestInit): Promise<T> {
   const { res, base } = await vaultRequest(path, init);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
   }
   const ct = res.headers.get('content-type') || '';
-  return ct.includes('json') ? res.json() : res.text();
+  if (!ct.includes('json')) {
+    const text = await res.text();
+    throw new Error(`Expected JSON from Vault via ${base}, got "${ct}": ${text.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
 }
 
-// ---------- Token (AppRole or static) ----------
-let cachedToken: { token: string; expiresAt: number } | null = null;
+// (Optional) If you ever need raw text responses, add this:
+async function vaultText(path: string, init?: RequestInit): Promise<string> {
+  const { res, base } = await vaultRequest(path, init);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
+  }
+  return res.text();
+}
 
+// 3) In getVaultToken, call vaultJson with the correct type
 async function getVaultToken(): Promise<string> {
   if (process.env.VAULT_TOKEN) return process.env.VAULT_TOKEN;
+
   const now = Date.now();
   if (cachedToken && now < cachedToken.expiresAt) return cachedToken.token;
 
   const roleId = process.env.VAULT_ROLE_ID;
   const secretId = process.env.VAULT_SECRET_ID;
-  if (!roleId || !secretId) throw new Error('Missing VAULT_ROLE_ID or VAULT_SECRET_ID');
+  if (!roleId || !secretId) {
+    throw new Error('Missing VAULT_ROLE_ID or VAULT_SECRET_ID');
+  }
 
-  const json = await vaultJson('/v1/auth/approle/login', {
+  const json = await vaultJson<VaultAppRoleLoginResp>('/v1/auth/approle/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ role_id: roleId, secret_id: secretId }),
   });
 
-  const token = json?.auth?.client_token as string | undefined;
+  const token = json?.auth?.client_token;
   if (!token) throw new Error('Vault AppRole login failed');
+
   cachedToken = { token, expiresAt: now + 5 * 60_000 };
   return token;
 }
