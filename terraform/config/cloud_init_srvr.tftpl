@@ -2934,13 +2934,7 @@ write_files:
       data:
         PROJECT_REGION: ${GCP_REGION}
       ---
-      # Dex SA + cluster-admin (scoped to dex SA, not "default")
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: dex
-        namespace: vault
-      ---
+      # Grant cluster-admin to "default" in vault (matches your previous working state)
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
       metadata:
@@ -2951,7 +2945,27 @@ write_files:
         apiGroup: rbac.authorization.k8s.io
       subjects:
       - kind: ServiceAccount
-        name: dex
+        name: default
+        namespace: vault
+      ---
+      # ALSO grant cluster-admin to vault-auth (so both the pod & the Job can act cluster-wide)
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: vault-auth
+        namespace: vault
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: vault-auth-admin
+      roleRef:
+        kind: ClusterRole
+        name: cluster-admin
+        apiGroup: rbac.authorization.k8s.io
+      subjects:
+      - kind: ServiceAccount
+        name: vault-auth
         namespace: vault
       ---
       # GCP KMS unseal credentials
@@ -2982,42 +2996,12 @@ write_files:
         name: vault-creds-pvc
         namespace: vault
       spec:
-        accessModes: ["ReadWriteMany"]
+        accessModes:
+          - ReadWriteMany
         resources:
           requests:
             storage: 1Gi
         storageClassName: nfs-client
-      ---
-      # RBAC for the Vault pod's SA to create secret/job & manage APISIX routes
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: Role
-      metadata:
-        name: vault-runner
-        namespace: vault
-      rules:
-      - apiGroups: [""]
-        resources: ["secrets"]
-        verbs: ["create","get","list","watch","update","patch"]
-      - apiGroups: ["batch"]
-        resources: ["jobs"]
-        verbs: ["create","get","list","watch","update","patch"]
-      - apiGroups: ["apisix.apache.org"]
-        resources: ["apisixroutes"]
-        verbs: ["get","list","watch","create","update","patch","delete"]
-      ---
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: RoleBinding
-      metadata:
-        name: vault-runner-binding
-        namespace: vault
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: Role
-        name: vault-runner
-      subjects:
-      - kind: ServiceAccount
-        name: vault-auth
-        namespace: vault
       ---
       # Dex configuration (GitHub connector and Vault client)
       apiVersion: v1
@@ -3052,8 +3036,10 @@ write_files:
               redirectURI: https://vault-dex.app.suncoast.systems/callback
               orgs:
               - name: dotcomrow
-                teams: [vault_admins]
-              scopes: [read:org]
+                teams:
+                - vault_admins
+              scopes:
+              - read:org
               loadAllGroups: true
               teamNameField: slug
       ---
@@ -3073,37 +3059,28 @@ write_files:
             labels:
               app: dex
           spec:
-            serviceAccountName: dex
             containers:
             - name: dex
               image: ghcr.io/dexidp/dex:v2.37.0
-              ports:
-              - containerPort: 5556
               resources:
-                requests: { cpu: "100m", memory: "128Mi" }
-                limits:   { cpu: "250m", memory: "256Mi" }
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "250m"
+                  memory: "256Mi"
               volumeMounts:
               - name: config
                 mountPath: /etc/dex/config.docker.yaml
                 subPath: config.docker.yaml
-              readinessProbe:
-                httpGet:
-                  path: /healthz
-                  port: 5556
-                initialDelaySeconds: 3
-                periodSeconds: 5
-              livenessProbe:
-                httpGet:
-                  path: /healthz
-                  port: 5556
-                initialDelaySeconds: 10
-                periodSeconds: 10
+              ports:
+              - containerPort: 5556
             volumes:
             - name: config
               configMap:
                 name: dex-config
       ---
-      # Dex Service (ClusterIP; APISIX will expose it)
+      # Dex Service (LoadBalancer as before)
       apiVersion: v1
       kind: Service
       metadata:
@@ -3112,13 +3089,14 @@ write_files:
       spec:
         selector:
           app: dex
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.122
         ports:
         - name: http
           port: 5556
           targetPort: 5556
-        type: ClusterIP
       ---
-      # APISIXRoute for Dex
+      # APISIXRoute for Dex (optional; harmless even with LB)
       apiVersion: apisix.apache.org/v2
       kind: ApisixRoute
       metadata:
@@ -3129,9 +3107,10 @@ write_files:
         http:
         - name: dex-gui
           match:
-            hosts: ["vault-dex.app.suncoast.systems"]
-            paths: ["/*"]
-          websocket: true
+            hosts:
+            - "vault-dex.app.suncoast.systems"
+            paths:
+            - /*
           backends:
           - serviceName: dex
             servicePort: http
@@ -3167,28 +3146,7 @@ write_files:
 
           ui = true
       ---
-      # ServiceAccount used by Vault for token review
-      apiVersion: v1
-      kind: ServiceAccount
-      metadata:
-        name: vault-auth
-        namespace: vault
-      ---
-      # Allow that SA to call the TokenReview API
-      apiVersion: rbac.authorization.k8s.io/v1
-      kind: ClusterRoleBinding
-      metadata:
-        name: vault-auth-delegator
-      roleRef:
-        apiGroup: rbac.authorization.k8s.io
-        kind: ClusterRole
-        name: system:auth-delegator
-      subjects:
-      - kind: ServiceAccount
-        name: vault-auth
-        namespace: vault
-      ---
-      # Vault StatefulSet
+      # Vault StatefulSet (runs as vault-auth which has cluster-admin for bootstrap)
       apiVersion: apps/v1
       kind: StatefulSet
       metadata:
@@ -3210,110 +3168,105 @@ write_files:
             serviceAccountName: vault-auth
             dnsPolicy: "None"
             dnsConfig:
-              nameservers: ["10.43.0.10","1.1.1.1"]
+              nameservers:
+                - 10.43.0.10
+                - 1.1.1.1
               options:
-              - name: ndots
-                value: "2"
+                - name: ndots
+                  value: "2"
             securityContext:
               fsGroup: 1000
             initContainers:
-            - name: install-utils
-              image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
-              command: ["sh","-c"]
-              args: ['cp /usr/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl']
-              volumeMounts:
-              - name: shared-utils
-                mountPath: /shared
+              - name: install-utils
+                image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
+                command: ["sh", "-c"]
+                args:
+                  - cp /usr/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
+                volumeMounts:
+                  - name: shared-utils
+                    mountPath: /shared
             containers:
-            - name: vault
-              image: hashicorp/vault:1.14.3
-              ports:
               - name: vault
-                containerPort: 8200
-              resources:
-                requests: { cpu: "250m", memory: "256Mi" }
-                limits:   { cpu: "500m", memory: "512Mi" }
-              env:
-              - name: VAULT_ADDR
-                value: "http://127.0.0.1:8200"
-              - name: VAULT_NAMESPACE
-                value: "root"
-              volumeMounts:
-              - name: config
-                mountPath: /vault/config/vault.hcl
-                subPath: vault.hcl
-              - name: data
-                mountPath: /vault/data
-              - name: gcp-creds
-                mountPath: /etc/vault
-                readOnly: true
-              - name: oidc-creds
-                mountPath: /etc/vault-oidc
-                readOnly: true
-              - name: shared-utils
-                mountPath: /usr/local/bin/kubectl
-                subPath: kubectl
-              - name: shared-data
-                mountPath: /vault/creds-data
-              - name: gcp-project-id
-                mountPath: /config/gcp-project-id
-                readOnly: true
-              - name: gcp-project-region
-                mountPath: /config/gcp-project-region
-                readOnly: true
-              - name: script
-                mountPath: /opt/configscript
-                readOnly: true
-              - name: script-tmp
-                mountPath: /opt/scripts
-              command: ["/bin/sh"]
-              args: ["-c","cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
-              readinessProbe:
-                httpGet:
-                  path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
-                  port: 8200
-                initialDelaySeconds: 10
-                periodSeconds: 5
-              livenessProbe:
-                httpGet:
-                  path: /v1/sys/health
-                  port: 8200
-                initialDelaySeconds: 30
-                periodSeconds: 10
+                image: hashicorp/vault:1.14.3
+                resources:
+                  requests:
+                    cpu: "250m"
+                    memory: "256Mi"
+                  limits:
+                    cpu: "500m"
+                    memory: "512Mi"
+                env:
+                  - name: VAULT_ADDR
+                    value: "http://127.0.0.1:8200"
+                  - name: VAULT_NAMESPACE
+                    value: "root"
+                volumeMounts:
+                  - name: config
+                    mountPath: /vault/config/vault.hcl
+                    subPath: vault.hcl
+                  - name: data
+                    mountPath: /vault/data
+                  - name: gcp-creds
+                    mountPath: /etc/vault
+                    readOnly: true
+                  - name: oidc-creds
+                    mountPath: /etc/vault-oidc
+                    readOnly: true
+                  - name: shared-utils
+                    mountPath: /usr/local/bin/kubectl
+                    subPath: kubectl
+                  - name: shared-data
+                    mountPath: /vault/creds-data
+                  - name: gcp-project-id
+                    mountPath: /config/gcp-project-id
+                    readOnly: true
+                  - name: gcp-project-region
+                    mountPath: /config/gcp-project-region
+                    readOnly: true
+                  - name: script
+                    mountPath: /opt/configscript
+                    readOnly: true
+                  - name: script-tmp
+                    mountPath: /opt/scripts
+                command: ["/bin/sh"]
+                args: ["-c", "cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
+                ports:
+                  - name: vault
+                    containerPort: 8200
             volumes:
-            - name: config
-              configMap:
-                name: vault-config
-            - name: gcp-creds
-              secret:
-                secretName: vault-unseal-gcp-creds
-            - name: oidc-creds
-              secret:
-                secretName: vault-oidc-creds
-            - name: shared-utils
-              emptyDir: {}
-            - name: shared-data
-              persistentVolumeClaim:
-                claimName: vault-creds-pvc
-            - name: gcp-project-id
-              configMap:
-                name: gcp-project-id
-            - name: gcp-project-region
-              configMap:
-                name: gcp-project-region
-            - name: script
-              configMap:
-                name: vault-init-script
-            - name: script-tmp
-              emptyDir: {}
+              - name: config
+                configMap:
+                  name: vault-config
+              - name: gcp-creds
+                secret:
+                  secretName: vault-unseal-gcp-creds
+              - name: oidc-creds
+                secret:
+                  secretName: vault-oidc-creds
+              - name: shared-utils
+                emptyDir: {}
+              - name: shared-data
+                persistentVolumeClaim:
+                  claimName: vault-creds-pvc
+              - name: gcp-project-id
+                configMap:
+                  name: gcp-project-id
+              - name: gcp-project-region
+                configMap:
+                  name: gcp-project-region
+              - name: script
+                configMap:
+                  name: vault-init-script
+              - name: script-tmp
+                emptyDir: {}
         volumeClaimTemplates:
-        - metadata:
-            name: data
-          spec:
-            accessModes: ["ReadWriteOnce"]
-            resources:
-              requests:
-                storage: 1Gi
+          - metadata:
+              name: data
+            spec:
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 1Gi
       ---
       apiVersion: v1
       kind: ConfigMap
@@ -3322,6 +3275,8 @@ write_files:
         namespace: vault
       data:
         run.sh: |
+          set -e
+
           vault server -config=/vault/config/vault.hcl &
           VAULT_PID=\$!
           sleep 5
@@ -3331,7 +3286,7 @@ write_files:
             vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /vault/data/init.json
           fi
 
-          apk add --no-cache jq
+          apk add --no-cache jq wget
 
           # Wait for Vault to be unsealed and ready
           until vault status -format=json | jq -e '.sealed == false'; do
@@ -3339,48 +3294,41 @@ write_files:
             sleep 2
           done
 
-          # Write admin policy
+          # Admin policy
           cat <<EOF > /vault/data/admin-policy.hcl
           path "*" { capabilities = ["create","read","update","delete","list","sudo"] }
           EOF
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write admin /vault/data/admin-policy.hcl
 
-          # Enable auth methods
-          if ! VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth list -format=json | grep -q '"oidc/"'; then
-            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth enable oidc
-          fi
-          if ! VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth list -format=json | grep -q '"kubernetes/"'; then
-            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth enable kubernetes
-          fi
-          if ! VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth list -format=json | grep -q '"approle/"'; then
-            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth enable approle
-          fi
+          # Enable auth methods (idempotent)
+          for m in oidc kubernetes approle; do
+            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth list -format=json | grep -q "\"\$m/\"" || \
+            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth enable "\$m"
+          done
 
-          # Kubernetes auth config (issuer fixed to be part of the same command)
+          # Kubernetes auth config
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/kubernetes/config \
             token_reviewer_jwt="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
             kubernetes_host="https://\$KUBERNETES_SERVICE_HOST:\$KUBERNETES_SERVICE_PORT_HTTPS" \
-            kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
-            issuer="https://kubernetes.default.svc.cluster.local"
+            kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
 
-          # Enable KV secrets engine
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
+          # Enable KV v2
+          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv || true
 
           # Policies
           cat <<EOF > /vault/data/avp-policy.hcl
           path "secret/data/*" { capabilities = ["read"] }
           EOF
-
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write vault-sync - <<EOF
           path "secret/data/*" { capabilities = ["create","read","update","delete"] }
           path "secret/metadata/*" { capabilities = ["read","delete","list"] }
           path "secret/*" { capabilities = ["list"] }
           EOF
-
           cat <<EOF | VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault policy write avp -
           path "secret/data/*" { capabilities = ["read"] }
           EOF
 
+          # AppRole for AVP
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/approle/role/vault-sync \
             token_ttl=1h token_max_ttl=4h bind_secret_id=true secret_id_bound_cidrs=0.0.0.0/0 policies=vault-sync
 
@@ -3389,11 +3337,12 @@ write_files:
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
           echo >> /vault/creds-data/secret_id.txt
 
+          # Store root token
           kubectl create secret generic vault-root-token \
             --from-literal=VAULT_TOKEN=\$(jq -r '.root_token' /vault/data/init.json) \
             -n vault || kubectl -n vault get secret vault-root-token >/dev/null
 
-          # GCP identifiers
+          # GCP identifiers for the follow-up job
           cat /config/gcp-project-id/PROJECT_ID > /vault/creds-data/project_id.txt
           cat /config/gcp-project-region/PROJECT_REGION > /vault/creds-data/region.txt
           echo "vault-sync-run-container" > /vault/creds-data/service_name.txt
@@ -3404,59 +3353,29 @@ write_files:
             bound_service_account_namespaces=argocd \
             policies=avp ttl=24h
 
-          # OIDC setup
+          # OIDC config (LB should be up, but add a small wait for safety)
+          DISC_URL="https://vault-dex.app.suncoast.systems/.well-known/openid-configuration"
+          for i in \$(seq 1 12); do
+            wget -q --spider "\$DISC_URL" && break || true
+            echo "Waiting for Dex discovery (\$i/12)..."; sleep 5
+          done
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/oidc/config \
             oidc_discovery_url="https://vault-dex.app.suncoast.systems" \
             oidc_client_id="\$(cat /etc/vault-oidc/client_id)" \
             oidc_client_secret="\$(cat /etc/vault-oidc/client_secret)" \
-            default_role="default"
+            default_role="default" || true
 
-          # Disable GitHub auth if present
-          if VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth list -format=json | grep -q '"github/"'; then
-            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth disable github
-          fi
-
-          # Default OIDC role
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/oidc/role/default \
             bound_audiences="\$(cat /etc/vault-oidc/client_id)" \
-            user_claim="email" groups_claim="groups" \
+            user_claim="email" \
+            groups_claim="groups" \
             allowed_redirect_uris="https://vault.app.suncoast.systems/ui/vault/auth/oidc/oidc/callback,https://vault.app.suncoast.systems/ui/vault/auth/oidc/callback,https://vault.app.suncoast.systems/ui/vault/auth/oidc/default/callback,https://vault.app.suncoast.systems/ui/vault/auth?with=oidc" \
             oidc_scopes="openid,email,groups" \
-            policies="admin" ttl="1h"
+            policies="admin" \
+            ttl="1h"
 
-          # ---- Follow-up Job (uses dedicated SA with least privilege) ----
+          # Follow-up Job (runs as vault-auth which is cluster-admin)
           cat <<'EOF' | kubectl apply -f -
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: vault-job
-            namespace: vault
-          ---
-          # Role in argocd namespace allowing creation of Applications
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: Role
-          metadata:
-            name: argocd-application-writer
-            namespace: argocd
-          rules:
-          - apiGroups: ["argoproj.io"]
-            resources: ["applications"]
-            verbs: ["create","get","list","watch","update","patch"]
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: RoleBinding
-          metadata:
-            name: argocd-application-writer-binding
-            namespace: argocd
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: Role
-            name: argocd-application-writer
-          subjects:
-          - kind: ServiceAccount
-            name: vault-job
-            namespace: vault
-          ---
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -3465,51 +3384,51 @@ write_files:
           spec:
             template:
               spec:
-                serviceAccountName: vault-job
+                serviceAccountName: vault-auth
                 restartPolicy: Never
                 initContainers:
-                - name: load-kubectl
-                  image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
-                  command: ["sh","-c"]
-                  args: ['cp /usr/bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl']
-                  volumeMounts:
-                  - name: kubectl-bin
-                    mountPath: /kubectl-bin
+                  - name: load-kubectl
+                    image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
+                    command: ["sh","-c"]
+                    args: ['cp /usr/bin/kubectl /kubectl-bin/kubectl && chmod +x /kubectl-bin/kubectl']
+                    volumeMounts:
+                      - name: kubectl-bin
+                        mountPath: /kubectl-bin
                 containers:
-                - name: gcloud-update
-                  image: google/cloud-sdk:slim
-                  resources:
-                    requests: { cpu: "100m", memory: "128Mi" }
-                    limits:   { cpu: "250m", memory: "256Mi" }
-                  command: ["/bin/sh"]
-                  args: ["-c","cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
-                  volumeMounts:
-                  - name: kubectl-bin
-                    mountPath: /usr/local/bin
-                  - name: gcp-creds
-                    mountPath: /tmp
-                    readOnly: true
-                  - name: shared-creds
-                    mountPath: /shared-creds
-                  - name: script
-                    mountPath: /opt/configscript
-                    readOnly: true
-                  - name: script-tmp
-                    mountPath: /opt/scripts
+                  - name: gcloud-update
+                    image: google/cloud-sdk:slim
+                    resources:
+                      requests: { cpu: "100m", memory: "128Mi" }
+                      limits:   { cpu: "250m", memory: "256Mi" }
+                    command: ["/bin/sh"]
+                    args: ["-c", "cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
+                    volumeMounts:
+                      - name: kubectl-bin
+                        mountPath: /usr/local/bin
+                      - name: gcp-creds
+                        mountPath: /tmp
+                        readOnly: true
+                      - name: shared-creds
+                        mountPath: /shared-creds
+                      - name: script
+                        mountPath: /opt/configscript
+                        readOnly: true
+                      - name: script-tmp
+                        mountPath: /opt/scripts
                 volumes:
-                - name: kubectl-bin
-                  emptyDir: {}
-                - name: gcp-creds
-                  secret:
-                    secretName: gcp-service-account
-                - name: shared-creds
-                  persistentVolumeClaim:
-                    claimName: vault-creds-pvc
-                - name: script
-                  configMap:
-                    name: vault-sync-script
-                - name: script-tmp
-                  emptyDir: {}
+                  - name: kubectl-bin
+                    emptyDir: {}
+                  - name: gcp-creds
+                    secret:
+                      secretName: gcp-service-account
+                  - name: shared-creds
+                    persistentVolumeClaim:
+                      claimName: vault-creds-pvc
+                  - name: script
+                    configMap:
+                      name: vault-sync-script
+                  - name: script-tmp
+                    emptyDir: {}
           EOF
 
           wait \$VAULT_PID
@@ -3523,10 +3442,12 @@ write_files:
         run.sh: |
           #!/bin/sh
           set -e
+
           echo "Waiting for Vault to write role_id and secret_id..."
           while [ ! -f /shared-creds/role_id.txt ] || [ ! -f /shared-creds/secret_id.txt ]; do
             sleep 2
           done
+
           ROLE_ID="\$(tr -d '\r\n' </shared-creds/role_id.txt)"
           SECRET_ID="\$(tr -d '\r\n' </shared-creds/secret_id.txt)"
           PROJECT_ID="\$(tr -d '\r\n' </shared-creds/project_id.txt)"
@@ -3537,7 +3458,9 @@ write_files:
 
           gcloud auth activate-service-account --key-file=/tmp/key.json
           gcloud config set project "\$PROJECT_ID"
-          gcloud run services update "\$SERVICE_NAME" --region="\$REGION" --update-env-vars "VAULT_ROLE_ID=\$ROLE_ID,VAULT_SECRET_ID=\$SECRET_ID"
+          gcloud run services update "\$SERVICE_NAME" \
+            --region="\$REGION" \
+            --update-env-vars "VAULT_ROLE_ID=\$ROLE_ID,VAULT_SECRET_ID=\$SECRET_ID"
 
           SVC_URL=\$(gcloud run services describe "\$SERVICE_NAME" --region "\$REGION" --format="value(status.url)")
           [ -n "\$SVC_URL" ] || { echo "❌ Failed to get service URL"; exit 1; }
@@ -3576,7 +3499,7 @@ write_files:
 
           kubectl patch statefulset vault -n vault \
             --type='merge' \
-            -p '{"spec":{"template":{"spec":{"dnsPolicy":"None","dnsConfig":{"nameservers":["10.43.0.10","10.0.0.10"],"options":[{"name":"ndots","value":"2"}]}}}}}'
+            -p '{"spec": {"template": {"spec": {"dnsPolicy": "None", "dnsConfig": {"nameservers": ["10.43.0.10", "10.0.0.10"], "options": [{"name": "ndots", "value": "2"}]}}}}}'
 
           kubectl delete pod -l app=vault -n vault || true
 
@@ -3594,9 +3517,9 @@ write_files:
         selector:
           app: vault
         ports:
-        - name: vault
-          port: 8200
-          targetPort: vault
+          - name: vault
+            port: 8200
+            targetPort: vault
       ---
       # APISIXRoute for Vault UI
       apiVersion: apisix.apache.org/v2
@@ -3609,9 +3532,10 @@ write_files:
         http:
         - name: vault-ui
           match:
-            hosts: ["vault.app.suncoast.systems"]
-            paths: ["/*"]
-          websocket: true
+            hosts:
+            - "vault.app.suncoast.systems"
+            paths:
+            - /*
           backends:
           - serviceName: vault
             servicePort: vault
@@ -3638,9 +3562,12 @@ write_files:
           kind: Issuer
         commonName: vault-agent-injector.vault.svc
         dnsNames:
-        - vault-agent-injector.vault.svc
-        - vault-agent-injector.vault.svc.cluster.local
-        usages: ["digital signature","key encipherment","server auth"]
+          - vault-agent-injector.vault.svc
+          - vault-agent-injector.vault.svc.cluster.local
+        usages:
+          - digital signature
+          - key encipherment
+          - server auth
       ---
       apiVersion: v1
       kind: ServiceAccount
@@ -3655,17 +3582,21 @@ write_files:
         namespace: vault
       data:
         config.hcl: |
-          vault { address = "http://vault.vault.svc.cluster.local:8200" }
-          injector { log_level = "info" }
+          vault {
+            address = "http://vault.vault.svc.cluster.local:8200"
+          }
+          injector {
+            log_level = "info"
+          }
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
       metadata:
         name: vault-agent-injector-role
       rules:
-      - apiGroups: ["admissionregistration.k8s.io"]
-        resources: ["mutatingwebhookconfigurations"]
-        verbs: ["get","list","watch","patch"]
+        - apiGroups: ["admissionregistration.k8s.io"]
+          resources: ["mutatingwebhookconfigurations"]
+          verbs: ["get", "list", "watch", "patch"]
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
@@ -3676,9 +3607,9 @@ write_files:
         kind: ClusterRole
         name: vault-agent-injector-role
       subjects:
-      - kind: ServiceAccount
-        name: vault-agent-injector
-        namespace: vault
+        - kind: ServiceAccount
+          name: vault-agent-injector
+          namespace: vault
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -3699,28 +3630,28 @@ write_files:
           spec:
             serviceAccountName: vault-agent-injector
             containers:
-            - name: injector
-              image: hashicorp/vault-k8s:1.3.0
-              args:
-              - "agent-inject"
-              - "-log-level=info"
-              - "-vault-address=http://vault.vault.svc.cluster.local:8200"
-              - "-tls-cert-file=/tls/tls.crt"
-              - "-tls-key-file=/tls/tls.key"
-              volumeMounts:
-              - name: config
-                mountPath: /etc/vault/config
-                readOnly: true
-              - name: tls
-                mountPath: /tls
-                readOnly: true
+              - name: injector
+                image: hashicorp/vault-k8s:1.3.0
+                args:
+                  - "agent-inject"
+                  - "-log-level=info"
+                  - "-vault-address=http://vault.vault.svc.cluster.local:8200"
+                  - "-tls-cert-file=/tls/tls.crt"
+                  - "-tls-key-file=/tls/tls.key"
+                volumeMounts:
+                  - name: config
+                    mountPath: /etc/vault/config
+                    readOnly: true
+                  - name: tls
+                    mountPath: /tls
+                    readOnly: true
             volumes:
-            - name: config
-              configMap:
-                name: vault-agent-injector-config
-            - name: tls
-              secret:
-                secretName: vault-agent-injector-tls
+              - name: config
+                configMap:
+                  name: vault-agent-injector-config
+              - name: tls
+                secret:
+                  secretName: vault-agent-injector-tls
       ---
       apiVersion: v1
       kind: Service
@@ -3731,9 +3662,9 @@ write_files:
         selector:
           app: vault-agent-injector
         ports:
-        - name: https
-          port: 443
-          targetPort: 8080
+          - name: https
+            port: 443
+            targetPort: 8080
       ---
       apiVersion: admissionregistration.k8s.io/v1
       kind: MutatingWebhookConfiguration
@@ -3744,23 +3675,23 @@ write_files:
         annotations:
           cert-manager.io/inject-ca-from: vault/vault-agent-injector-tls
       webhooks:
-      - name: vault.hashicorp.com
-        sideEffects: None
-        admissionReviewVersions: ["v1"]
-        clientConfig:
-          service:
-            name: vault-agent-injector
-            namespace: vault
-            path: "/mutate"
-            port: 443
-          caBundle: null  # Automatically populated
-        rules:
-        - operations: ["CREATE"]
-          apiGroups: [""]
-          apiVersions: ["v1"]
-          resources: ["pods"]
-        failurePolicy: Ignore
-        namespaceSelector: {}
+        - name: vault.hashicorp.com
+          sideEffects: None
+          admissionReviewVersions: ["v1"]
+          clientConfig:
+            service:
+              name: vault-agent-injector
+              namespace: vault
+              path: "/mutate"
+              port: 443
+            caBundle: null  # Automatically populated
+          rules:
+            - operations: ["CREATE"]
+              apiGroups: [""]
+              apiVersions: ["v1"]
+              resources: ["pods"]
+          failurePolicy: Ignore
+          namespaceSelector: {}
       EOF
 
       echo "🏗️ Installing Stakater..."
