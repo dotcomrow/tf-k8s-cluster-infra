@@ -2046,7 +2046,7 @@ write_files:
             restartPolicy: OnFailure
             containers:
               - name: etcdctl
-                image: quay.io/coreos/etcd:v3.5.12
+                image: alpine:3.20
                 imagePullPolicy: IfNotPresent
                 env:
                   - { name: ETCDCTL_API, value: "3" }
@@ -2058,24 +2058,26 @@ write_files:
                 command: ["/bin/sh","-lc"]
                 args:
                   - |
+                    echo "🔧 Installing etcdctl..."
+                    apk add --no-cache etcd >/dev/null
+
                     echo "🔎 Checking auth status..."
                     AUTH_JSON=$(etcdctl --endpoints="$EP" auth status -w json || true)
                     if echo "$AUTH_JSON" | grep -q '"enabled":true'; then
                       echo "✅ etcd auth already enabled."
-                      ROOT_FLAG="--user=root:$ROOT_PASS"
+                      ROOT_FLAG="--user=root:${ROOT_PASS}"
                     else
-                      echo "🔧 Creating root user (if needed)..."
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
-                      echo "🔒 Enabling auth..."
+                      echo "👑 Creating root user (if needed) & enabling auth..."
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="${ROOT_PASS}" || true
                       etcdctl --endpoints="$EP" auth enable || true
-                      ROOT_FLAG="--user=root:$ROOT_PASS"
+                      ROOT_FLAG="--user=root:${ROOT_PASS}"
                     fi
 
-                    echo "👤 Ensure 'apisix' role & user with prefix RW on /apisix/"
-                    etcdctl --endpoints="$EP" $ROOT_FLAG role add apisix 2>/dev/null || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG role grant-permission --prefix=true apisix readwrite /apisix/ || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG user add apisix --interactive=false --new-user-password="$APISIX_PASS" 2>/dev/null || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG user grant-role apisix apisix || true
+                    echo "👤 Ensure 'apisix' role/user with prefix RW on /apisix/"
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} role add apisix 2>/dev/null || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} role grant-permission --prefix=true apisix readwrite /apisix/ || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} user add apisix --interactive=false --new-user-password="${APISIX_PASS}" 2>/dev/null || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} user grant-role apisix apisix || true
 
                     echo "✅ Done."
       YAML
