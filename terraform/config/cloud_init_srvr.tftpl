@@ -2010,14 +2010,15 @@ write_files:
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --namespace apisix \
+        --namespace apisix --create-namespace \
         -f /tmp/apisix-plugins.yaml \
         --set service.type=NodePort \
+        --set etcd.enabled=false \
+        --set apisix.deployment.role=traditional \
+        --set apisix.deployment.role_traditional.config_provider=yaml \
         --set ingress-controller.enabled=true \
+        --set ingress-controller.config.provider.type=apisix-standalone \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
-        --set ingress-controller.args[0]="ingress-apisix" \
-        --set ingress-controller.args[1]="--namespace-selector=" \
         --set config.enable_ipv6=false \
         --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
         --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
