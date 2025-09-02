@@ -74,6 +74,30 @@ locals {
   tbot_config_b64 = base64encode(local.tbot_config_yaml)
 }
 
+# --- DRY helpers ---
+locals {
+  app_image  = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
+  tbot_image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/thirdparty/teleport-bot-container@sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+
+  app_env = [
+    { name = "VAULT_ADDRS",              value = "${var.VAULT_ADDRESS},http://127.0.0.1:8200" },
+    { name = "GCP_PROJECT_ID",           value = google_project.infra.project_id },
+    { name = "VAULT_CONNECT_TIMEOUT_MS", value = "300" },
+    { name = "VAULT_READ_TIMEOUT_MS",    value = "2000" },
+    { name = "VAULT_WAIT_FOR_TUNNEL_MS", value = "4000" },
+    { name = "VAULT_ACTIVE_BASE_TTL_MS", value = "60000" },
+    { name = "VAULT_PASSIVE_RECHECK_MS", value = "30000" },
+    { name = "DEBUG_VAULT_RESOLVER",     value = "true" },
+  ]
+
+  tbot_env = [
+    { name = "TBOT_CONFIG",      value = local.tbot_config_b64 },
+    { name = "TBOT_RETRY_DELAY", value = "10" },
+    # { name = "TBOT_ARGS",       value = "start" },  # default is "start"
+    # { name = "TBOT_DISABLED",   value = "" },       # set "1" to park sidecar
+  ]
+}
+
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
   name                = "vault-sync-run-container"
   location            = var.region
@@ -84,58 +108,59 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
   template {
     service_account = google_service_account.eventarc_service_account.email
 
-    # Explicit scaling: allow scale-to-zero and cap bursts
     scaling {
       min_instance_count = 0
-      max_instance_count = 20
+      max_instance_count = 1
     }
 
-    # ---------------- App container ----------------
+    # ---- App container ----
     containers {
       name  = "app"
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
+      image = local.app_image
 
-      env { name = "VAULT_ADDRS"              value = "${var.VAULT_ADDRESS},http://127.0.0.1:8200" }
-      env { name = "GCP_PROJECT_ID"           value = google_project.infra.project_id }
-      env { name = "VAULT_CONNECT_TIMEOUT_MS" value = "300" }
-      env { name = "VAULT_READ_TIMEOUT_MS"    value = "2000" }
-      env { name = "VAULT_WAIT_FOR_TUNNEL_MS" value = "4000" }
-      env { name = "VAULT_ACTIVE_BASE_TTL_MS" value = "60000" }
-      env { name = "VAULT_PASSIVE_RECHECK_MS" value = "30000" }
-      env { name = "DEBUG_VAULT_RESOLVER"     value = "true" }
+      dynamic "env" {
+        for_each = { for i, e in local.app_env : i => e }
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
 
-      ports { container_port = 8080 }
+      ports {
+        container_port = 8080
+      }
 
-      # Ensure CPU pauses when idle (saves money; allows scale-to-zero)
       resources {
         cpu_idle = true
       }
     }
 
-    # ---------------- Teleport tbot wrapper sidecar ----------------
+    # ---- Teleport tbot wrapper sidecar ----
     containers {
       name  = "tbot"
-      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/thirdparty/teleport-bot-container@sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+      image = local.tbot_image
 
-      # Wrapper loops `tbot start` and never exits; safe for Cloud Run
-      env { name = "TBOT_CONFIG"      value = local.tbot_config_b64 }
-      env { name = "TBOT_RETRY_DELAY" value = "10" }   # seconds between retries
-      # env { name = "TBOT_ARGS"        value = "start" }  # default is "start"
-      # env { name = "TBOT_DISABLED"    value = "" }       # set to "1" to park the sidecar
+      dynamic "env" {
+        for_each = { for i, e in local.tbot_env : i => e }
+        content {
+          name  = env.value.name
+          value = env.value.value
+        }
+      }
 
       resources {
         limits = {
           cpu    = "200m"
           memory = "128Mi"
         }
-        cpu_idle = true   # pause sidecar CPU when idle
+        cpu_idle = true
       }
     }
   }
 
   lifecycle {
     ignore_changes = [
-      template[0].containers[0].env,
+      template[0].containers[0].env, # app envs may drift intentionally
       client,
       client_version,
     ]
@@ -149,7 +174,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.cloud_run_secret_access,
     google_project_iam_member.eventarc_receive_auditlog,
     null_resource.kms_iam_binding,
-    google_project_iam_member.cloud_run_secret_list
+    google_project_iam_member.cloud_run_secret_list,
   ]
 }
 
