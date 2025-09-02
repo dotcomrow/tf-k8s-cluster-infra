@@ -1939,12 +1939,26 @@ write_files:
       
       sudo helm repo update
 
-      # Installing etcd
+      # Choose strong passwords; you can reuse the same value for both if you want
+      ETCD_ROOT_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
+      APISIX_ETCD_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
+
+      # etcd (root) secret
+      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd \
+        create secret generic etcd-root-auth \
+        --from-literal=ROOT_PASS="$ETCD_ROOT_PASS" --dry-run=client -o yaml | \
+        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      # apisix etcd password secret
+      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
+        create secret generic etcd-apisix \
+        --from-literal=etcd-password="$APISIX_ETCD_PASS" --dry-run=client -o yaml | \
+        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
       metadata: { name: etcd }
-
       ---
       apiVersion: v1
       kind: Service
@@ -1958,7 +1972,6 @@ write_files:
           - { name: client, port: 2379, targetPort: 2379 }
           - { name: peer,   port: 2380, targetPort: 2380 }
         selector: { app: etcd }
-
       ---
       apiVersion: apps/v1
       kind: StatefulSet
@@ -1979,8 +1992,7 @@ write_files:
                 imagePullPolicy: IfNotPresent
                 env:
                   - name: ETCD_NAME
-                    valueFrom:
-                      fieldRef: { fieldPath: metadata.name }
+                    valueFrom: { fieldRef: { fieldPath: metadata.name } }
                   - name: ETCD_INITIAL_CLUSTER
                     value: |
                       etcd-0=http://etcd-0.etcd.etcd.svc.cluster.local:2380,etcd-1=http://etcd-1.etcd.etcd.svc.cluster.local:2380,etcd-2=http://etcd-2.etcd.etcd.svc.cluster.local:2380
@@ -2008,6 +2020,57 @@ write_files:
               resources: { requests: { storage: 5Gi } }
               # storageClassName: longhorn
       EOF
+
+      # Wait for etcd pods to be Ready
+      cat <<'YAML' | sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: etcd-auth-bootstrap
+        namespace: etcd
+      spec:
+        ttlSecondsAfterFinished: 600
+        template:
+          spec:
+            restartPolicy: OnFailure
+            containers:
+              - name: etcdctl
+                image: quay.io/coreos/etcd:v3.5.12
+                imagePullPolicy: IfNotPresent
+                env:
+                  - { name: ETCDCTL_API, value: "3" }
+                  - { name: EP, value: "http://etcd.etcd.svc.cluster.local:2379" }
+                  - name: ROOT_PASS
+                    valueFrom: { secretKeyRef: { name: etcd-root-auth, key: ROOT_PASS } }
+                  - name: APISIX_PASS
+                    valueFrom: { secretKeyRef: { name: etcd-apisix, key: etcd-password } }
+                command: ["/bin/sh","-lc"]
+                args:
+                  - |
+                    echo "🔎 Checking auth status..."
+                    AUTH_JSON=$(etcdctl --endpoints="$EP" auth status -w json || true)
+                    if echo "$AUTH_JSON" | grep -q '"enabled":true'; then
+                      echo "✅ etcd auth already enabled."
+                      ROOT_FLAG="--user=root:${ROOT_PASS}"
+                    else
+                      echo "🔧 Creating root user (if needed)..."
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="${ROOT_PASS}" || true
+                      echo "🔒 Enabling auth..."
+                      etcdctl --endpoints="$EP" auth enable || true
+                      ROOT_FLAG="--user=root:${ROOT_PASS}"
+                    fi
+
+                    echo "👤 Ensure 'apisix' role & user with prefix RW on /apisix/"
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} role add apisix 2>/dev/null || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} role grant-permission --prefix=true apisix readwrite /apisix/ || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} user add apisix --interactive=false --new-user-password="${APISIX_PASS}" 2>/dev/null || true
+                    etcdctl --endpoints="$EP" ${ROOT_FLAG} user grant-role apisix apisix || true
+
+                    echo "✅ Done."
+      YAML
+
+      # Wait for the Job to complete
+      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd wait --for=condition=complete job/etcd-auth-bootstrap --timeout=180s
 
       RETRIES=5
       DELAY=5
@@ -2080,28 +2143,25 @@ write_files:
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --namespace apisix --create-namespace \
-        -f /tmp/apisix-plugins.yaml \
-        --set service.type=NodePort \
+        --namespace apisix \
         --set etcd.enabled=false \
-        --set apisix.deployment.role=traditional \
-        --set apisix.deployment.role_traditional.config_provider=etcd \            # CHANGED: use etcd, not yaml
-        --set ingress-controller.enabled=true \
-        --set ingress-controller.config.provider.type=apisix \                      # CHANGED: normal mode (not apisix-standalone)
-        --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set config.enable_ipv6=false \
-        --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
-        --set-string config.nginx_config.ssl.listen="[127.0.0.1:9443]" \
-        --set-string config.nginx_config.stream_proxy.tcp="[]" \
-        --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set externalEtcd.host[0]="http://etcd-0.etcd.svc.cluster.local:2379" \    # NEW: external etcd
-        --set externalEtcd.host[1]="http://etcd-1.etcd.svc.cluster.local:2379" \
-        --set externalEtcd.host[2]="http://etcd-2.etcd.svc.cluster.local:2379"
-        # If you set etcd auth, also add:
-        # --set externalEtcd.user="root" \
-        # --set externalEtcd.password="REDACTED"    # or externalEtcd.existingSecret + secretPasswordKey
+        --set externalEtcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
+        --set externalEtcd.user="apisix" \
+        --set externalEtcd.passwordFrom.secretName=etcd-apisix \
+        --set externalEtcd.passwordFrom.secretKey=etcd-password \
+        --set externalEtcd.tls.enabled=false \
+        --set apisix.deployment.role=traditional \
+        --set apisix.deployment.role_traditional.config_provider=etcd \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.config.provider.type=apisix \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix \
+        --set config.enable_ipv6=false \
+        --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
+        --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
+        --set config.nginx_config.stream_proxy.tcp="[]" \
+        --set config.nginx_config.stream_proxy.udp="[]"
 
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
