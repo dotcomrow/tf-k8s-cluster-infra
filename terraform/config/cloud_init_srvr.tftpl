@@ -1939,6 +1939,80 @@ write_files:
       
       sudo helm repo update
 
+      # Installing etcd
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Namespace
+      metadata: { name: etcd }
+
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: etcd
+        namespace: etcd
+        labels: { app: etcd }
+      spec:
+        clusterIP: None       # headless for stable DNS
+        ports:
+          - name: client
+            port: 2379
+            targetPort: 2379
+          - name: peer
+            port: 2380
+            targetPort: 2380
+        selector: { app: etcd }
+
+      ---
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: etcd
+        namespace: etcd
+      spec:
+        serviceName: etcd
+        replicas: 3
+        selector: { matchLabels: { app: etcd } }
+        template:
+          metadata:
+            labels: { app: etcd }
+          spec:
+            containers:
+              - name: etcd
+                image: quay.io/coreos/etcd:v3.5.12
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: ETCD_NAME
+                    valueFrom:
+                      fieldRef: { fieldPath: metadata.name }
+                  - name: ETCD_INITIAL_CLUSTER
+                    value: |
+                      etcd-0=http://etcd-0.etcd.etcd.svc.cluster.local:2380,etcd-1=http://etcd-1.etcd.etcd.svc.cluster.local:2380,etcd-2=http://etcd-2.etcd.etcd.svc.cluster.local:2380
+                  - name: ETCD_INITIAL_CLUSTER_STATE
+                    value: new
+                  - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+                    value: http://$(ETCD_NAME).etcd.etcd.svc.cluster.local:2380
+                  - name: ETCD_ADVERTISE_CLIENT_URLS
+                    value: http://$(ETCD_NAME).etcd.etcd.svc.cluster.local:2379
+                  - name: ETCD_LISTEN_PEER_URLS
+                    value: http://0.0.0.0:2380
+                  - name: ETCD_LISTEN_CLIENT_URLS
+                    value: http://0.0.0.0:2379
+                  - name: ETCD_DATA_DIR
+                    value: /var/lib/etcd
+                ports:
+                  - { name: client, containerPort: 2379 }
+                  - { name: peer,   containerPort: 2380 }
+                volumeMounts:
+                  - { name: data, mountPath: /var/lib/etcd }
+        volumeClaimTemplates:
+          - metadata: { name: data }
+            spec:
+              accessModes: [ "ReadWriteOnce" ]
+              resources: { requests: { storage: 5Gi } }
+              # storageClassName: longhorn   # uncomment if you want to force Longhorn
+      EOF
+
       RETRIES=5
       DELAY=5
 
@@ -2015,9 +2089,9 @@ write_files:
         --set service.type=NodePort \
         --set etcd.enabled=false \
         --set apisix.deployment.role=traditional \
-        --set apisix.deployment.role_traditional.config_provider=yaml \
+        --set apisix.deployment.role_traditional.config_provider=etcd \            # CHANGED: use etcd, not yaml
         --set ingress-controller.enabled=true \
-        --set ingress-controller.config.provider.type=apisix-standalone \
+        --set ingress-controller.config.provider.type=apisix \                      # CHANGED: normal mode (not apisix-standalone)
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
         --set config.enable_ipv6=false \
         --set-string config.nginx_config.http_listen="[127.0.0.1:9080]" \
@@ -2025,7 +2099,13 @@ write_files:
         --set-string config.nginx_config.stream_proxy.tcp="[]" \
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false"
+        --set extraEnv[0].value="false" \
+        --set externalEtcd.host[0]="http://etcd-0.etcd.svc.cluster.local:2379" \    # NEW: external etcd
+        --set externalEtcd.host[1]="http://etcd-1.etcd.svc.cluster.local:2379" \
+        --set externalEtcd.host[2]="http://etcd-2.etcd.svc.cluster.local:2379"
+        # If you set etcd auth, also add:
+        # --set externalEtcd.user="root" \
+        # --set externalEtcd.password="REDACTED"    # or externalEtcd.existingSecret + secretPasswordKey
 
       NAMESPACE="apisix"
       CONFIGMAP_NAME="apisix"
@@ -2057,8 +2137,14 @@ write_files:
 
       for i in $(seq 1 $RETRIES); do
         echo "Attempt $i to install APISIX Dashboard..."
-        sudo helm install apisix-dashboard apisix/apisix-dashboard --namespace apisix --set replicaCount=1 --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
-
+        sudo helm upgrade --install apisix-dashboard apisix/apisix-dashboard \
+          --namespace apisix \
+          --set replicaCount=1 \
+          --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+          --set conf.etcd.endpoints[0]="etcd-0.etcd.svc.cluster.local:2379" \
+          --set conf.etcd.endpoints[1]="etcd-1.etcd.svc.cluster.local:2379" \
+          --set conf.etcd.endpoints[2]="etcd-2.etcd.svc.cluster.local:2379"
+        
         echo "Helm install failed. Retrying in $DELAY seconds..."
         sleep $DELAY
       done
