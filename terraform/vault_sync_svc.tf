@@ -75,55 +75,60 @@ locals {
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
-  name               = "vault-sync-run-container"
-  location           = var.region
-  ingress            = "INGRESS_TRAFFIC_ALL"
-  project            = google_project.infra.project_id
+  name                = "vault-sync-run-container"
+  location            = var.region
+  project             = google_project.infra.project_id
+  ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = false
 
   template {
-    # Use the Cloud Run execution identity that is allowed in your Teleport GCP join token
     service_account = google_service_account.eventarc_service_account.email
 
-    # --- Ingress container (your app) ---
+    # Explicit scaling: allow scale-to-zero and cap bursts
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 20
+    }
+
+    # ---------------- App container ----------------
     containers {
       name  = "app"
       image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
 
-      # Prefer Teleport tunnel, fallback direct
-      env {
-        name  = "VAULT_ADDRS"
-        value = "http://127.0.0.1:8200,${var.VAULT_ADDRESS}"
-      }
-      env {
-        name  = "GCP_PROJECT_ID"
-        value = google_project.infra.project_id
-      }
-      env {
-        name  = "VAULT_CONNECT_TIMEOUT_MS"
-        value = "300"
-      }
-      env {
-        name  = "VAULT_READ_TIMEOUT_MS"
-        value = "2000"
-      }
-      env {
-        name  = "VAULT_WAIT_FOR_TUNNEL_MS"
-        value = "4000"
-      }
+      env { name = "VAULT_ADDRS"              value = "${var.VAULT_ADDRESS},http://127.0.0.1:8200" }
+      env { name = "GCP_PROJECT_ID"           value = google_project.infra.project_id }
+      env { name = "VAULT_CONNECT_TIMEOUT_MS" value = "300" }
+      env { name = "VAULT_READ_TIMEOUT_MS"    value = "2000" }
+      env { name = "VAULT_WAIT_FOR_TUNNEL_MS" value = "4000" }
+      env { name = "VAULT_ACTIVE_BASE_TTL_MS" value = "60000" }
+      env { name = "VAULT_PASSIVE_RECHECK_MS" value = "30000" }
+      env { name = "DEBUG_VAULT_RESOLVER"     value = "true" }
 
       ports { container_port = 8080 }
+
+      # Ensure CPU pauses when idle (saves money; allows scale-to-zero)
+      resources {
+        cpu_idle = true
+      }
     }
 
-    # --- Sidecar: Teleport Machine ID (tbot) ---
+    # ---------------- Teleport tbot wrapper sidecar ----------------
     containers {
       name  = "tbot"
-      image = "us-east1-docker.pkg.dev/tf-k8s-cluster-infra-9734/thirdparty/tbot-distroless:18.1.6"
-      # tbot will read base64 config from TBOT_CONFIG and start.
-      args  = ["start"]
-      env {
-        name  = "TBOT_CONFIG"
-        value = local.tbot_config_b64
+      image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/thirdparty/teleport-bot-container@sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+
+      # Wrapper loops `tbot start` and never exits; safe for Cloud Run
+      env { name = "TBOT_CONFIG"      value = local.tbot_config_b64 }
+      env { name = "TBOT_RETRY_DELAY" value = "10" }   # seconds between retries
+      # env { name = "TBOT_ARGS"        value = "start" }  # default is "start"
+      # env { name = "TBOT_DISABLED"    value = "" }       # set to "1" to park the sidecar
+
+      resources {
+        limits = {
+          cpu    = "200m"
+          memory = "128Mi"
+        }
+        cpu_idle = true   # pause sidecar CPU when idle
       }
     }
   }
