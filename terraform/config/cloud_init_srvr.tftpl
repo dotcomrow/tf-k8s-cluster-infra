@@ -1940,7 +1940,7 @@ write_files:
       sudo helm repo update
 
       # Installing etcd
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
       metadata: { name: etcd }
@@ -1953,14 +1953,10 @@ write_files:
         namespace: etcd
         labels: { app: etcd }
       spec:
-        clusterIP: None       # headless for stable DNS
+        clusterIP: None
         ports:
-          - name: client
-            port: 2379
-            targetPort: 2379
-          - name: peer
-            port: 2380
-            targetPort: 2380
+          - { name: client, port: 2379, targetPort: 2379 }
+          - { name: peer,   port: 2380, targetPort: 2380 }
         selector: { app: etcd }
 
       ---
@@ -2010,7 +2006,7 @@ write_files:
             spec:
               accessModes: [ "ReadWriteOnce" ]
               resources: { requests: { storage: 5Gi } }
-              # storageClassName: longhorn   # uncomment if you want to force Longhorn
+              # storageClassName: longhorn
       EOF
 
       RETRIES=5
