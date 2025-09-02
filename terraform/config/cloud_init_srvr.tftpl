@@ -1939,6 +1939,11 @@ write_files:
       
       sudo helm repo update
 
+      sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
       # Choose strong passwords; you can reuse the same value for both if you want
       ETCD_ROOT_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
       APISIX_ETCD_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
@@ -1956,10 +1961,6 @@ write_files:
         sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: Namespace
-      metadata: { name: etcd }
-      ---
       apiVersion: v1
       kind: Service
       metadata:
@@ -2109,10 +2110,6 @@ write_files:
       fi
       
       sudo helm repo update
-
-      sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       cat >/tmp/apisix-plugins.yaml <<'YAML'
       apisix:
