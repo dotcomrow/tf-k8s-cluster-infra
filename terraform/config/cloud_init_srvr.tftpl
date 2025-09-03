@@ -2254,10 +2254,8 @@ write_files:
         ' "$TMP_FILE"
 
         # Secret value (use env-injection so special chars are safe)
-        export APISIX_ETCD_PASS
-        sudo yq -i '.etcd.password = env(APISIX_ETCD_PASS)' "$TMP_FILE"
-        unset APISIX_ETCD_PASS
-
+        sudo yq -i '.etcd.password = $APISIX_ETCD_PASS "$TMP_FILE"
+        
         # 3) Apply the updated ConfigMap
         echo "🚀 Updating ConfigMap..."
         sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
