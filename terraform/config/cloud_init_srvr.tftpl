@@ -2042,7 +2042,7 @@ write_files:
             containers:
               - name: etcdctl
                 image: alpine:3.20
-                imagePullPolicy: IfNotPresent
+                command: ["/bin/sh","-lc"]
                 env:
                   - { name: ETCDCTL_API, value: "3" }
                   - { name: EP, value: "http://etcd.etcd.svc.cluster.local:2379" }
@@ -2050,31 +2050,28 @@ write_files:
                     valueFrom: { secretKeyRef: { name: etcd-root-auth, key: ROOT_PASS } }
                   - name: APISIX_PASS
                     valueFrom: { secretKeyRef: { name: etcd-apisix, key: etcd-password } }
-                command: ["/bin/sh","-lc"]
                 args:
                   - |
-                    echo "🔧 Installing etcdctl..."
+                    set -eu
                     apk add --no-cache etcd >/dev/null
+                    echo "Waiting for etcd to be healthy..."
+                    until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
 
-                    echo "🔎 Checking auth status..."
-                    AUTH_JSON=$(etcdctl --endpoints="$EP" auth status -w json || true)
-                    if echo "$AUTH_JSON" | grep -q '"enabled":true'; then
-                      echo "✅ etcd auth already enabled."
-                      ROOT_FLAG="--user=root:$ROOT_PASS"
+                    if etcdctl --endpoints="$EP" auth status -w json | grep -q '"enabled":true'; then
+                      echo "Auth already enabled."
                     else
-                      echo "👑 Creating root user (if needed) & enabling auth..."
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
-                      etcdctl --endpoints="$EP" auth enable || true
-                      ROOT_FLAG="--user=root:$ROOT_PASS"
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS"
+                      etcdctl --endpoints="$EP" auth enable
                     fi
 
-                    echo "👤 Ensure 'apisix' role/user with prefix RW on /apisix/"
-                    etcdctl --endpoints="$EP" $ROOT_FLAG role add apisix 2>/dev/null || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG role grant-permission --prefix=true apisix readwrite /apisix/ || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG user add apisix --interactive=false --new-user-password="$APISIX_PASS" 2>/dev/null || true
-                    etcdctl --endpoints="$EP" $ROOT_FLAG user grant-role apisix apisix || true
+                    ROOT="--user=root:$ROOT_PASS"
+                    etcdctl --endpoints="$EP" $ROOT role add apisix || true
+                    etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/
+                    etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS" || true
+                    etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix
 
-                    echo "✅ Done."
+                    # assert enabled at the end (will fail the Job if not)
+                    etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'
       YAML
 
       # Wait for the Job to complete
