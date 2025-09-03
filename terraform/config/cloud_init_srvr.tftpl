@@ -2068,11 +2068,11 @@ write_files:
                       *) echo "Unsupported arch: $ARCH"; exit 1 ;;
                     esac
 
-                    URL="https://github.com/etcd-io/etcd/releases/download/${VER}/etcd-${VER}-linux-${ETC_ARCH}.tar.gz"
+                    URL="https://github.com/etcd-io/etcd/releases/download/$VER/etcd-$VER-linux-$ETC_ARCH.tar.gz"
                     echo "⬇️  Fetching etcdctl from $URL"
                     curl -fsSL "$URL" -o /tmp/etcd.tgz
                     tar -xzf /tmp/etcd.tgz -C /tmp
-                    cp "/tmp/etcd-${VER}-linux-${ETC_ARCH}/etcdctl" /usr/local/bin/etcdctl
+                    cp "/tmp/etcd-$VER-linux-$ETC_ARCH/etcdctl" /usr/local/bin/etcdctl
                     chmod +x /usr/local/bin/etcdctl
                     etcdctl version
 
@@ -2084,11 +2084,11 @@ write_files:
                       echo "Auth already enabled."
                     else
                       echo "👑 Creating root (if needed) & enabling auth..."
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="${ROOT_PASS}" || true
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
                       etcdctl --endpoints="$EP" auth enable
                     fi
 
-                    ROOT="--user=root:${ROOT_PASS}"
+                    ROOT="--user=root:$ROOT_PASS"
 
                     echo "👤 Ensure 'apisix' role exists..."
                     etcdctl --endpoints="$EP" $ROOT role get apisix >/dev/null 2>&1 || \
@@ -2101,7 +2101,7 @@ write_files:
 
                     echo "👤 Ensure 'apisix' user exists..."
                     etcdctl --endpoints="$EP" $ROOT user get apisix >/dev/null 2>&1 || \
-                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="${APISIX_PASS}"
+                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS"
 
                     echo "🔗 Ensure 'apisix' user has 'apisix' role..."
                     if ! etcdctl --endpoints="$EP" $ROOT user get apisix | grep -Eq '^Roles:.*\bapisix\b'; then
