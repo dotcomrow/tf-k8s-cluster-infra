@@ -2035,10 +2035,15 @@ write_files:
         name: etcd-auth-bootstrap
         namespace: etcd
       spec:
-        ttlSecondsAfterFinished: 600
+        # Run exactly once: no retries and don't auto-delete after finish
+        backoffLimit: 0
+        ttlSecondsAfterFinished: null
+        completions: 1
+        parallelism: 1
         template:
           spec:
-            restartPolicy: OnFailure
+            # Never restart the container inside the pod if it exits non-zero
+            restartPolicy: Never
             containers:
               - name: etcdctl
                 image: alpine:3.20
@@ -2054,23 +2059,40 @@ write_files:
                   - |
                     set -eu
                     apk add --no-cache etcd >/dev/null
+
                     echo "Waiting for etcd to be healthy..."
                     until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
 
+                    echo "Checking auth status..."
                     if etcdctl --endpoints="$EP" auth status -w json | grep -q '"enabled":true'; then
                       echo "Auth already enabled."
                     else
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS"
+                      # create root if missing (ignore if exists)
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
                       etcdctl --endpoints="$EP" auth enable
                     fi
 
                     ROOT="--user=root:$ROOT_PASS"
-                    etcdctl --endpoints="$EP" $ROOT role add apisix || true
-                    etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/
-                    etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS" || true
-                    etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix
 
-                    # assert enabled at the end (will fail the Job if not)
+                    echo "Ensure 'apisix' role exists..."
+                    etcdctl --endpoints="$EP" $ROOT role get apisix >/dev/null 2>&1 || \
+                      etcdctl --endpoints="$EP" $ROOT role add apisix
+
+                    echo "Ensure 'apisix' role has RW on /apisix/ ..."
+                    if ! etcdctl --endpoints="$EP" $ROOT role get apisix | grep -Eq '^KV ranges:.*\[/apisix/, /apisix0\) readwrite'; then
+                      etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ || true
+                    fi
+
+                    echo "Ensure 'apisix' user exists..."
+                    etcdctl --endpoints="$EP" $ROOT user get apisix >/dev/null 2>&1 || \
+                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS"
+
+                    echo "Ensure 'apisix' user has 'apisix' role..."
+                    if ! etcdctl --endpoints="$EP" $ROOT user get apisix | grep -Eq '^Roles:.*\bapisix\b'; then
+                      etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix || true
+                    fi
+
+                    echo "Final auth status:"
                     etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'
       YAML
 
