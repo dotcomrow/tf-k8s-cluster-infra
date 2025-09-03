@@ -2214,7 +2214,9 @@ write_files:
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
-        --set config.nginx_config.stream_proxy.udp="[]"
+        --set config.nginx_config.stream_proxy.udp="[]" \
+        --set-string config.etcd.user=apisix \
+        --set-string config.etcd.password="$APISIX_ETCD_PASS"
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
