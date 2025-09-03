@@ -1648,7 +1648,7 @@ write_files:
       echo "✔️ Cloud credential created"
 
       KUBECONFIG=/etc/rancher/rke2/rke2.yaml
-      K="sudo -E kubectl --kubeconfig=$KUBECONFIG"
+      K="sudo kubectl --kubeconfig=$KUBECONFIG"
 
       echo "🔍 Locating ClusterRoleTemplateBinding for local:// user..."
 
@@ -1949,27 +1949,34 @@ write_files:
       APISIX_ETCD_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
 
       # etcd (root) secret
-      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd \
         create secret generic etcd-root-auth \
         --from-literal=ROOT_PASS="$ETCD_ROOT_PASS" --dry-run=client -o yaml | \
-        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
-      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
         create secret generic etcd-root-auth \
         --from-literal=ROOT_PASS="$ETCD_ROOT_PASS" --dry-run=client -o yaml | \
-        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       # apisix etcd password secret
-      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd \
         create secret generic etcd-apisix \
         --from-literal=etcd-password="$APISIX_ETCD_PASS" --dry-run=client -o yaml | \
-        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
-      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
         create secret generic etcd-apisix \
         --from-literal=etcd-password="$APISIX_ETCD_PASS" \
         --dry-run=client -o yaml | \
-        sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix annotate secret etcd-apisix \
+        meta.helm.sh/release-name=apisix \
+        meta.helm.sh/release-namespace=apisix --overwrite
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix label secret etcd-apisix \
+        app.kubernetes.io/managed-by=Helm --overwrite
 
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
@@ -2034,7 +2041,7 @@ write_files:
       EOF
 
       # Wait for etcd pods to be Ready
-      cat <<'YAML' | sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'YAML' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: batch/v1
       kind: Job
       metadata:
@@ -2119,7 +2126,7 @@ write_files:
       YAML
 
       # Wait for the Job to complete
-      sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd wait --for=condition=complete job/etcd-auth-bootstrap --timeout=180s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n etcd wait --for=condition=complete job/etcd-auth-bootstrap --timeout=180s
 
       RETRIES=5
       DELAY=5
