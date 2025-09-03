@@ -2215,28 +2215,65 @@ write_files:
         --set config.nginx_config.stream_proxy.tcp="[]" \
         --set config.nginx_config.stream_proxy.udp="[]"
 
-      NAMESPACE="apisix"
-      CONFIGMAP_NAME="apisix"
-      KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
-      TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
+        NAMESPACE="apisix"
+        CONFIGMAP_NAME="apisix"
+        KUBECONFIG="/etc/rancher/rke2/rke2.yaml"
+        TMP_FILE="$HOME/disable-ipv6-apisix.yaml"
 
-      echo "📦 Exporting current config..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
-        -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
+        # 1) Grab the apisix etcd password from the apisix namespace secret
+        APISIX_ETCD_PASS="$(
+          sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" \
+            get secret etcd-apisix -o jsonpath='{.data.etcd-password}' 2>/dev/null | base64 -d
+        )"
 
-      echo "🛠 Patching enable_ipv6: false..."
-      sudo yq -i '.apisix.enable_ipv6 = false' "$TMP_FILE"
+        # Fallback: if not in apisix ns (shouldn’t happen now), pull from etcd ns
+        if [ -z "$APISIX_ETCD_PASS" ]; then
+          APISIX_ETCD_PASS="$(
+            sudo kubectl --kubeconfig "$KUBECONFIG" -n etcd \
+              get secret etcd-apisix -o jsonpath='{.data.etcd-password}' 2>/dev/null | base64 -d
+          )"
+        fi
 
+        if [ -z "$APISIX_ETCD_PASS" ]; then
+          echo "❌ Could not read etcd password from secret 'etcd-apisix'." >&2
+          exit 1
+        fi
 
-      echo "🚀 Updating ConfigMap..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
-        --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
-        sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+        echo "📦 Exporting current config..."
+        sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
+          -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
 
-      echo "🔥 Restarting APISIX pod..."
-      sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
+        # 2) Patch config: disable IPv6 and ensure etcd auth block is present
+        echo "🛠 Patching config (disable IPv6 + set etcd credentials)..."
+        # Static bits
+        sudo yq -i '
+          .apisix.enable_ipv6 = false
+          | .etcd.host = ["http://etcd.etcd.svc.cluster.local:2379"]
+          | .etcd.prefix = "/apisix"
+          | .etcd.user = "apisix"
+        ' "$TMP_FILE"
 
-      echo "✅ IPv6 disabled and pod restarted."
+        # Secret value (use env-injection so special chars are safe)
+        export APISIX_ETCD_PASS
+        sudo yq -i '.etcd.password = env(APISIX_ETCD_PASS)' "$TMP_FILE"
+        unset APISIX_ETCD_PASS
+
+        # 3) Apply the updated ConfigMap
+        echo "🚀 Updating ConfigMap..."
+        sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" create configmap "$CONFIGMAP_NAME" \
+          --from-file=config.yaml="$TMP_FILE" --dry-run=client -o yaml | \
+          sudo kubectl --kubeconfig "$KUBECONFIG" apply -f -
+
+        # (Optional) Show the etcd section we just wrote
+        echo "🔎 New etcd section in config.yaml:"
+        sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get cm "$CONFIGMAP_NAME" \
+          -o jsonpath='{.data.config\.yaml}' | sed -n '/^etcd:/,/^[^[:space:]]/p'
+
+        # 4) Restart APISIX so it picks up the new config
+        echo "🔥 Restarting APISIX pod(s)..."
+        sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" delete pod -l app.kubernetes.io/name=apisix
+
+        echo "✅ IPv6 disabled, etcd auth configured, APISIX restarting."
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
 
