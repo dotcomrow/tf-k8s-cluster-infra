@@ -2035,14 +2035,12 @@ write_files:
         name: etcd-auth-bootstrap
         namespace: etcd
       spec:
-        # Run exactly once: no retries and don't auto-delete after finish
         backoffLimit: 0
         ttlSecondsAfterFinished: null
         completions: 1
         parallelism: 1
         template:
           spec:
-            # Never restart the container inside the pod if it exits non-zero
             restartPolicy: Never
             containers:
               - name: etcdctl
@@ -2058,41 +2056,59 @@ write_files:
                 args:
                   - |
                     set -eu
-                    apk add --no-cache etcd >/dev/null
+                    echo "📦 Installing curl+tar..."
+                    apk add --no-cache ca-certificates curl tar >/dev/null
 
-                    echo "Waiting for etcd to be healthy..."
+                    VER="v3.5.12"
+                    ARCH="$(uname -m)"
+                    case "$ARCH" in
+                      x86_64)  ETC_ARCH=amd64 ;;
+                      aarch64) ETC_ARCH=arm64 ;;
+                      armv7l)  ETC_ARCH=armv7 ;;
+                      *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+                    esac
+
+                    URL="https://github.com/etcd-io/etcd/releases/download/${VER}/etcd-${VER}-linux-${ETC_ARCH}.tar.gz"
+                    echo "⬇️  Fetching etcdctl from $URL"
+                    curl -fsSL "$URL" -o /tmp/etcd.tgz
+                    tar -xzf /tmp/etcd.tgz -C /tmp
+                    cp "/tmp/etcd-${VER}-linux-${ETC_ARCH}/etcdctl" /usr/local/bin/etcdctl
+                    chmod +x /usr/local/bin/etcdctl
+                    etcdctl version
+
+                    echo "⏱️  Waiting for etcd to be healthy..."
                     until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
 
-                    echo "Checking auth status..."
+                    echo "🔐 Checking auth status..."
                     if etcdctl --endpoints="$EP" auth status -w json | grep -q '"enabled":true'; then
                       echo "Auth already enabled."
                     else
-                      # create root if missing (ignore if exists)
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
+                      echo "👑 Creating root (if needed) & enabling auth..."
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="${ROOT_PASS}" || true
                       etcdctl --endpoints="$EP" auth enable
                     fi
 
-                    ROOT="--user=root:$ROOT_PASS"
+                    ROOT="--user=root:${ROOT_PASS}"
 
-                    echo "Ensure 'apisix' role exists..."
+                    echo "👤 Ensure 'apisix' role exists..."
                     etcdctl --endpoints="$EP" $ROOT role get apisix >/dev/null 2>&1 || \
                       etcdctl --endpoints="$EP" $ROOT role add apisix
 
-                    echo "Ensure 'apisix' role has RW on /apisix/ ..."
+                    echo "🔏 Ensure 'apisix' role has RW on /apisix/ ..."
                     if ! etcdctl --endpoints="$EP" $ROOT role get apisix | grep -Eq '^KV ranges:.*\[/apisix/, /apisix0\) readwrite'; then
                       etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ || true
                     fi
 
-                    echo "Ensure 'apisix' user exists..."
+                    echo "👤 Ensure 'apisix' user exists..."
                     etcdctl --endpoints="$EP" $ROOT user get apisix >/dev/null 2>&1 || \
-                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS"
+                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="${APISIX_PASS}"
 
-                    echo "Ensure 'apisix' user has 'apisix' role..."
+                    echo "🔗 Ensure 'apisix' user has 'apisix' role..."
                     if ! etcdctl --endpoints="$EP" $ROOT user get apisix | grep -Eq '^Roles:.*\bapisix\b'; then
                       etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix || true
                     fi
 
-                    echo "Final auth status:"
+                    echo "✅ Final auth status (must be enabled):"
                     etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'
       YAML
 
