@@ -2055,104 +2055,75 @@ write_files:
         template:
           spec:
             restartPolicy: Never
-            volumes:
-              - name: work
-                emptyDir: {}
-            # 1) Put etcdctl into /work from the official etcd image (no network needed)
-            initContainers:
-              - name: put-etcdctl
-                image: quay.io/coreos/etcd:v3.5.12
-                command: ["cp","/usr/local/bin/etcdctl","/work/etcdctl"]
-                volumeMounts:
-                  - name: work
-                    mountPath: /work
-              # 2) Write the bootstrap script into /work/run.sh
-              - name: write-script
-                image: busybox:1.36
+            containers:
+              - name: etcdctl
+                image: alpine:3.20
                 command: ["/bin/sh","-lc"]
+                env:
+                  - { name: ETCDCTL_API, value: "3" }
+                  - { name: EP, value: "http://etcd.etcd.svc.cluster.local:2379" }
+                  - name: ROOT_PASS
+                    valueFrom: { secretKeyRef: { name: etcd-root-auth, key: ROOT_PASS } }
+                  - name: APISIX_PASS
+                    valueFrom: { secretKeyRef: { name: etcd-apisix, key: etcd-password } }
                 args:
                   - |
-                    cat >/work/run.sh <<'EOS'
-                    #!/bin/sh
                     set -eu
+                    echo "📦 Installing curl+tar..."
+                    apk add --no-cache ca-certificates curl tar >/dev/null
 
-                    ETCDCTL=/work/etcdctl
-                    EP="http://etcd.etcd.svc.cluster.local:2379"
+                    VER="v3.5.12"
+                    ARCH="$(uname -m)"
+                    case "$ARCH" in
+                      x86_64)  ETC_ARCH=amd64 ;;
+                      aarch64) ETC_ARCH=arm64 ;;
+                      *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+                    esac
 
-                    echo "⏱️  Waiting for etcd to be healthy..."
-                    # Wait until the endpoint replies healthy without auth (before enable)
-                    i=0
-                    until $ETCDCTL --endpoints="$EP" endpoint health >/dev/null 2>&1; do
-                      i=$((i+1)); [ $i -gt 60 ] && { echo "etcd not healthy"; exit 2; }
+                    URL="https://github.com/etcd-io/etcd/releases/download/$VER/etcd-$VER-linux-$ETC_ARCH.tar.gz"
+                    echo "⬇️  Fetching etcdctl from $URL"
+                    # simple retry loop for flaky DNS/egress
+                    for i in 1 2 3; do
+                      if curl -fsSL "$URL" -o /tmp/etcd.tgz; then break; fi
+                      echo "curl failed (attempt $i), retrying..." >&2
                       sleep 2
                     done
+                    tar -xzf /tmp/etcd.tgz -C /tmp
+                    cp "/tmp/etcd-$VER-linux-$ETC_ARCH/etcdctl" /usr/local/bin/etcdctl
+                    chmod +x /usr/local/bin/etcdctl
+                    etcdctl version
+
+                    echo "⏱️  Waiting for etcd to be healthy..."
+                    until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
 
                     echo "🔐 Checking auth status..."
-                    if $ETCDCTL --endpoints="$EP" auth status -w json 2>/dev/null | grep -q '"enabled":true'; then
+                    if etcdctl --endpoints="$EP" auth status -w json | grep -q '"enabled":true'; then
                       echo "Auth already enabled."
                     else
                       echo "👑 Creating root (if needed) & enabling auth..."
-                      # create root; ignore if exists
-                      $ETCDCTL --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
-                      # enabling can briefly fail; retry a few times
+                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
+                      # enable can be momentarily racy; retry a few times
                       for j in 1 2 3; do
-                        if $ETCDCTL --endpoints="$EP" auth enable; then break; fi
-                        sleep 1
+                        etcdctl --endpoints="$EP" auth enable && break || sleep 1
                       done
                     fi
 
                     ROOT="--user=root:$ROOT_PASS"
 
                     echo "👤 Ensure 'apisix' role exists..."
-                    $ETCDCTL --endpoints="$EP" $ROOT role add apisix 2>/dev/null || true
+                    etcdctl --endpoints="$EP" $ROOT role add apisix 2>/dev/null || true
 
                     echo "🔏 Ensure 'apisix' role has RW on /apisix/ ..."
-                    $ETCDCTL --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ 2>/dev/null || true
+                    etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ 2>/dev/null || true
 
                     echo "👤 Ensure 'apisix' user exists..."
-                    $ETCDCTL --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS" 2>/dev/null || true
+                    etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS" 2>/dev/null || true
 
                     echo "🔗 Ensure 'apisix' user has 'apisix' role..."
-                    $ETCDCTL --endpoints="$EP" $ROOT user grant-role apisix apisix 2>/dev/null || true
+                    etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix 2>/dev/null || true
 
                     echo "✅ Final auth status (must be enabled):"
-                    for k in 1 2 3 4 5; do
-                      if $ETCDCTL --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'; then
-                        echo "Auth enabled."
-                        exit 0
-                      fi
-                      sleep 1
-                    done
-                    echo "Auth not enabled after retries" >&2
-                    exit 3
-                    EOS
-                    chmod +x /work/run.sh
-                volumeMounts:
-                  - name: work
-                    mountPath: /work
-            # 3) Run the script with busybox
-            containers:
-              - name: runner
-                image: busybox:1.36
-                command: ["/bin/sh","/work/run.sh"]
-                env:
-                  - name: ETCDCTL_API
-                    value: "3"
-                  - name: EP
-                    value: "http://etcd.etcd.svc.cluster.local:2379"
-                  - name: ROOT_PASS
-                    valueFrom:
-                      secretKeyRef:
-                        name: etcd-root-auth
-                        key: ROOT_PASS
-                  - name: APISIX_PASS
-                    valueFrom:
-                      secretKeyRef:
-                        name: etcd-apisix
-                        key: etcd-password
-                volumeMounts:
-                  - name: work
-                    mountPath: /work
+                    etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'
       YAML
 
       # Wait for the Job to complete
