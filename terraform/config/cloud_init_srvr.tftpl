@@ -2199,11 +2199,11 @@ write_files:
         echo "Attempt $i to install APISIX Dashboard..."
         sudo helm upgrade --install apisix-dashboard apisix/apisix-dashboard \
           --namespace apisix \
-          --set replicaCount=1 \
           --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-          --set conf.etcd.endpoints[0]="etcd-0.etcd.svc.cluster.local:2379" \
-          --set conf.etcd.endpoints[1]="etcd-1.etcd.svc.cluster.local:2379" \
-          --set conf.etcd.endpoints[2]="etcd-2.etcd.svc.cluster.local:2379"
+          --set replicaCount=1 \
+          --set config.conf.etcd.endpoints[0]="http://etcd.etcd.svc.cluster.local:2379" \
+          --set config.conf.etcd.username="apisix" \
+          --set-string config.conf.etcd.password="$PASS"
         
         echo "Helm install failed. Retrying in $DELAY seconds..."
         sleep $DELAY
