@@ -2048,42 +2048,55 @@ write_files:
         name: etcd-auth-bootstrap
         namespace: etcd
       spec:
-        backoffLimit: 0            # run once only
-        ttlSecondsAfterFinished: null
         completions: 1
         parallelism: 1
+        backoffLimit: 0
+        ttlSecondsAfterFinished: null
         template:
           spec:
             restartPolicy: Never
-            containers:
-              - name: etcdctl
-                image: alpine:3.19          # <-- 3.19 still has etcdctl via apk
+            volumes:
+              - name: work
+                emptyDir: {}
+            # 1) Put etcdctl into /work from the official etcd image (no network needed)
+            initContainers:
+              - name: put-etcdctl
+                image: quay.io/coreos/etcd:v3.5.12
+                command: ["cp","/usr/local/bin/etcdctl","/work/etcdctl"]
+                volumeMounts:
+                  - name: work
+                    mountPath: /work
+              # 2) Write the bootstrap script into /work/run.sh
+              - name: write-script
+                image: busybox:1.36
                 command: ["/bin/sh","-lc"]
-                env:
-                  - { name: ETCDCTL_API, value: "3" }
-                  - { name: EP, value: "http://etcd.etcd.svc.cluster.local:2379" }
-                  - name: ROOT_PASS
-                    valueFrom: { secretKeyRef: { name: etcd-root-auth, key: ROOT_PASS } }
-                  - name: APISIX_PASS
-                    valueFrom: { secretKeyRef: { name: etcd-apisix, key: etcd-password } }
                 args:
                   - |
+                    cat >/work/run.sh <<'EOS'
+                    #!/bin/sh
                     set -eu
-                    # etcdctl comes from Alpine 3.19 repo; no GitHub fetch needed
-                    apk add --no-cache etcd >/dev/null
+
+                    ETCDCTL=/work/etcdctl
+                    EP="http://etcd.etcd.svc.cluster.local:2379"
 
                     echo "⏱️  Waiting for etcd to be healthy..."
-                    until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
+                    # Wait until the endpoint replies healthy without auth (before enable)
+                    i=0
+                    until $ETCDCTL --endpoints="$EP" endpoint health >/dev/null 2>&1; do
+                      i=$((i+1)); [ $i -gt 60 ] && { echo "etcd not healthy"; exit 2; }
+                      sleep 2
+                    done
 
                     echo "🔐 Checking auth status..."
-                    if etcdctl --endpoints="$EP" auth status -w json | grep -q '"enabled":true'; then
+                    if $ETCDCTL --endpoints="$EP" auth status -w json 2>/dev/null | grep -q '"enabled":true'; then
                       echo "Auth already enabled."
                     else
                       echo "👑 Creating root (if needed) & enabling auth..."
-                      etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
-                      # enabling can race; retry a couple of times
-                      for i in 1 2 3; do
-                        if etcdctl --endpoints="$EP" auth enable; then break; fi
+                      # create root; ignore if exists
+                      $ETCDCTL --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
+                      # enabling can briefly fail; retry a few times
+                      for j in 1 2 3; do
+                        if $ETCDCTL --endpoints="$EP" auth enable; then break; fi
                         sleep 1
                       done
                     fi
@@ -2091,29 +2104,55 @@ write_files:
                     ROOT="--user=root:$ROOT_PASS"
 
                     echo "👤 Ensure 'apisix' role exists..."
-                    etcdctl --endpoints="$EP" $ROOT role get apisix >/dev/null 2>&1 || \
-                      etcdctl --endpoints="$EP" $ROOT role add apisix
+                    $ETCDCTL --endpoints="$EP" $ROOT role add apisix 2>/dev/null || true
 
                     echo "🔏 Ensure 'apisix' role has RW on /apisix/ ..."
-                    etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ || true
+                    $ETCDCTL --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ 2>/dev/null || true
 
                     echo "👤 Ensure 'apisix' user exists..."
-                    etcdctl --endpoints="$EP" $ROOT user get apisix >/dev/null 2>&1 || \
-                      etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS"
+                    $ETCDCTL --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS" 2>/dev/null || true
 
                     echo "🔗 Ensure 'apisix' user has 'apisix' role..."
-                    etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix || true
+                    $ETCDCTL --endpoints="$EP" $ROOT user grant-role apisix apisix 2>/dev/null || true
 
                     echo "✅ Final auth status (must be enabled):"
-                    # be tolerant of brief lag after enabling
-                    for i in 1 2 3 4 5; do
-                      if etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'; then
+                    for k in 1 2 3 4 5; do
+                      if $ETCDCTL --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'; then
+                        echo "Auth enabled."
                         exit 0
                       fi
                       sleep 1
                     done
                     echo "Auth not enabled after retries" >&2
                     exit 3
+                    EOS
+                    chmod +x /work/run.sh
+                volumeMounts:
+                  - name: work
+                    mountPath: /work
+            # 3) Run the script with busybox
+            containers:
+              - name: runner
+                image: busybox:1.36
+                command: ["/bin/sh","/work/run.sh"]
+                env:
+                  - name: ETCDCTL_API
+                    value: "3"
+                  - name: EP
+                    value: "http://etcd.etcd.svc.cluster.local:2379"
+                  - name: ROOT_PASS
+                    valueFrom:
+                      secretKeyRef:
+                        name: etcd-root-auth
+                        key: ROOT_PASS
+                  - name: APISIX_PASS
+                    valueFrom:
+                      secretKeyRef:
+                        name: etcd-apisix
+                        key: etcd-password
+                volumeMounts:
+                  - name: work
+                    mountPath: /work
       YAML
 
       # Wait for the Job to complete
