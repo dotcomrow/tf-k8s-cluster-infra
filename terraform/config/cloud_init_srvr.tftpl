@@ -2255,7 +2255,7 @@ write_files:
         ' "$TMP_FILE"
 
         # Secret value (use env-injection so special chars are safe)
-        sudo yq -i '.etcd.password = $APISIX_ETCD_PASS "$TMP_FILE"
+        sudo yq -i '.etcd.password = $APISIX_ETCD_PASS' "$TMP_FILE"
         
         # 3) Apply the updated ConfigMap
         echo "🚀 Updating ConfigMap..."
