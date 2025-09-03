@@ -2041,14 +2041,14 @@ write_files:
       EOF
 
       # Wait for etcd pods to be Ready
-      cat <<'YAML' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'YAML' | sudo -E kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: batch/v1
       kind: Job
       metadata:
         name: etcd-auth-bootstrap
         namespace: etcd
       spec:
-        backoffLimit: 0
+        backoffLimit: 0            # run once only
         ttlSecondsAfterFinished: null
         completions: 1
         parallelism: 1
@@ -2057,7 +2057,7 @@ write_files:
             restartPolicy: Never
             containers:
               - name: etcdctl
-                image: alpine:3.20
+                image: alpine:3.19          # <-- 3.19 still has etcdctl via apk
                 command: ["/bin/sh","-lc"]
                 env:
                   - { name: ETCDCTL_API, value: "3" }
@@ -2069,25 +2069,8 @@ write_files:
                 args:
                   - |
                     set -eu
-                    echo "📦 Installing curl+tar..."
-                    apk add --no-cache ca-certificates curl tar >/dev/null
-
-                    VER="v3.5.12"
-                    ARCH="$(uname -m)"
-                    case "$ARCH" in
-                      x86_64)  ETC_ARCH=amd64 ;;
-                      aarch64) ETC_ARCH=arm64 ;;
-                      armv7l)  ETC_ARCH=armv7 ;;
-                      *) echo "Unsupported arch: $ARCH"; exit 1 ;;
-                    esac
-
-                    URL="https://github.com/etcd-io/etcd/releases/download/$VER/etcd-$VER-linux-$ETC_ARCH.tar.gz"
-                    echo "⬇️  Fetching etcdctl from $URL"
-                    curl -fsSL "$URL" -o /tmp/etcd.tgz
-                    tar -xzf /tmp/etcd.tgz -C /tmp
-                    cp "/tmp/etcd-$VER-linux-$ETC_ARCH/etcdctl" /usr/local/bin/etcdctl
-                    chmod +x /usr/local/bin/etcdctl
-                    etcdctl version
+                    # etcdctl comes from Alpine 3.19 repo; no GitHub fetch needed
+                    apk add --no-cache etcd >/dev/null
 
                     echo "⏱️  Waiting for etcd to be healthy..."
                     until etcdctl --endpoints="$EP" endpoint health >/dev/null 2>&1; do sleep 2; done
@@ -2098,7 +2081,11 @@ write_files:
                     else
                       echo "👑 Creating root (if needed) & enabling auth..."
                       etcdctl --endpoints="$EP" user add root --interactive=false --new-user-password="$ROOT_PASS" || true
-                      etcdctl --endpoints="$EP" auth enable
+                      # enabling can race; retry a couple of times
+                      for i in 1 2 3; do
+                        if etcdctl --endpoints="$EP" auth enable; then break; fi
+                        sleep 1
+                      done
                     fi
 
                     ROOT="--user=root:$ROOT_PASS"
@@ -2108,21 +2095,25 @@ write_files:
                       etcdctl --endpoints="$EP" $ROOT role add apisix
 
                     echo "🔏 Ensure 'apisix' role has RW on /apisix/ ..."
-                    if ! etcdctl --endpoints="$EP" $ROOT role get apisix | grep -Eq '^KV ranges:.*\[/apisix/, /apisix0\) readwrite'; then
-                      etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ || true
-                    fi
+                    etcdctl --endpoints="$EP" $ROOT role grant-permission --prefix=true apisix readwrite /apisix/ || true
 
                     echo "👤 Ensure 'apisix' user exists..."
                     etcdctl --endpoints="$EP" $ROOT user get apisix >/dev/null 2>&1 || \
                       etcdctl --endpoints="$EP" $ROOT user add apisix --interactive=false --new-user-password="$APISIX_PASS"
 
                     echo "🔗 Ensure 'apisix' user has 'apisix' role..."
-                    if ! etcdctl --endpoints="$EP" $ROOT user get apisix | grep -Eq '^Roles:.*\bapisix\b'; then
-                      etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix || true
-                    fi
+                    etcdctl --endpoints="$EP" $ROOT user grant-role apisix apisix || true
 
                     echo "✅ Final auth status (must be enabled):"
-                    etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'
+                    # be tolerant of brief lag after enabling
+                    for i in 1 2 3 4 5; do
+                      if etcdctl --endpoints="$EP" $ROOT auth status -w json | grep -q '"enabled":true'; then
+                        exit 0
+                      fi
+                      sleep 1
+                    done
+                    echo "Auth not enabled after retries" >&2
+                    exit 3
       YAML
 
       # Wait for the Job to complete
