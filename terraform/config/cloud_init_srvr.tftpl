@@ -2195,28 +2195,24 @@ write_files:
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace apisix \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --set etcd.enabled=false \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set externalEtcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
-        --set externalEtcd.user="apisix" \
-        --set externalEtcd.passwordFrom.secretName=etcd-apisix \
-        --set externalEtcd.tls.enabled=false \
         --set apisix.deployment.role=traditional \
         --set apisix.deployment.role_traditional.config_provider=etcd \
         --set ingress-controller.enabled=true \
         --set ingress-controller.config.provider.type=apisix \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
         --set config.enable_ipv6=false \
-        --set externalEtcd.passwordFrom.secretKey=etcd-password \
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
         --set config.nginx_config.stream_proxy.udp="[]" \
         --set apisix.podAnnotations."config\.linkerd\.io/skip-outbound-ports"="2379" \
-        --set-string config.etcd.user=apisix
+        --set-json config.etcd="$(jq -cn --arg p "$APISIX_ETCD_PASS" \
+          '{host:["http://etcd.etcd.svc.cluster.local:2379"], prefix:"/apisix", user:"apisix", password:$p}')"
 
         # -- ensure the APISIX pod template has Linkerd bypass for etcd:2379 --
         # 1) make sure the annotations map exists on the pod template
