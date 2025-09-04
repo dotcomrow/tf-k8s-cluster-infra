@@ -2287,7 +2287,7 @@ write_files:
           --set replicaCount=1 \
           --set config.conf.etcd.endpoints[0]="http://etcd.etcd.svc.cluster.local:2379" \
           --set config.conf.etcd.username="apisix" \
-          --set-string config.conf.etcd.password="$APISIX_ETCD_PASS"
+          --set-string config.conf.etcd.password="$APISIX_ETCD_PASS" && break
         
         echo "Helm install failed. Retrying in $DELAY seconds..."
         sleep $DELAY
