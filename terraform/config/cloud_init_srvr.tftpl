@@ -1942,7 +1942,7 @@ write_files:
       sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace apisix linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Choose strong passwords; you can reuse the same value for both if you want
       ETCD_ROOT_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
@@ -2195,31 +2195,25 @@ write_files:
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace apisix \
-        -f /tmp/apisix-plugins.yaml \
-        --set service.type=NodePort \
-        --set ingress-controller.enabled=true \
-        --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
-        --set ingress-controller.args[0]="ingress-apisix" \
-        --set ingress-controller.args[1]="--namespace-selector=" \
-        --set config.enable_ipv6=false \
-        --set config.apisix.enable_ipv6=false \
-        --set config.deployment.role=traditional \
-        --set config.deployment.role_traditional.config_provider=etcd \
-        --set-json config.etcd="$(jq -cn --arg p "$APISIX_ETCD_PASS" \
-          '{host:["http://etcd.etcd.svc.cluster.local:2379"], prefix:"/apisix", timeout:30, user:"apisix", password:$p}')" \
-        --set ingress-controller.enabled=true \
-        --set ingress-controller.config.provider.type=apisix \
-        --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set-string config.nginx_config.http_listen="[0.0.0.0:9080]" \
-        --set-string config.nginx_config.ssl.listen="[0.0.0.0:9443]" \
-        --set-string config.nginx_config.stream_proxy.tcp="[]" \
-        --set-string config.nginx_config.stream_proxy.udp="[]" \
-        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false" \
-        --set etcd.enabled=false 
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --set etcd.enabled=false \
+        --set externalEtcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
+        --set externalEtcd.user="apisix" \
+        --set-string externalEtcd.password="$APISIX_ETCD_PASS" \
+        --set-string externalEtcd.user=apisix \
+        --set externalEtcd.tls.enabled=false \
+        --set config.etcd.prefix="/apisix" \
+        --set config.etcd.timeout=30 \
+        --set config.etcd.user="apisix" \
+        --set apisix.deployment.role=traditional \
+        --set apisix.deployment.role_traditional.config_provider=etcd \
+        --set apisix.enableIPv6=false \
+        --set apisix.podAnnotations."linkerd\.io/inject"="disabled" \
+        --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
+        --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
+        --set config.nginx_config.stream_proxy.tcp="[]" \
+        --set config.nginx_config.stream_proxy.udp="[]"
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
