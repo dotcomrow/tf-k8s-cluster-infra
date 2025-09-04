@@ -2213,7 +2213,11 @@ write_files:
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
-        --set config.nginx_config.stream_proxy.udp="[]"
+        --set config.nginx_config.stream_proxy.udp="[]" \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.replicaCount=1 \
+        --set ingress-controller.config.provider.type=apisix \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix 
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
