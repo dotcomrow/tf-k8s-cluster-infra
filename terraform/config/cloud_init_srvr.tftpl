@@ -2195,43 +2195,31 @@ write_files:
       echo "🚀 Installing APISIX Gateway and Dashboard..."
       sudo helm upgrade --install apisix apisix/apisix \
         --version 2.10.1 \
-        --namespace apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --set etcd.enabled=false \
-        --set etcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
-        --set deployment.role=traditional \
-        --set deployment.role_traditional.config_provider=etcd \
-        --set deployment.etcd.user="apisix" \
-        --set-string deployment.etcd.password="$APISIX_ETCD_PASS" \
-        --set apisix.enableIPv6=false \
-        --set apisix.podAnnotations."config\.linkerd\.io/skip-outbound-ports"="2379" \
-        --set apisix.podAnnotations."config\.linkerd\.io/opaque-ports"="2379" \
+        --namespace apisix \
+        -f /tmp/apisix-plugins.yaml \
+        --set service.type=NodePort \
+        --set ingress-controller.enabled=true \
+        --set ingress-controller.config.apisix.serviceNamespace=apisix \
+        --set ingress-controller.config.kubernetes.enableGatewayAPI=true \
+        --set ingress-controller.args[0]="ingress-apisix" \
+        --set ingress-controller.args[1]="--namespace-selector=" \
+        --set config.enable_ipv6=false \
+        --set config.apisix.enable_ipv6=false \
+        --set config.deployment.role=traditional \
+        --set config.deployment.role_traditional.config_provider=etcd \
+        --set-json config.etcd="$(jq -cn --arg p "$APISIX_ETCD_PASS" \
+          '{host:["http://etcd.etcd.svc.cluster.local:2379"], prefix:"/apisix", timeout:30, user:"apisix", password:$p}')" \
         --set ingress-controller.enabled=true \
         --set ingress-controller.config.provider.type=apisix \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
-        --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
-        --set config.nginx_config.stream_proxy.tcp="[]" \
-        --set config.nginx_config.stream_proxy.udp="[]"
-
-        # -- ensure the APISIX pod template has Linkerd bypass for etcd:2379 --
-        # 1) make sure the annotations map exists on the pod template
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
-          patch deploy apisix --type='merge' \
-          -p '{"spec":{"template":{"metadata":{"annotations":{}}}}}'
-
-        # 2) add the two key annotations to the *pod template* and nudge a rollout
-        TS="$(date +%s)"
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
-          patch deploy apisix --type='json' -p='[
-            {"op":"add","path":"/spec/template/metadata/annotations/config.linkerd.io~1skip-outbound-ports","value":"2379"},
-            {"op":"add","path":"/spec/template/metadata/annotations/config.linkerd.io~1opaque-ports","value":"2379"},
-            {"op":"add","path":"/spec/template/metadata/annotations/rollout-tick","value":"'"$TS"'"}
-          ]'
-
-        # 3) wait for the new pod to come up (this patch triggers a rollout)
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix \
-          rollout status deploy/apisix --timeout=300s
+        --set-string config.nginx_config.http_listen="[0.0.0.0:9080]" \
+        --set-string config.nginx_config.ssl.listen="[0.0.0.0:9443]" \
+        --set-string config.nginx_config.stream_proxy.tcp="[]" \
+        --set-string config.nginx_config.stream_proxy.udp="[]" \
+        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
+        --set extraEnv[0].value="false" \
+        --set etcd.enabled=false \
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
