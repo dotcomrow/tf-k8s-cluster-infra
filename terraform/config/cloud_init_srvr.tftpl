@@ -1942,7 +1942,7 @@ write_files:
       sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace apisix linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Choose strong passwords; you can reuse the same value for both if you want
       ETCD_ROOT_PASS=$(openssl rand -base64 48 | tr -d '=\n' | tr '/+' '_-')
@@ -2198,21 +2198,21 @@ write_files:
         --namespace apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --set etcd.enabled=false \
-        --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
-        --set extraEnv[0].value="false" \
-        --set apisix.deployment.role=traditional \
-        --set apisix.deployment.role_traditional.config_provider=etcd \
+        --set etcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
+        --set deployment.role=traditional \
+        --set deployment.role_traditional.config_provider=etcd \
+        --set deployment.etcd.user="apisix" \
+        --set-string deployment.etcd.password="$APISIX_ETCD_PASS" \
+        --set apisix.enableIPv6=false \
+        --set apisix.podAnnotations."config\.linkerd\.io/skip-outbound-ports"="2379" \
+        --set apisix.podAnnotations."config\.linkerd\.io/opaque-ports"="2379" \
         --set ingress-controller.enabled=true \
         --set ingress-controller.config.provider.type=apisix \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
-        --set config.enable_ipv6=false \
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
-        --set config.nginx_config.stream_proxy.udp="[]" \
-        --set apisix.podAnnotations."config\.linkerd\.io/skip-outbound-ports"="2379" \
-        --set-json config.etcd="$(jq -cn --arg p "$APISIX_ETCD_PASS" \
-          '{host:["http://etcd.etcd.svc.cluster.local:2379"], prefix:"/apisix", user:"apisix", password:$p}')"
+        --set config.nginx_config.stream_proxy.udp="[]"
 
         # -- ensure the APISIX pod template has Linkerd bypass for etcd:2379 --
         # 1) make sure the annotations map exists on the pod template
