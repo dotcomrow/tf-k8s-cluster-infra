@@ -2219,7 +2219,7 @@ write_files:
         --set-string config.nginx_config.stream_proxy.udp="[]" \
         --set extraEnv[0].name=APISIX_ENABLE_IPV6 \
         --set extraEnv[0].value="false" \
-        --set etcd.enabled=false \
+        --set etcd.enabled=false 
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
