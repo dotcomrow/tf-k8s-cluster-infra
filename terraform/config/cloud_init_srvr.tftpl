@@ -2215,7 +2215,11 @@ write_files:
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
         --set config.nginx_config.stream_proxy.udp="[]" \
+        --set apisix.podAnnotations."config\.linkerd\.io/skip-outbound-ports"="2379" \
         --set-string config.etcd.user=apisix
+
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n apisix annotate deploy/apisix \
+          config.linkerd.io/skip-outbound-ports="2379" --overwrite
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
