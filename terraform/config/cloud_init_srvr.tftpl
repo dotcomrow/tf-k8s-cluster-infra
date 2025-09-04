@@ -2203,7 +2203,6 @@ write_files:
         --set externalEtcd.host[0]="http://etcd.etcd.svc.cluster.local:2379" \
         --set externalEtcd.user="apisix" \
         --set externalEtcd.passwordFrom.secretName=etcd-apisix \
-        --set externalEtcd.passwordFrom.secretKey=etcd-password \
         --set externalEtcd.tls.enabled=false \
         --set apisix.deployment.role=traditional \
         --set apisix.deployment.role_traditional.config_provider=etcd \
@@ -2211,12 +2210,12 @@ write_files:
         --set ingress-controller.config.provider.type=apisix \
         --set ingress-controller.config.apisix.serviceNamespace=apisix \
         --set config.enable_ipv6=false \
+        --set externalEtcd.passwordFrom.secretKey=etcd-password \
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
         --set config.nginx_config.stream_proxy.udp="[]" \
-        --set-string config.etcd.user=apisix \
-        --set-string config.etcd.password="$APISIX_ETCD_PASS"
+        --set-string config.etcd.user=apisix
 
         NAMESPACE="apisix"
         CONFIGMAP_NAME="apisix"
