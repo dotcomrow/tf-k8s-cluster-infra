@@ -9,20 +9,27 @@ users:
     ssh_authorized_keys:
       - ${ssh_keys}
 
+bootcmd:
+  - [ systemctl, stop, apt-daily.service, apt-daily-upgrade.service ]
+  - [ systemctl, disable, apt-daily.timer, apt-daily-upgrade.timer ]
+  - [ systemctl, mask, apt-daily.service, apt-daily-upgrade.service ]
+
 ssh_pwauth: false
 
 package_update: true
 package_upgrade: true
 apt:
   conf: |
-    // Retry and timeout knobs (APT reads these from /etc/apt/apt.conf.d/)
-    Acquire::Retries "60";
-    Acquire::http::Timeout "30";
-    Acquire::https::Timeout "30";
-    // If IPv6 is flaky in your environment, force IPv4 for APT only:
+    Acquire::Retries "10";
+    Acquire::http::Timeout "15";
+    Acquire::https::Timeout "15";
     Acquire::ForceIPv4 "true";
-    // Avoid dpkg lock races on first boot
-    DPkg::Lock::Timeout "120";
+    DPkg::Lock::Timeout "600";
+    Dpkg::Options {
+      "--force-confdef";
+      "--force-confold";
+    };
+
 packages:
   - qemu-guest-agent
   - apt-transport-https
@@ -1029,3 +1036,5 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable initial-setup.service
   - systemctl start initial-setup.service
+  - [ systemctl, unmask, apt-daily.service, apt-daily-upgrade.service ]
+  - [ systemctl, enable, --now, apt-daily.timer, apt-daily-upgrade.timer ]
