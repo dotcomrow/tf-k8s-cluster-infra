@@ -13,6 +13,16 @@ users:
 ssh_pwauth: false
 package_update: true
 package_upgrade: true
+apt:
+  conf: |
+    // Retry and timeout knobs (APT reads these from /etc/apt/apt.conf.d/)
+    Acquire::Retries "60";
+    Acquire::http::Timeout "30";
+    Acquire::https::Timeout "30";
+    // If IPv6 is flaky in your environment, force IPv4 for APT only:
+    Acquire::ForceIPv4 "true";
+    // Avoid dpkg lock races on first boot
+    DPkg::Lock::Timeout "120";
 packages:
   - qemu-guest-agent
   - apt-transport-https
