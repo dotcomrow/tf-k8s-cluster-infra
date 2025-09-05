@@ -54,6 +54,7 @@ write_files:
       deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-updates main restricted universe multiverse
       deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-backports main restricted universe multiverse
       deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+      
   - path: /etc/systemd/system/initial-setup.service
     permissions: '0644'
     content: |
