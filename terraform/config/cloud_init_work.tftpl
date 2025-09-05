@@ -89,8 +89,7 @@ write_files:
       sysctl --system
       update-grub
       /usr/local/bin/disable-swap.sh
-      /usr/local/bin/setup-hosts-dns.sh
-
+      
       systemctl enable setup-hosts-dns.service
       systemctl start setup-hosts-dns.service
       /usr/local/bin/setup-nfs-modules.sh
