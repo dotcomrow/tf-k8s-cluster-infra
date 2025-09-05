@@ -25,14 +25,6 @@ apt:
     Acquire::https::Timeout "15";
     Acquire::ForceIPv4 "true";
     DPkg::Lock::Timeout "600";
-write_files:
-  - path: /etc/apt/sources.list
-    permissions: '0644'
-    content: |
-      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy main restricted universe multiverse
-      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-updates main restricted universe multiverse
-      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-backports main restricted universe multiverse
-      deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
 
 packages:
   - qemu-guest-agent
@@ -54,6 +46,13 @@ growpart:
   devices: ["/"]
 
 write_files:
+  - path: /etc/apt/sources.list
+    permissions: '0644'
+    content: |
+      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy main restricted universe multiverse
+      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-updates main restricted universe multiverse
+      deb mirror://mirrors.ubuntu.com/mirrors.txt jammy-backports main restricted universe multiverse
+      deb http://security.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
   - path: /etc/systemd/system/initial-setup.service
     permissions: '0644'
     content: |
