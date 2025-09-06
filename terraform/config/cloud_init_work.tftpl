@@ -95,15 +95,16 @@ write_files:
       
       systemctl enable setup-hosts-dns.service
       systemctl start setup-hosts-dns.service
+
+      systemctl enable qemu-guest-agent
+      systemctl start qemu-guest-agent
+
       /usr/local/bin/setup-nfs-modules.sh
       systemctl enable --now mount-shared-storage.service
       /usr/local/bin/setup-docker.sh
       /usr/local/bin/setup-nvidia.sh
       /usr/local/bin/setup-fluentbit.sh
       /usr/local/bin/setup-rke2.sh
-
-      systemctl enable qemu-guest-agent
-      systemctl start qemu-guest-agent
 
       systemctl enable rke2-preload-images.service
       systemctl start rke2-preload-images.service
