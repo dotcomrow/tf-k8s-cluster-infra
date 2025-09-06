@@ -155,7 +155,6 @@ write_files:
       sysctl --system
 
       # 2) Pick all “large-MTU” interfaces automatically
-      #    (adjust the grep if your jumbo-MTU devices have a different naming scheme)
       for IF in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(eth|vtnet)'); do
         # bring MTU up before offloads
         ip link set dev $IF mtu 9000
@@ -168,7 +167,6 @@ write_files:
       done
 
       # 3) Sysctls — bump backlog and buffers for all interfaces
-      #    and enable TCP MTU probing (helps path-MTU discovery)
       sysctl -w net.core.netdev_max_backlog=250000
       sysctl -w net.core.rmem_max=134217728
       sysctl -w net.core.wmem_max=134217728
@@ -185,6 +183,17 @@ write_files:
       net.ipv4.tcp_wmem=4096 87380 134217728
       net.ipv4.tcp_mtu_probing=1
       EOF
+
+      # ⭐ NEW: System-wide FD ceilings + inotify room
+      cat <<EOF >/etc/sysctl.d/99-fd-and-inotify.conf
+      fs.file-max = 2000000
+      fs.nr_open  = 2097152
+      fs.inotify.max_user_instances = 4096
+      fs.inotify.max_user_watches   = 1048576
+      fs.inotify.max_queued_events  = 32768
+      EOF
+
+      sysctl --system
 
       # 5) Persist ethtool + txqueuelen via a systemd service
       cat <<'EOF' >/etc/systemd/system/network-tweaks.service
@@ -253,14 +262,6 @@ write_files:
       LimitNPROC=65536
       TasksMax=infinity
       EOF
-
-      # cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
-      # export HTTP_PROXY="http://10.0.0.10:3128"
-      # export HTTPS_PROXY="http://10.0.0.10:3128"
-      # export NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12,192.168.0.0/16"
-      # EOF
-
-      # sudo chmod +x /etc/profile.d/http_proxy.sh
 
       # Unbind kernel workqueues from specific CPUs (recommended on NUMA/multicore systems)
       if [ -e /sys/module/workqueue/parameters/disable_bound ]; then
@@ -534,17 +535,6 @@ write_files:
 
       systemctl restart containerd
       systemctl enable containerd
-      # sudo mkdir -p /etc/systemd/system/docker.service.d
-      # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
-      # [Service]
-      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      # EOF
-
-      # sudo mkdir -p /etc/systemd/system/containerd.service.d
-      # cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/10-http-proxy.conf
-      # [Service]
-      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      # EOF
 
   - path: /etc/rancher/rke2/registries.yaml
     permissions: '0755'
@@ -714,42 +704,18 @@ write_files:
       # 7. Finally, check:
       nvidia-smi
 
+      # Keep your cleanup; just remove disabled_plugins if present
       sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
 
-      CONTAINERD_CONFIG="/etc/containerd/config.toml"
-      BACKUP_PATH="/etc/containerd/config.toml.bak"
-
-      echo "📦 Patching containerd config to set file limits for NVIDIA runtime..."
-
-      # Backup the config
-      sudo cp "$CONTAINERD_CONFIG" "$BACKUP_PATH"
-
-      # Check for runtime section
-      if ! sudo grep -q '\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia\]' "$CONTAINERD_CONFIG"; then
-        echo "➕ NVIDIA runtime section not found — adding explicitly..."
-        sudo tee -a "$CONTAINERD_CONFIG" > /dev/null <<EOF
-
-      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia]
-        runtime_type = "io.containerd.runc.v2"
-        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options]
-          SystemdCgroup = true
-          runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }
-      EOF
-      else
-        echo "🔧 NVIDIA runtime already exists — checking for runc_options..."
-        if ! sudo grep -q 'runc_options' "$CONTAINERD_CONFIG"; then
-          sudo sed -i '/\[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.nvidia.options\]/a\    runc_options = { rlimits = { nofile = { hard = 1048576, soft = 1048576 } } }' "$CONTAINERD_CONFIG"
-        else
-          echo "⚠️  'runc_options' already present — please verify it includes correct values."
-        fi
-      fi
+      # NOTE: removed the containerd runc_options/rlimits injection block on purpose.
+      # Limits are inherited via systemd overrides for containerd/rke2.
 
       echo "🔁 Reloading containerd..."
       sudo systemctl daemon-reexec
       sudo systemctl daemon-reload
       sudo systemctl restart containerd
 
-      echo "✅ Patch complete. Backup saved at $BACKUP_PATH"
+      echo "✅ NVIDIA setup complete"
 
       sudo systemctl restart docker
       sudo systemctl restart containerd
