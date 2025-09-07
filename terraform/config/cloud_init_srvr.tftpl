@@ -3482,6 +3482,25 @@ write_files:
                 ports:
                   - name: vault
                     containerPort: 8200
+                # --- Probes (minimal addition) ---
+                startupProbe:
+                  httpGet:
+                    path: /v1/sys/health?standbyok=true&sealedcode=503&uninitcode=501
+                    port: 8200
+                  failureThreshold: 60
+                  periodSeconds: 5
+                livenessProbe:
+                  httpGet:
+                    path: /v1/sys/health?standbyok=true
+                    port: 8200
+                  failureThreshold: 3
+                  periodSeconds: 10
+                readinessProbe:
+                  httpGet:
+                    path: /v1/sys/health?standbyok=true
+                    port: 8200
+                  failureThreshold: 2
+                  periodSeconds: 5
             volumes:
               - name: config
                 configMap:
@@ -3524,20 +3543,100 @@ write_files:
         namespace: vault
       data:
         run.sh: |
+          #!/bin/sh
+          # Minimal/targeted changes only: robust state detection + one-time restart if sealed.
           set -e
 
-          vault server -config=/vault/config/vault.hcl &
-          VAULT_PID=\$!
-          sleep 5
+          export VAULT_ADDR="\${VAULT_ADDR}"
 
-          # Initialize if necessary
+          SEAL_JSON=/etc/vault/vault-unseal-sa.json
+          CONF=/vault/config/vault.hcl
+
+          echo "Preflight: waiting for $SEAL_JSON and $CONF ..."
+          i=0
+          while [ ! -s "\$SEAL_JSON" ] || [ ! -s "\$CONF" ]; do
+            i=\$((i+1)); if [ \$i -gt 60 ]; then echo "❌ Seal creds or config missing"; exit 1; fi
+            sleep 1
+          done
+          echo "Preflight OK."
+
+          vault server -config="\$CONF" &
+          VAULT_PID=\$!
+          trap 'kill \$VAULT_PID 2>/dev/null || true' EXIT
+
+          # Helpers using only vault CLI (no jq/curl yet)
+          read_status() {
+            vault status -format=json 2>/dev/null || true
+          }
+
+          is_initialized() {
+            read_status | grep -q '"initialized":true'
+          }
+
+          is_uninitialized() {
+            read_status | grep -q '"initialized":false'
+          }
+
+          is_sealed() {
+            read_status | grep -q '"sealed":true'
+          }
+
+          is_unsealed() {
+            read_status | grep -q '"sealed":false'
+          }
+
+          echo "Waiting for Vault HTTP listener..."
+          for _ in \$(seq 1 60); do
+            s="\$(read_status)"
+            [ -n "\$s" ] && break
+            sleep 1
+          done
+
+          if is_uninitialized; then
+            echo "Vault UNINITIALIZED -> operator init (recovery-shares=1)"
+            vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /vault/data/init.json
+            sleep 3
+          fi
+
+          # If sealed for a while (with creds present), restart once to kick KMS
+          if is_sealed; then
+            echo "Vault SEALED; waiting briefly for auto-unseal..."
+            for _ in \$(seq 1 30); do
+              is_unsealed && break
+              sleep 2
+            done
+            if ! is_unsealed; then
+              echo "Still SEALED; restarting Vault once to re-read KMS seal..."
+              kill \$VAULT_PID
+              wait \$VAULT_PID || true
+              vault server -config="\$CONF" &
+              VAULT_PID=\$!
+              sleep 5
+            fi
+          fi
+
+          echo "Waiting for Vault to become unsealed..."
+          for _ in \$(seq 1 120); do
+            if is_unsealed; then break; fi
+            if is_uninitialized; then echo "❌ Unexpected UNINITIALIZED after init"; exit 1; fi
+            sleep 2
+          done
+          if ! is_unsealed; then
+            echo "❌ Vault did not unseal in time"; exit 1
+          fi
+          echo "✅ Vault is unsealed"
+
+          # Install jq/wget for later steps (same as before)
+          apk add --no-cache jq wget >/dev/null 2>&1 || true
+
+          # ---- Existing bootstrap (kept intact) ----
+
+          # Initialize if necessary (convenience; state is already validated)
           if [ ! -f /vault/data/init.json ]; then
             vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /vault/data/init.json
           fi
 
-          apk add --no-cache jq wget
-
-          # Wait for Vault to be unsealed and ready
+          # Wait for Vault to be unsealed and ready (jq now available)
           until vault status -format=json | jq -e '.sealed == false'; do
             echo "Waiting for Vault to be unsealed..."
             sleep 2
