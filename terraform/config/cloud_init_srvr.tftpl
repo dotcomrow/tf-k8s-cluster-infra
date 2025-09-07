@@ -3552,7 +3552,7 @@ write_files:
           SEAL_JSON=/etc/vault/vault-unseal-sa.json
           CONF=/vault/config/vault.hcl
 
-          echo "Preflight: waiting for $SEAL_JSON and $CONF ..."
+          echo "Preflight: waiting for \$SEAL_JSON and \$CONF ..."
           i=0
           while [ ! -s "\$SEAL_JSON" ] || [ ! -s "\$CONF" ]; do
             i=\$((i+1)); if [ \$i -gt 60 ]; then echo "❌ Seal creds or config missing"; exit 1; fi
