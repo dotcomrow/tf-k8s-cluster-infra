@@ -3564,26 +3564,23 @@ write_files:
           vault server -config="\$CONF" &
           VAULT_PID=\$!
           trap 'kill \$VAULT_PID 2>/dev/null || true' EXIT
-
-          # Helpers using only vault CLI (no jq/curl yet)
+          # Force local listener & bound call time; never hang the loop
           read_status() {
-            vault status -format=json 2>/dev/null || true
+            timeout 2 sh -lc 'vault status -address=http://127.0.0.1:8200 -format=json' 2>/dev/null || true
           }
 
-          is_initialized() {
-            read_status | grep -q '"initialized":true'
+          # Match JSON robustly (allow spaces around the colon)
+          is_initialized() { 
+            read_status | grep -Eq '"initialized"[[:space:]]*:[[:space:]]*true'; 
           }
-
-          is_uninitialized() {
-            read_status | grep -q '"initialized":false'
+          is_uninitialized() { 
+            read_status | grep -Eq '"initialized"[[:space:]]*:[[:space:]]*false'; 
           }
-
-          is_sealed() {
-            read_status | grep -q '"sealed":true'
+          is_sealed() { 
+            read_status | grep -Eq '"sealed"[[:space:]]*:[[:space:]]*true'; 
           }
-
-          is_unsealed() {
-            read_status | grep -q '"sealed":false'
+          is_unsealed() { 
+            read_status | grep -Eq '"sealed"[[:space:]]*:[[:space:]]*false'; 
           }
 
           echo "Waiting for Vault HTTP listener..."
@@ -3623,8 +3620,22 @@ write_files:
             sleep 2
           done
           if ! is_unsealed; then
-            echo "❌ Vault did not unseal in time"; exit 1
+            echo "❌ Vault did not unseal in time; deleting this pod to retry cleanly."
+
+            # Discover namespace & pod name without new env vars:
+            NS="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo vault)"
+            POD="$HOSTNAME"
+
+            # Best-effort self-delete (don’t block the container exit)
+            if command -v kubectl >/dev/null 2>&1; then
+              kubectl -n "$NS" delete pod "$POD" --wait=false || true
+            fi
+
+            # Exit non-zero so the container stops if deletion didn’t happen
+            sleep 2
+            exit 1
           fi
+
           echo "✅ Vault is unsealed"
 
           # Install jq/wget for later steps (same as before)
