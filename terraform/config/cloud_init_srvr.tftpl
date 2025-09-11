@@ -3547,7 +3547,7 @@ write_files:
           # Minimal/targeted changes only: robust state detection + one-time restart if sealed.
           set -e
 
-          export VAULT_ADDR="\${VAULT_ADDR}"
+          export VAULT_ADDR="\$VAULT_ADDR"
 
           SEAL_JSON=/etc/vault/vault-unseal-sa.json
           CONF=/vault/config/vault.hcl
