@@ -1997,7 +1997,8 @@ write_files:
       metadata:
         name: etcd
         namespace: etcd
-        labels: { app: etcd, field.cattle.io/projectId: local:applications, scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node" }
+        labels: { app: etcd }
+        annotations: { field.cattle.io/projectId: local:applications, scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node" }
       spec:
         clusterIP: None
         ports:
