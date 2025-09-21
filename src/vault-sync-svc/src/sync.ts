@@ -23,13 +23,13 @@ if (ADDRS.length === 0) {
   throw new Error('Set VAULT_ADDRS (comma-separated) or VAULT_ADDR.');
 }
 
-const CONNECT_TIMEOUT_MS = parseInt(process.env.VAULT_CONNECT_TIMEOUT_MS || '300', 10);
-const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '2000', 10);
+const CONNECT_TIMEOUT_MS = parseInt(process.env.VAULT_CONNECT_TIMEOUT_MS || '2000', 10); // Faster connection timeout
+const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '3000', 10); // Faster read timeout
 
 // Resolver tuning
 const DEBUG_VAULT_RESOLVER = (process.env.DEBUG_VAULT_RESOLVER || 'false').toLowerCase() === 'true';
-const ACTIVE_BASE_TTL_MS   = parseInt(process.env.VAULT_ACTIVE_BASE_TTL_MS || '60000', 10); // re-check every 60s by default
-const PASSIVE_RECHECK_MS   = parseInt(process.env.VAULT_PASSIVE_RECHECK_MS || '30000', 10); // fire-and-forget health check
+const ACTIVE_BASE_TTL_MS   = parseInt(process.env.VAULT_ACTIVE_BASE_TTL_MS || '10000', 10); // re-check every 10s by default (faster switching)
+const PASSIVE_RECHECK_MS   = parseInt(process.env.VAULT_PASSIVE_RECHECK_MS || '5000', 10); // fire-and-forget health check every 5s
 
 // Treat these as "reachable" health statuses even if Vault is sealed/standby/etc.
 const HEALTH_OK_CODES = new Set([200, 204, 429, 472, 473, 501, 503]);
@@ -50,9 +50,13 @@ function dbg(...args: any[]) { if (DEBUG_VAULT_RESOLVER) console.log('[resolver]
 ================================== */
 async function fetchWithTimeout(url: string, init?: RequestInit): Promise<FetchResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), CONNECT_TIMEOUT_MS + READ_TIMEOUT_MS);
+  const totalTimeout = CONNECT_TIMEOUT_MS + READ_TIMEOUT_MS;
+  const timeout = setTimeout(() => controller.abort(), totalTimeout);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { 
+      ...init, 
+      signal: controller.signal
+    });
   } finally {
     clearTimeout(timeout);
   }
@@ -84,7 +88,7 @@ async function resolveActiveBase(): Promise<string> {
 
   dbg('detecting among:', candidates);
 
-  // Race both; pick first that answers with a health-OK status
+  // Race both with a shorter timeout for faster switching; pick first that answers with a health-OK status
   const probes = candidates.map(base => probe(base));
   try {
     const winner = await Promise.any(probes);
@@ -141,34 +145,45 @@ setInterval(async () => {
 /* ================================
    Vault request helper (flip-aware)
 ================================== */
-async function vaultRequest(path: string, init?: RequestInit): Promise<{ res: FetchResponse; base: string }> {
+async function vaultRequest(path: string, init?: RequestInit, maxRetries: number = 2): Promise<{ res: FetchResponse; base: string }> {
   let base = await resolveActiveBase();
   let url = joinUrl(base, path);
+  let lastError: Error | null = null;
 
-  try {
-    dbg('→ using', url);
-    const res = await fetchWithTimeout(url, init);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      dbg(`→ attempt ${attempt + 1}/${maxRetries} using`, url);
+      const res = await fetchWithTimeout(url, init);
 
-    // If infra/auth looks flaky (rebuild/flip), invalidate and retry once
-    if (!res.ok && (RETRY_STATUSES.has(res.status) || FLIP_TRIGGER_STATUSES.has(res.status))) {
-      dbg('flip-trigger HTTP', res.status, '— invalidating activeBase and re-detecting');
+      // If infra/auth looks flaky (rebuild/flip), invalidate and retry
+      if (!res.ok && (RETRY_STATUSES.has(res.status) || FLIP_TRIGGER_STATUSES.has(res.status))) {
+        dbg('flip-trigger HTTP', res.status, '— invalidating activeBase and re-detecting');
+        activeBase = null; activeBaseExpiresAt = 0;
+        
+        if (attempt < maxRetries - 1) {
+          base = await resolveActiveBase();
+          url = joinUrl(base, path);
+          continue; // Try again with new endpoint
+        }
+      }
+
+      return { res, base };
+    } catch (e) {
+      // Network error: also flip & retry
+      dbg(`network error on attempt ${attempt + 1}/${maxRetries} — invalidating activeBase and re-detecting:`, String((e as Error).message));
+      lastError = e as Error;
       activeBase = null; activeBaseExpiresAt = 0;
-      base = await resolveActiveBase();
-      url = joinUrl(base, path);
-      const res2 = await fetchWithTimeout(url, init);
-      return { res: res2, base };
+      
+      if (attempt < maxRetries - 1) {
+        base = await resolveActiveBase();
+        url = joinUrl(base, path);
+        continue; // Try again with new endpoint
+      }
     }
-
-    return { res, base };
-  } catch (e) {
-    // Network error: also flip & retry once
-    dbg('network error — invalidating activeBase and re-detecting:', String((e as Error).message));
-    activeBase = null; activeBaseExpiresAt = 0;
-    base = await resolveActiveBase();
-    url = joinUrl(base, path);
-    const res = await fetchWithTimeout(url, init);
-    return { res, base };
   }
+
+  // If we've exhausted all retries, throw the last error
+  throw lastError || new Error('All vault request attempts failed');
 }
 
 /* ================================
@@ -201,15 +216,6 @@ async function vaultJson<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function vaultText(path: string, init?: RequestInit): Promise<string> {
-  const { res, base } = await vaultRequest(path, init);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
-  }
-  return res.text();
-}
-
 async function getVaultToken(): Promise<string> {
   if (process.env.VAULT_TOKEN) return process.env.VAULT_TOKEN;
 
@@ -232,7 +238,7 @@ async function getVaultToken(): Promise<string> {
   if (!token) throw new Error('Vault AppRole login failed');
 
   // Simple TTL (short) to reduce logins while still flipping quickly if needed
-  cachedToken = { token, expiresAt: now + 5 * 60_000 };
+  cachedToken = { token, expiresAt: now + 2 * 60_000 }; // Reduced from 5 minutes to 2 minutes for faster auth switching
   return token;
 }
 
