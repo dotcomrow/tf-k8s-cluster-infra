@@ -4,7 +4,9 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import fetch, { RequestInit, Response as FetchResponse } from 'node-fetch';
 
 const app = express();
-app.use(bodyParser.json());
+// Accept reasonably large payloads safely
+app.use(bodyParser.json({ limit: '5mb' }));
+
 const client = new SecretManagerServiceClient();
 
 /* ================================
@@ -23,13 +25,13 @@ if (ADDRS.length === 0) {
   throw new Error('Set VAULT_ADDRS (comma-separated) or VAULT_ADDR.');
 }
 
-const CONNECT_TIMEOUT_MS = parseInt(process.env.VAULT_CONNECT_TIMEOUT_MS || '2000', 10); // Faster connection timeout
-const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '3000', 10); // Faster read timeout
+const CONNECT_TIMEOUT_MS = parseInt(process.env.VAULT_CONNECT_TIMEOUT_MS || '2000', 10);
+const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '3000', 10);
 
 // Resolver tuning
 const DEBUG_VAULT_RESOLVER = (process.env.DEBUG_VAULT_RESOLVER || 'false').toLowerCase() === 'true';
-const ACTIVE_BASE_TTL_MS   = parseInt(process.env.VAULT_ACTIVE_BASE_TTL_MS || '10000', 10); // re-check every 10s by default (faster switching)
-const PASSIVE_RECHECK_MS   = parseInt(process.env.VAULT_PASSIVE_RECHECK_MS || '5000', 10); // fire-and-forget health check every 5s
+const ACTIVE_BASE_TTL_MS   = parseInt(process.env.VAULT_ACTIVE_BASE_TTL_MS || '10000', 10);
+const PASSIVE_RECHECK_MS   = parseInt(process.env.VAULT_PASSIVE_RECHECK_MS || '5000', 10);
 
 // Treat these as "reachable" health statuses even if Vault is sealed/standby/etc.
 const HEALTH_OK_CODES = new Set([200, 204, 429, 472, 473, 501, 503]);
@@ -41,9 +43,19 @@ const FLIP_TRIGGER_STATUSES = new Set([401, 403]);
 const TUNNEL_BASE = 'http://127.0.0.1:8200';
 
 /* ================================
-   Logger
+   Small logging helpers
 ================================== */
 function dbg(...args: any[]) { if (DEBUG_VAULT_RESOLVER) console.log('[resolver]', ...args); }
+
+function head(str: string, n = 500) {
+  if (!str) return '';
+  return str.length > n ? `${str.slice(0, n)}…(+${str.length - n} bytes)` : str;
+}
+
+function safePreview(obj: unknown, n = 500) {
+  try { return head(JSON.stringify(obj), n); }
+  catch { return '[unserializable]'; }
+}
 
 /* ================================
    HTTP helper (with timeout)
@@ -81,20 +93,17 @@ async function resolveActiveBase(): Promise<string> {
     return activeBase;
   }
 
-  // Expect one external + one tunnel; tolerate any order
   const apisix = ADDRS.find(a => a !== TUNNEL_BASE);
   const tunnel = TUNNEL_BASE;
   const candidates = [apisix, tunnel].filter(Boolean) as string[];
 
   dbg('detecting among:', candidates);
 
-  // Race both with a shorter timeout for faster switching; pick first that answers with a health-OK status
   const probes = candidates.map(base => probe(base));
   try {
     const winner = await Promise.any(probes);
     return setActive(winner);
   } catch {
-    // Both failed fast; check sequentially to build an error summary
     const errs: string[] = [];
     for (const base of candidates) {
       try {
@@ -163,13 +172,12 @@ async function vaultRequest(path: string, init?: RequestInit, maxRetries: number
         if (attempt < maxRetries - 1) {
           base = await resolveActiveBase();
           url = joinUrl(base, path);
-          continue; // Try again with new endpoint
+          continue;
         }
       }
 
       return { res, base };
     } catch (e) {
-      // Network error: also flip & retry
       dbg(`network error on attempt ${attempt + 1}/${maxRetries} — invalidating activeBase and re-detecting:`, String((e as Error).message));
       lastError = e as Error;
       activeBase = null; activeBaseExpiresAt = 0;
@@ -177,12 +185,11 @@ async function vaultRequest(path: string, init?: RequestInit, maxRetries: number
       if (attempt < maxRetries - 1) {
         base = await resolveActiveBase();
         url = joinUrl(base, path);
-        continue; // Try again with new endpoint
+        continue;
       }
     }
   }
 
-  // If we've exhausted all retries, throw the last error
   throw lastError || new Error('All vault request attempts failed');
 }
 
@@ -207,7 +214,7 @@ async function vaultJson<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(`Vault request failed (${res.status}) via ${base}: ${text}`);
   }
-  if (res.status === 204) return {} as T; // no content
+  if (res.status === 204) return {} as T;
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('json')) {
     const text = await res.text();
@@ -237,8 +244,8 @@ async function getVaultToken(): Promise<string> {
   const token = json?.auth?.client_token;
   if (!token) throw new Error('Vault AppRole login failed');
 
-  // Simple TTL (short) to reduce logins while still flipping quickly if needed
-  cachedToken = { token, expiresAt: now + 2 * 60_000 }; // Reduced from 5 minutes to 2 minutes for faster auth switching
+  // Short cache to reduce logins but flip quickly
+  cachedToken = { token, expiresAt: now + 2 * 60_000 };
   return token;
 }
 
@@ -252,7 +259,7 @@ async function writeToVault(dataPath: string, value: string): Promise<void> {
     headers: { 'X-Vault-Token': token, 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: { value } }),
   });
-  console.log('✅ Secret synced to Vault.');
+  console.log('✅ Secret synced to Vault at', dataPath);
 }
 
 async function deleteFromVault(metadataPath: string): Promise<void> {
@@ -261,7 +268,7 @@ async function deleteFromVault(metadataPath: string): Promise<void> {
     method: 'DELETE',
     headers: { 'X-Vault-Token': token },
   });
-  console.log('🗑️ Secret deleted from Vault.');
+  console.log('🗑️ Secret deleted from Vault at', metadataPath);
 }
 
 function extractSecretName(versionPath: string): string {
@@ -270,67 +277,153 @@ function extractSecretName(versionPath: string): string {
 }
 
 /* ================================
+   Event normalization
+   - Accepts CloudEvent (Eventarc), Pub/Sub push, or raw AuditLog JSON
+================================== */
+type NormalizedEvent = {
+  methodName: string | undefined;
+  resourceName: string | undefined;
+  rawPreview: string;
+};
+
+function decodeBase64(b64?: string | null): string {
+  if (!b64) return '';
+  try { return Buffer.from(b64, 'base64').toString('utf8'); }
+  catch { return ''; }
+}
+
+function normalizeEvent(req: Request): NormalizedEvent {
+  const ceType  = req.header('ce-type') || '';
+  const ceId    = req.header('ce-id') || '';
+  const ceSrc   = req.header('ce-source') || '';
+  const ceSubj  = req.header('ce-subject') || '';
+
+  // Log CloudEvent headers briefly
+  if (ceType) {
+    console.log('[event] ce-type=%s ce-id=%s ce-source=%s ce-subject=%s', ceType, ceId, ceSrc, ceSubj);
+  } else {
+    console.log('[event] no CloudEvent headers detected');
+  }
+
+  const body = req.body || {};
+
+  // Case A: Eventarc → Pub/Sub → Cloud Run (CloudEvent with Pub/Sub message)
+  // Shape: { message: { data: "<base64>", attributes?: {...}, messageId, publishTime }, subscription: "..." }
+  if (body && typeof body === 'object' && body.message && typeof body.message.data === 'string') {
+    const decoded = decodeBase64(body.message.data);
+    console.log('[event] pubsub envelope detected; decoded len=%d', decoded.length);
+    const parsed = safeParseJson(decoded);
+    const methodName = parsed?.protoPayload?.methodName;
+    const resourceName = parsed?.protoPayload?.resourceName;
+    return { methodName, resourceName, rawPreview: head(decoded) };
+  }
+
+  // Case B: Eventarc (AuditLog) delivers CloudEvent with data field only:
+  // Body can be the AuditLog entry directly or wrapped under "data".
+  const maybeData = (body && (body.data || body));
+  if (maybeData && typeof maybeData === 'object' && (maybeData.protoPayload || body.protoPayload)) {
+    const node = (body.data?.protoPayload) ? body.data : body;
+    const methodName = node?.protoPayload?.methodName;
+    const resourceName = node?.protoPayload?.resourceName;
+    return { methodName, resourceName, rawPreview: head(JSON.stringify(node)) };
+  }
+
+  // Case C: Your manual direct JSON (raw AuditLog entry as root)
+  if (body && body.protoPayload) {
+    const methodName = body.protoPayload?.methodName;
+    const resourceName = body.protoPayload?.resourceName;
+    return { methodName, resourceName, rawPreview: head(JSON.stringify(body)) };
+  }
+
+  // Unknown format
+  return { methodName: undefined, resourceName: undefined, rawPreview: safePreview(body) };
+}
+
+function safeParseJson(s: string): any {
+  try { return JSON.parse(s); } catch { return undefined; }
+}
+
+/* ================================
    Routes
 ================================== */
 
-// Event handler (Secret Manager AuditLog → push → this endpoint)
+// Main event handler
 app.post('/', async (req: Request, res: Response) => {
+  const norm = normalizeEvent(req);
+  const { methodName, resourceName } = norm;
+
+  // Reject (but ACK) if format is unusable
+  if (!methodName || !resourceName) {
+    console.error('⚠️  Bad/unsupported event; will ACK to stop retries. preview=%s', norm.rawPreview);
+    return res.status(204).send('ignored');  // ACK so the message is dropped
+  }
+
+  // For delete we expect the secret path without /versions; for others we’ll ensure latest
+  let secretPath = resourceName;
+  const isDelete = methodName === 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret';
+
+  if (!isDelete && !secretPath.includes('/versions/')) {
+    secretPath = `${secretPath}/versions/latest`;
+  }
+
+  const secretName = extractSecretName(secretPath);
+  const vaultDataPath     = `secret/data/${secretName}`;
+  const vaultMetadataPath = `secret/metadata/${secretName}`;
+
+  console.log('🔔 Event: method=%s secretPath=%s (secret=%s)', methodName, secretPath, secretName);
+
   try {
-    const event = req.body;
-    const methodName = event?.protoPayload?.methodName;
-    let secretPath = event?.protoPayload?.resourceName;
-    if (!secretPath) throw new Error('Missing secret path in event payload');
-
-    if (!secretPath.includes('/versions/') && methodName !== 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret') {
-      secretPath = `${secretPath}/versions/latest`;
-    }
-
-    const secretName = extractSecretName(secretPath);
-    const vaultDataPath = `secret/data/${secretName}`;
-    const vaultMetadataPath = `secret/metadata/${secretName}`;
-
-    console.log(`🔔 Received Secret Manager event: ${methodName}`);
-
     switch (methodName) {
-      case 'google.cloud.secretmanager.v1.SecretManagerService.CreateSecret':
+      case 'google.cloud.secretmanager.v1.SecretManagerService.CreateSecret': {
+        // Seed a placeholder so the path exists in Vault
         await writeToVault(vaultDataPath, '__PLACEHOLDER__');
         break;
-
+      }
       case 'google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion':
       case 'google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret': {
+        // Fetch payload from GSM
         const [accessResponse] = await client.accessSecretVersion({
           name: secretPath.includes('/versions/') ? secretPath : `${secretPath}/versions/latest`,
         });
         const payload = accessResponse.payload?.data?.toString();
-        if (!payload) throw new Error('Empty secret payload');
+        if (!payload) {
+          // Permanent problem (empty secret) — log & ACK so we don’t spin
+          console.error('⚠️  Empty secret payload for %s; ACKing.', secretPath);
+          return res.status(204).send('empty payload');
+        }
         await writeToVault(vaultDataPath, payload);
         break;
       }
-
-      case 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret':
+      case 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret': {
+        // Permanent removal — delete Vault secret too
         await deleteFromVault(vaultMetadataPath);
         break;
-
-      default:
-        console.log(`ℹ️ Unsupported method: ${methodName} — skipping`);
-        break;
+      }
+      default: {
+        console.log('ℹ️  Unhandled method: %s — ACKing.', methodName);
+        return res.status(204).send('ignored');
+      }
     }
 
-    res.status(200).send('OK');
+    console.log('✅ Done: %s -> %s', methodName, isDelete ? vaultMetadataPath : vaultDataPath);
+    return res.status(200).send('OK');
   } catch (err: any) {
-    console.error('❗ Error:', err);
-    res.status(500).send(err.message || 'Unknown error');
+    // Transient errors (Vault/SM network, etc.) — return 500 to let Eventarc/Pub/Sub retry
+    console.error('❗ Handler error (will retry):', err?.message || err, 'stack=', err?.stack);
+    return res.status(500).send(err?.message || 'Unknown error');
   }
 });
 
-// Manual sync-all
+// Manual sync-all (unchanged except for a bit more logging)
 app.post('/sync-all', async (_req: Request, res: Response) => {
   try {
     const projectId = process.env.GCP_PROJECT_ID;
     if (!projectId) throw new Error('Missing GCP_PROJECT_ID');
 
+    console.log('[sync-all] listing secrets in project %s', projectId);
     const [secrets] = await client.listSecrets({ parent: `projects/${projectId}` });
 
+    let count = 0;
     for (const secret of secrets) {
       const name = secret.name;
       if (!name) continue;
@@ -354,17 +447,18 @@ app.post('/sync-all', async (_req: Request, res: Response) => {
         const text = await r.text();
         throw new Error(`Failed to sync ${vaultDataPath} via ${base}: ${text}`);
       }
+      count++;
     }
 
-    console.log('✅ All secrets synced to Vault.');
-    res.status(200).send('All secrets synced.');
+    console.log('✅ [sync-all] synced %d secrets to Vault.', count);
+    res.status(200).send(`Synced ${count} secrets.`);
   } catch (err: any) {
-    console.error('Error in sync-all:', err);
-    res.status(500).send(err.message || 'Unknown error');
+    console.error('❗ [sync-all] error:', err?.message || err, 'stack=', err?.stack);
+    res.status(500).send(err?.message || 'Unknown error');
   }
 });
 
-// Diagnostics: see which base is reachable and what’s cached
+// Diagnostics
 app.get('/diag', async (_req: Request, res: Response) => {
   try {
     const apisix = ADDRS.find(a => a !== TUNNEL_BASE);
@@ -387,6 +481,9 @@ app.get('/diag', async (_req: Request, res: Response) => {
     res.status(500).json({ error: String(e?.message || e) });
   }
 });
+
+// Liveness
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 
 /* ================================
    Boot
