@@ -1291,7 +1291,7 @@ write_files:
           storageclass.kubernetes.io/is-default-class: 'true'
       provisioner: driver.longhorn.io
       allowVolumeExpansion: true
-      reclaimPolicy: Retain
+      reclaimPolicy: Delete
       volumeBindingMode: Immediate
       parameters:
         numberOfReplicas: '1'
@@ -1303,7 +1303,7 @@ write_files:
         name: longhorn-rwx
       provisioner: driver.longhorn.io
       allowVolumeExpansion: true
-      reclaimPolicy: Retain
+      reclaimPolicy: Delete
       volumeBindingMode: Immediate
       parameters:
         numberOfReplicas: '1'
@@ -3137,7 +3137,7 @@ write_files:
       provisioner: example.com/nfs
       parameters:
         archiveOnDelete: "true"
-      reclaimPolicy: Retain
+      reclaimPolicy: Delete
       volumeBindingMode: Immediate
       ---
       # Vault namespace
