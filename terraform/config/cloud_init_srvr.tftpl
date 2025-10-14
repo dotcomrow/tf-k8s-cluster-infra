@@ -1296,6 +1296,7 @@ write_files:
       parameters:
         numberOfReplicas: '1'
         staleReplicaTimeout: '30'
+        archiveOnDelete: "false"
       ---
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
@@ -1309,6 +1310,7 @@ write_files:
         numberOfReplicas: '1'
         staleReplicaTimeout: '30'
         fromBackup: ''
+        archiveOnDelete: "false"
       ---
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
@@ -1317,6 +1319,8 @@ write_files:
       provisioner: kubernetes.io/no-provisioner
       volumeBindingMode: WaitForFirstConsumer
       reclaimPolicy: Delete
+      parameters:
+        archiveOnDelete: "false"
       EOF
 
   - path: /etc/systemd/system/k8s-addons.service
@@ -3136,7 +3140,7 @@ write_files:
         name: nfs-client
       provisioner: example.com/nfs
       parameters:
-        archiveOnDelete: "true"
+        archiveOnDelete: "false"
       reclaimPolicy: Delete
       volumeBindingMode: Immediate
       ---
