@@ -4302,6 +4302,19 @@ write_files:
         insecure: $INSECURE_B64
       EOF
 
+      echo "Adding annotations to services that are installed through helm..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc argocd-server --type merge \
+        -p '{"metadata":{"annotations":{"teleport.dev/name":"argocd","teleport.dev/protocol":"http","teleport.dev/public-addr":"argocd.teleport.app.suncoast.systems","teleport.dev/description":"ArgoCD Service"},"labels":{"app":"argocd","app.kubernetes.io/name":"argocd","app.kubernetes.io/component":"argocd","teleport.dev/enroll":"true"}}}' \
+        -n argocd
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc argocd-dex-server --type merge \
+        -p '{"metadata":{"annotations":{"teleport.dev/name":"argocd-dex","teleport.dev/protocol":"http","teleport.dev/public-addr":"argocd-dex.teleport.app.suncoast.systems","teleport.dev/description":"ArgoCD DEX Service"},"labels":{"app":"argocd-dex","app.kubernetes.io/name":"argocd-dex","app.kubernetes.io/component":"argocd-dex","teleport.dev/enroll":"true"}}}' \
+        -n argocd
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc policy-reporter-ui --type merge \
+        -p '{"metadata":{"annotations":{"teleport.dev/name":"policy-reporter-ui","teleport.dev/protocol":"http","teleport.dev/public-addr":"policy-reporter-ui.teleport.app.suncoast.systems","teleport.dev/description":"Policy Reporter UI Service"},"labels":{"app":"policy-reporter-ui","app.kubernetes.io/name":"policy-reporter-ui","app.kubernetes.io/component":"policy-reporter-ui","teleport.dev/enroll":"true"}}}' \
+        -n policy-reporter
+
       echo "Cleaning up uneeded resources..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace applications
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace infrastructure
