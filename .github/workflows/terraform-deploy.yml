@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
       - name: Upload Terraform Configuration
         uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.1.1
@@ -251,14 +251,14 @@ jobs:
 
       - name: Trigger Lightweight Terraform Apply (patch/fix only)
         if: ${{ github.event.inputs.mode == 'apply-patch' }}
-        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
+        uses: hashicorp/tfc-workflows-github/actions/create-run@8e08d1ba957673f5fbf971a22b3219639dc45661
         with:
           workspace: ${{ github.event.repository.name }}
           configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
           plan_only: false
 
       - name: Trigger Terraform Apply
-        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
+        uses: hashicorp/tfc-workflows-github/actions/create-run@8e08d1ba957673f5fbf971a22b3219639dc45661
         with:
           workspace: ${{ github.event.repository.name }}
           configuration_version: ${{ steps.upload.outputs.configuration_version_id }}

@@ -15,10 +15,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
       - name: Get next version
-        uses: reecetech/version-increment@2023.9.3
+        uses: reecetech/version-increment@a29aa752dc3b8118a2dc2ed93faf0e95a73a9c7e
         id: version
         with:
           scheme: calver
@@ -129,7 +129,7 @@ jobs:
           https://app.terraform.io/api/v2/vars
 
       - name: Create release
-        uses: "actions/github-script@v6"
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         env:
           VERSION: ${{ steps.version.outputs.version }}
         with:
@@ -152,14 +152,14 @@ jobs:
               core.setFailed(error.message);
             }
 
-      - uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.1.1
+      - uses: hashicorp/tfc-workflows-github/actions/upload-configuration@8e08d1ba957673f5fbf971a22b3219639dc45661
         id: upload
         with:
           workspace: ${{ github.event.repository.name }}
           directory: terraform
 
       - name: Create Apply Run
-        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.1.1
+        uses: hashicorp/tfc-workflows-github/actions/create-run@8e08d1ba957673f5fbf971a22b3219639dc45661
         id: apply-run
         if: success() || failure()
         with:
