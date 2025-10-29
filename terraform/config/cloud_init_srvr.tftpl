@@ -1862,63 +1862,6 @@ write_files:
           enabled: false
       EOF
 
-      LINKERD_JAEGER_VERSION="v0.3.0"  # Set to desired version, e.g. "v0.3.0"
-      MAX_RETRIES=5
-      SLEEP_BETWEEN_RETRIES=5
-      LINKERD_JAEGER_CLI_PATH="$HOME/.linkerd2/bin/linkerd-jaeger"
-
-      echo "🔄 Installing Linkerd Jaeger CLI ($LINKERD_JAEGER_VERSION)..."
-
-      for attempt in $(seq 1 "$MAX_RETRIES"); do
-        echo "🔁 Attempt $attempt to download Linkerd Jaeger CLI..."
-        if curl -sL https://github.com/linkerd/linkerd2-jaeger/releases/download/$LINKERD_JAEGER_VERSION/linkerd-jaeger-$LINKERD_JAEGER_VERSION-linux-amd64 -o "$LINKERD_JAEGER_CLI_PATH"; then
-          chmod +x "$LINKERD_JAEGER_CLI_PATH"
-          echo "✅ Linkerd Jaeger CLI download succeeded"
-          break
-        else
-          echo "⚠️  Download failed (attempt $attempt)"
-          if [ "$attempt" -eq "$MAX_RETRIES" ]; then
-            echo "❌ Linkerd Jaeger CLI download failed after $MAX_RETRIES attempts"
-            exit 1
-          fi
-          sleep "$SLEEP_BETWEEN_RETRIES"
-        fi
-      done
-
-      if [ -f "$LINKERD_JAEGER_CLI_PATH" ]; then
-        echo "📦 Found Linkerd Jaeger CLI at $LINKERD_JAEGER_CLI_PATH"
-        sudo cp "$LINKERD_JAEGER_CLI_PATH" /usr/local/bin/
-        echo "✅ Linkerd Jaeger CLI installed to /usr/local/bin"
-      else
-        echo "❌ Linkerd Jaeger CLI binary not found at $LINKERD_JAEGER_CLI_PATH"
-        exit 1
-      fi
-
-      # Optional: Verify
-      if ! command -v linkerd-jaeger >/dev/null; then
-        echo "❌ Linkerd Jaeger CLI not found in PATH after installation"
-        exit 1
-      fi
-
-      echo "🎉 Linkerd Jaeger CLI is ready:"
-      linkerd-jaeger version
-
-      # After generating the Jaeger manifest
-      sudo linkerd-jaeger install -f /tmp/linkerd-jaeger-values.yaml \
-        --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
-
-      sudo yq -i '
-        (. | select(.kind == "Deployment" and .metadata.name == "collector") |
-          .spec.template.metadata.annotations["linkerd.io/inject"]) = "enabled" |
-        (. | select(.kind == "Deployment" and .metadata.name == "jaeger") |
-          .spec.template.metadata.annotations["linkerd.io/inject"]) = "disabled"
-      ' /tmp/jaeger-install.yaml
-
-      # Apply the patched manifest
-      sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo linkerd-jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
-
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
       #    disabling *only* the dashboard’s TLS + auth
       sudo linkerd viz install \
