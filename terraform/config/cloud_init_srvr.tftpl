@@ -1821,7 +1821,7 @@ write_files:
         --set adminUsername="$OPENOBSERVE_USERNAME" \
         --set adminPassword="$OPENOBSERVE_PASSWORD"
 
-      AUTH_HEADER_VALUE=$(echo -n "${OPENOBSERVE_USERNAME}:${OPENOBSERVE_PASSWORD}" | base64)
+      AUTH_HEADER_VALUE=$(echo -n "$OPENOBSERVE_USERNAME:$OPENOBSERVE_PASSWORD" | base64)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
       apiVersion: v1
       kind: Namespace
@@ -1947,7 +1947,7 @@ write_files:
             otlp/openobserve:
               endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
               headers:
-                Authorization: "Basic ${AUTH_HEADER_VALUE}"
+                Authorization: "Basic $AUTH_HEADER_VALUE"
                 organization: default
                 stream-name: default
               tls:
