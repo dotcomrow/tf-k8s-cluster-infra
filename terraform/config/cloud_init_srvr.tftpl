@@ -1862,8 +1862,10 @@ write_files:
           enabled: false
       EOF
 
+      curl -sL https://run.linkerd.io/jaeger/install | sh
+
       # After generating the Jaeger manifest
-      sudo linkerd jaeger install -f /tmp/linkerd-jaeger-values.yaml \
+      sudo linkerd-jaeger install -f /tmp/linkerd-jaeger-values.yaml \
         --kubeconfig /etc/rancher/rke2/rke2.yaml > /tmp/jaeger-install.yaml
 
       sudo yq -i '
@@ -1876,7 +1878,7 @@ write_files:
       # Apply the patched manifest
       sudo kubectl apply -f /tmp/jaeger-install.yaml --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      sudo linkerd jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
+      sudo linkerd-jaeger check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
       #    disabling *only* the dashboard’s TLS + auth
