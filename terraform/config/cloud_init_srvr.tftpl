@@ -1775,7 +1775,7 @@ write_files:
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379" \
         --set-string global.tracing.enabled=true \
-        --set-string proxy.tracing.enabled=true \
+        --set proxy.tracing.enabled=true \
         --set-string proxy.tracing.otlp.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
         --set-string proxy.tracing.collector.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
         --set-string proxy.tracing.collector.meshIdentity.serviceAccountName="linkerd-jaeger" \
