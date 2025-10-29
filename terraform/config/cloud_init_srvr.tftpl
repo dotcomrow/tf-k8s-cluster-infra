@@ -1778,6 +1778,7 @@ write_files:
         --set-string proxy.tracing.enabled=true \
         --set-string proxy.tracing.otlp.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
         --set-string proxy.tracing.collector.endpoint="collector.linkerd-jaeger.svc.cluster.local:4317" \
+        --set-string proxy.tracing.collector.meshIdentity.serviceAccountName="linkerd-jaeger" \
         --set-string proxy.telemetry.spans.enabled=true \
         --set-string proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
