@@ -1793,12 +1793,6 @@ write_files:
       export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)"
       export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
 
-      # Create the Kubernetes secret in the 'observability' namespace
-      kubectl create secret generic openobserve-credentials \
-        --from-literal=username="$OPENOBSERVE_USERNAME" \
-        --from-literal=password="$OPENOBSERVE_PASSWORD" \
-        -n observability
-
       echo "🏗️ Installing OpenObserve..."
       RETRIES=5
       DELAY=3
@@ -1820,6 +1814,12 @@ write_files:
       sudo helm install --wait --create-namespace -n openobserve openobserve openobserve/openobserve-standalone \
         --set adminUsername="$OPENOBSERVE_USERNAME" \
         --set adminPassword="$OPENOBSERVE_PASSWORD"
+
+      # Create the Kubernetes secret in the 'observability' namespace
+      kubectl create secret generic openobserve-credentials \
+        --from-literal=username="$OPENOBSERVE_USERNAME" \
+        --from-literal=password="$OPENOBSERVE_PASSWORD" \
+        -n observability
 
       AUTH_HEADER_VALUE=$(echo -n "$OPENOBSERVE_USERNAME:$OPENOBSERVE_PASSWORD" | base64)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
