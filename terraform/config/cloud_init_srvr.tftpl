@@ -1871,7 +1871,7 @@ write_files:
 
       for attempt in $(seq 1 "$MAX_RETRIES"); do
         echo "🔁 Attempt $attempt to download Linkerd Jaeger CLI..."
-        if curl -sL https://github.com/linkerd/linkerd2-jaeger/releases/download/${LINKERD_JAEGER_VERSION}/linkerd-jaeger-${LINKERD_JAEGER_VERSION}-linux-amd64 -o "$LINKERD_JAEGER_CLI_PATH"; then
+        if curl -sL https://github.com/linkerd/linkerd2-jaeger/releases/download/$LINKERD_JAEGER_VERSION/linkerd-jaeger-${LINKERD_JAEGER_VERSION}-linux-amd64 -o "$LINKERD_JAEGER_CLI_PATH"; then
           chmod +x "$LINKERD_JAEGER_CLI_PATH"
           echo "✅ Linkerd Jaeger CLI download succeeded"
           break
