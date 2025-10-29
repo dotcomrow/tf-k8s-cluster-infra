@@ -1787,79 +1787,223 @@ write_files:
       # 4) Wait for Linkerd to come up
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
-      # Install Jaeger extension with collector config
-      cat <<EOF | sudo tee /tmp/linkerd-jaeger-values.yaml
-      webhook:
-        collectorTraceProtocol: opentelemetry  # tell proxies to use OTLP
+      # 5) install openobserve
 
-      collector:
-        enabled: true
-        config:
+      # Generate random username and password
+      export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)"
+      export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
+
+      # Create the Kubernetes secret in the 'observability' namespace
+      kubectl create secret generic openobserve-credentials \
+        --from-literal=username="$OPENOBSERVE_USERNAME" \
+        --from-literal=password="$OPENOBSERVE_PASSWORD" \
+        -n observability
+
+      echo "🏗️ Installing OpenObserve..."
+      RETRIES=5
+      DELAY=3
+
+      for i in $(seq 1 $RETRIES); do
+        echo "Attempt $i to add Helm repo..."
+        sudo helm repo add openobserve https://charts.openobserve.ai --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+        echo "Failed to add repo, retrying in $DELAY seconds..."
+        sleep $DELAY
+      done
+
+      # Optionally fail hard if all retries exhausted
+      if [[ $i -eq $RETRIES ]]; then
+        echo "Failed to add Helm repo after $RETRIES attempts" >&2
+        exit 1
+      fi
+
+      sudo helm repo update
+      sudo helm install --wait --create-namespace -n openobserve openobserve openobserve/openobserve-standalone \
+        --set adminUsername="$OPENOBSERVE_USERNAME" \
+        --set adminPassword="$OPENOBSERVE_PASSWORD"
+
+      AUTH_HEADER_VALUE=$(echo -n "${OPENOBSERVE_USERNAME}:${OPENOBSERVE_PASSWORD}" | base64)
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: observability
+        annotations:
+          field.cattle.io/projectId: local:infrastructure
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
+      ---
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: otel-collector
+        namespace: observability
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: otel-collector-read
+      rules:
+      - apiGroups: [""]
+        resources: ["pods", "endpoints", "services", "namespaces", "nodes"]
+        verbs: ["get", "list", "watch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: otel-collector-read
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: otel-collector-read
+      subjects:
+        - kind: ServiceAccount
+          name: otel-collector
+          namespace: observability
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: otel-collector-config
+        namespace: observability
+        labels:
+          app: otel-collector
+      data:
+        config.yaml: |
           receivers:
-            otlp:
-              protocols:
-                grpc: {}
-                http: {}        # 4318
-            opencensus:
-              endpoint: 0.0.0.0:55678
+            prometheus/linkerd:
+              config:
+                global:
+                  evaluation_interval: 10s
+                  scrape_interval: 10s
+                  scrape_timeout: 10s
+                scrape_configs:
+                  - job_name: 'linkerd-controller'
+                    kubernetes_sd_configs:
+                    - role: pod
+                      namespaces:
+                        names:
+                        - 'linkerd'
+                        - 'linkerd-viz'
+                    relabel_configs:
+                    - source_labels:
+                      - __meta_kubernetes_pod_container_port_name
+                      action: keep
+                      regex: admin
+                    - source_labels: [__meta_kubernetes_pod_container_name]
+                      action: replace
+                      target_label: component
 
-          processors:
-            k8sattributes:
-              extract:
-                metadata: [k8s.namespace.name, k8s.pod.name]
-                labels:
-                  - from: pod
-                    key: app.kubernetes.io/name
-                  - from: pod
-                    key: app
-            transform:
-              error_mode: ignore
-              trace_statements:
-                - context: resource
-                  statements:
-                    - set(
-                        attributes["service.name"],
-                        Concat([attributes["k8s.namespace.name"], attributes["app.kubernetes.io/name"]], "-")
-                      )
-                      where attributes["service.name"] == "linkerd-proxy"
-                        and IsMatch(attributes["k8s.namespace.name"], ".+")
-                        and IsMatch(attributes["app.kubernetes.io/name"], ".+")
-                    - set(
-                        attributes["service.name"],
-                        Concat([attributes["k8s.namespace.name"], attributes["app"]], "-")
-                      )
-                      where attributes["service.name"] == "linkerd-proxy"
-                        and IsMatch(attributes["k8s.namespace.name"], ".+")
-                        and IsMatch(attributes["app"], ".+")
-                    - set(
-                        attributes["service.name"],
-                        Concat([attributes["k8s.namespace.name"], attributes["k8s.pod.name"]], "-")
-                      )
-                      where attributes["service.name"] == "linkerd-proxy"
-                        and IsMatch(attributes["k8s.namespace.name"], ".+")
-                        and IsMatch(attributes["k8s.pod.name"], ".+")
+                  - job_name: 'linkerd-multicluster-controller'
+                    kubernetes_sd_configs:
+                    - role: pod
+                    relabel_configs:
+                    - source_labels:
+                      - __meta_kubernetes_pod_label_component
+                      - __meta_kubernetes_pod_container_port_name
+                      action: keep
+                      regex: (linkerd-service-mirror|controller);admin$
+                    - source_labels: [__meta_kubernetes_pod_container_name]
+                      action: replace
+                      target_label: component
 
-            batch: {}
+                  - job_name: 'linkerd-proxy'
+                    kubernetes_sd_configs:
+                    - role: pod
+                    relabel_configs:
+                    - source_labels:
+                      - __meta_kubernetes_pod_container_name
+                      - __meta_kubernetes_pod_container_port_name
+                      - __meta_kubernetes_pod_label_linkerd_io_control_plane_ns
+                      action: keep
+                      regex: ^linkerd-proxy;linkerd-admin;linkerd$
+                    - source_labels: [__meta_kubernetes_namespace]
+                      action: replace
+                      target_label: namespace
+                    - source_labels: [__meta_kubernetes_pod_name]
+                      action: replace
+                      target_label: pod
+                    - source_labels: [__meta_kubernetes_pod_label_linkerd_io_proxy_job]
+                      action: replace
+                      target_label: k8s_job
+                    - action: labeldrop
+                      regex: __meta_kubernetes_pod_label_linkerd_io_proxy_job
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labeldrop
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_(.+)
+                      replacement: __tmp_pod_label_$1
+                    - action: labelmap
+                      regex: __tmp_pod_label_linkerd_io_(.+)
+                      replacement:  __tmp_pod_label_$1
+                    - action: labeldrop
+                      regex: __tmp_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __tmp_pod_label_(.+)
 
           exporters:
-            jaeger:
-              endpoint: jaeger.linkerd-jaeger.svc.cluster.local:14250
+            otlp/openobserve:
+              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+              headers:
+                Authorization: "Basic ${AUTH_HEADER_VALUE}"
+                organization: default
+                stream-name: default
               tls:
                 insecure: true
+            debug:
+              verbosity: detailed
 
           service:
             pipelines:
-              traces:
-                receivers: [otlp, opencensus]
-                # Order matters: enrich with k8s labels -> rewrite service.name -> batch -> export
-                processors: [k8sattributes, transform, batch]
-                exporters: [jaeger]
-
-      ui:
-        tls:
-          enabled: false
-        auth:
-          enabled: false
+              metrics:
+                receivers: [prometheus/linkerd]
+                exporters: [debug,otlp/openobserve]
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: otel-collector
+        namespace: observability
+        labels:
+          app: otel-collector
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: otel-collector
+        template:
+          metadata:
+            labels:
+              app: otel-collector
+          spec:
+            serviceAccountName: otel-collector
+            containers:
+              - name: otel-collector
+                image: otel/opentelemetry-collector:latest
+                args: ["--config=/etc/otelcol/config.yaml"]
+                volumeMounts:
+                  - name: otel-config
+                    mountPath: /etc/otelcol
+                    readOnly: true
+                resources:
+                  requests:
+                    cpu: 100m
+                    memory: 128Mi
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+                securityContext:
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+            volumes:
+              - name: otel-config
+                configMap:
+                  name: otel-collector-config
+                  items:
+                    - key: config.yaml
+                      path: config.yaml
       EOF
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
