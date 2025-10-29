@@ -1815,6 +1815,14 @@ write_files:
         --set adminUsername="$OPENOBSERVE_USERNAME" \
         --set adminPassword="$OPENOBSERVE_PASSWORD"
 
+      sudo kubectl create namespace observability --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | sudo kubectl apply -f --kubeconfig=/etc/rancher/rke2/rke2.yaml -
+
+      sudo kubectl annotate namespace observability field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace observability scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
       # Create the Kubernetes secret in the 'observability' namespace
       kubectl create secret generic openobserve-credentials \
         --from-literal=username="$OPENOBSERVE_USERNAME" \
@@ -1823,14 +1831,6 @@ write_files:
 
       AUTH_HEADER_VALUE=$(echo -n "$OPENOBSERVE_USERNAME:$OPENOBSERVE_PASSWORD" | base64)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: observability
-        annotations:
-          field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
-      ---
       apiVersion: v1
       kind: ServiceAccount
       metadata:
