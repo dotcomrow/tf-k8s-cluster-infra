@@ -1811,7 +1811,8 @@ write_files:
       fi
 
       sudo helm repo update
-      sudo helm install --wait --create-namespace -n openobserve openobserve openobserve/openobserve-standalone \
+      sudo helm upgrade --install --kubeconfig=/etc/rancher/rke2/rke2.yaml --wait \
+        --create-namespace -n openobserve openobserve openobserve/openobserve-standalone \
         --set adminUsername="$OPENOBSERVE_USERNAME" \
         --set adminPassword="$OPENOBSERVE_PASSWORD"
 
