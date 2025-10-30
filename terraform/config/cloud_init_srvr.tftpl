@@ -1824,10 +1824,10 @@ write_files:
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       # Create the Kubernetes secret in the 'observability' namespace
-      kubectl create secret generic openobserve-credentials \
+      sudo kubectl create secret generic openobserve-credentials \
         --from-literal=username="$OPENOBSERVE_USERNAME" \
         --from-literal=password="$OPENOBSERVE_PASSWORD" \
-        -n observability
+        -n observability --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       AUTH_HEADER_VALUE=$(echo -n "$OPENOBSERVE_USERNAME:$OPENOBSERVE_PASSWORD" | base64)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
