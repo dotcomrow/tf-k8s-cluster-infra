@@ -1781,6 +1781,7 @@ write_files:
         --set-string proxy.tracing.collector.meshIdentity.serviceAccountName="linkerd-jaeger" \
         --set-string proxy.tracing.collector.meshIdentity.namespace="linkerd-jaeger" \
         --set-string proxy.telemetry.spans.enabled=true \
+        --set proxy.tracing.otlp.insecure=true \
         --set-string proxy.telemetry.spans.level=trace \
         | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
@@ -1790,7 +1791,7 @@ write_files:
       # 5) install openobserve
 
       # Generate random username and password
-      export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)"
+      export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)@suncoast.systems"
       export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
 
       echo "🏗️ Installing OpenObserve..."
@@ -1825,14 +1826,17 @@ write_files:
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
-      # Create the Kubernetes secret in the 'observability' namespace
-      sudo kubectl create secret generic openobserve-credentials \
-        --from-literal=username="$OPENOBSERVE_USERNAME" \
-        --from-literal=password="$OPENOBSERVE_PASSWORD" \
-        -n observability --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      OO_BASIC=$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64)
+      OO_AUTH_HEADER="Basic $OO_BASIC"
 
-      AUTH_HEADER_VALUE=$(echo -n "$OPENOBSERVE_USERNAME:$OPENOBSERVE_PASSWORD" | base64)
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
+      # store it in the same namespace as the collector
+      sudo kubectl -n observability \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        create secret generic oo-auth \
+        --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
       apiVersion: v1
       kind: ServiceAccount
       metadata:
@@ -1861,6 +1865,7 @@ write_files:
           name: otel-collector
           namespace: observability
       ---
+      # TEMPLATE ConfigMap (note the literal __AUTH_HEADER__ token)
       apiVersion: v1
       kind: ConfigMap
       metadata:
@@ -1945,7 +1950,7 @@ write_files:
                     - action: labelmap
                       regex: __tmp_pod_label_(.+)
 
-            # NEW: accept OTLP from Linkerd proxies/apps
+            # Accept OTLP from Linkerd proxies/apps
             otlp:
               protocols:
                 grpc:
@@ -1962,7 +1967,8 @@ write_files:
             otlp/openobserve:
               endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
               headers:
-                Authorization: "Basic $AUTH_HEADER_VALUE"
+                # Will be replaced at pod start by initContainer:
+                Authorization: __AUTH_HEADER__
                 organization: default
                 stream-name: default
               tls:
@@ -1974,11 +1980,11 @@ write_files:
             pipelines:
               metrics:
                 receivers: [prometheus/linkerd]
-                processors: [batch]
+                processors: [batch, memory_limiter]
                 exporters: [debug, otlp/openobserve]
               traces:
                 receivers: [otlp]
-                processors: [batch]
+                processors: [batch, memory_limiter]
                 exporters: [debug, otlp/openobserve]
       ---
       apiVersion: apps/v1
@@ -1999,6 +2005,47 @@ write_files:
               app: otel-collector
           spec:
             serviceAccountName: otel-collector
+
+            volumes:
+              # Template from ConfigMap
+              - name: otel-config-tpl
+                configMap:
+                  name: otel-collector-config
+                  items:
+                    - key: config.yaml
+                      path: config.yaml
+              # Secret with full Authorization header
+              - name: oo-auth
+                secret:
+                  secretName: oo-auth
+                  items:
+                    - key: OO_AUTH_HEADER
+                      path: authorization_header
+              # Writable target for rendered config
+              - name: otel-config-final
+                emptyDir: {}
+
+            # Render config without using ${...}
+            initContainers:
+              - name: render-config
+                image: alpine:3.20
+                command: ["/bin/sh","-c"]
+                args:
+                  - |
+                    mkdir -p /etc/otelcol;
+                    AUTH="$(cat /etc/secret/authorization_header)";
+                    ESCAPED_AUTH=$(printf '%s' "$AUTH" | sed -e 's/[\/&]/\\&/g');
+                    sed "s/__AUTH_HEADER__/$ESCAPED_AUTH/g" /etc/otelcol-src/config.yaml > /etc/otelcol/config.yaml;
+                volumeMounts:
+                  - name: otel-config-tpl
+                    mountPath: /etc/otelcol-src
+                    readOnly: true
+                  - name: oo-auth
+                    mountPath: /etc/secret
+                    readOnly: true
+                  - name: otel-config-final
+                    mountPath: /etc/otelcol
+
             containers:
               - name: otel-collector
                 image: otel/opentelemetry-collector:latest
@@ -2009,7 +2056,7 @@ write_files:
                   - name: otlp-http
                     containerPort: 4318
                 volumeMounts:
-                  - name: otel-config
+                  - name: otel-config-final
                     mountPath: /etc/otelcol
                     readOnly: true
                 resources:
@@ -2022,13 +2069,6 @@ write_files:
                 securityContext:
                   runAsNonRoot: true
                   allowPrivilegeEscalation: false
-            volumes:
-              - name: otel-config
-                configMap:
-                  name: otel-collector-config
-                  items:
-                    - key: config.yaml
-                      path: config.yaml
       ---
       apiVersion: v1
       kind: Service
@@ -2896,7 +2936,17 @@ write_files:
           namespace: scheduler-plugins
       EOF
 
-      # adding apisix routes for linkerd and jaeger
+      OO_USER='root@example.com'
+      OO_PASS='Complexpass#123'
+      BASIC=$(echo -n "$OO_USER:$OO_PASS" | base64) 
+      HDR=$(echo -n "Basic $BASIC" | base64) 
+
+      # Store the base64 of the FULL header value ("Basic <...>") in the *openobserve* namespace
+      sudo kubectl create secret generic openobserve-upstream-auth \
+        --from-literal=authorization_header_b64="$HDR" \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve
+
+      # adding apisix routes for linkerd and jaeger + oauth2-proxy alpha config + mounts
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRole
@@ -2916,6 +2966,19 @@ write_files:
         - apiGroups: ["networking.k8s.io"]
           resources: ["ingresses", "ingressclasses"]
           verbs: ["get", "list", "watch"]
+      ---
+      # Alpha config to *force* Authorization header upstream to OpenObserve
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config
+        namespace: openobserve
+      data:
+        alpha.yaml: |
+          injectRequestHeaders:
+            - name: Authorization
+              values:
+                - fromEnv: OOPROXY_AUTHZ_B64
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2946,6 +3009,9 @@ write_files:
                   - --client-id=${JAEGER_CLIENT_ID}
                   - --client-secret=${JAEGER_CLIENT_SECRET}
                   - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  # The alpha config below injects the Basic header for the built-in OpenObserve user:
+                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  # Keep standard auth header behavior for downstream clients if you want:
                   - --scope=user:email,read:org
                   - --cookie-secure=true
                   - --set-authorization-header=true
@@ -2953,6 +3019,22 @@ write_files:
                   - --allowed-group=${GITHUB_ORG}:linkerd_admins
                 ports:
                   - containerPort: 4180
+                env:
+                  - name: OOPROXY_AUTHZ_B64
+                    valueFrom:
+                      secretKeyRef:
+                        name: openobserve-upstream-auth
+                        key: authorization_header_b64
+                volumeMounts:
+                  - name: alpha-config
+                    mountPath: /etc/oauth2-proxy/alpha
+            volumes:
+              - name: alpha-config
+                configMap:
+                  name: oauth2-proxy-alpha-config
+                  items:
+                    - key: alpha.yaml
+                      path: alpha.yaml
       ---
       apiVersion: v1
       kind: Service
