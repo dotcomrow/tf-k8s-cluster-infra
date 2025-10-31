@@ -2032,11 +2032,9 @@ write_files:
                 command: ["/bin/sh","-c"]
                 args:
                   - |
-                    mkdir -p /etc/otelcol;
-                    AUTH="$(cat /etc/secret/authorization_header)"
-                    # escape the delimiter and '&' just in case
-                    ESCAPED_AUTH=$(printf '%s' "$AUTH" | sed -e 's/[|&]/\\&/g')
-                    sed "s|__AUTH_HEADER__|$ESCAPED_AUTH|g" /etc/otelcol-src/config.yaml > /etc/otelcol/config.yaml
+                    mkdir -p /etc/otelcol
+                    AUTH="$(tr -d '\r\n' < /etc/secret/authorization_header)"
+                    awk -v val="$AUTH" '{ gsub(/__AUTH_HEADER__/, val); print }' /etc/otelcol-src/config.yaml > /etc/otelcol/config.yaml
                 volumeMounts:
                   - name: otel-config-tpl
                     mountPath: /etc/otelcol-src
