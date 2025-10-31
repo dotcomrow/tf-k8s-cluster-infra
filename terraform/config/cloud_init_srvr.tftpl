@@ -2033,9 +2033,10 @@ write_files:
                 args:
                   - |
                     mkdir -p /etc/otelcol;
-                    AUTH="$(cat /etc/secret/authorization_header)";
-                    ESCAPED_AUTH=$(printf '%s' "$AUTH" | sed -e 's/[\/&]/\\&/g');
-                    sed "s/__AUTH_HEADER__/$ESCAPED_AUTH/g" /etc/otelcol-src/config.yaml > /etc/otelcol/config.yaml;
+                    AUTH="$(cat /etc/secret/authorization_header)"
+                    # escape the delimiter and '&' just in case
+                    ESCAPED_AUTH=$(printf '%s' "$AUTH" | sed -e 's/[|&]/\\&/g')
+                    sed "s|__AUTH_HEADER__|$ESCAPED_AUTH|g" /etc/otelcol-src/config.yaml > /etc/otelcol/config.yaml
                 volumeMounts:
                   - name: otel-config-tpl
                     mountPath: /etc/otelcol-src
@@ -2980,6 +2981,45 @@ write_files:
               values:
                 - fromEnv: OOPROXY_AUTHZ_B64
       ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config
+        namespace: openobserve
+      data:
+        alpha.yaml: |
+          server:
+            address: 0.0.0.0:4180
+
+          upstreamConfig:
+            upstreams:
+              - id: oo
+                uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
+
+          providers:
+            - id: github
+              type: github
+              clientID: ${JAEGER_CLIENT_ID}
+              clientSecret: ${JAEGER_CLIENT_SECRET}
+              scope: ["user:email","read:org"]
+              emailDomains: ["*"]
+              allowedGroups: ["${GITHUB_ORG}:linkerd_admins"]
+              redirectURL: https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+
+          cookie:
+            secret: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+            secure: true
+            samesite: lax
+
+          headers:
+            setAuthorization: true
+            passAuthorization: true
+
+          injectRequestHeaders:
+            - name: Authorization
+              values:
+                - fromEnv: OOPROXY_AUTHZ_B64
+      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -3001,30 +3041,18 @@ write_files:
               - name: oauth2-proxy
                 image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
                 args:
-                  - --provider=github
                   - --http-address=0.0.0.0:4180
-                  - --upstream=http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
-                  - --email-domain=*
-                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - --client-id=${JAEGER_CLIENT_ID}
-                  - --client-secret=${JAEGER_CLIENT_SECRET}
-                  - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
-                  # The alpha config below injects the Basic header for the built-in OpenObserve user:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
-                  # Keep standard auth header behavior for downstream clients if you want:
-                  - --scope=user:email,read:org
-                  - --cookie-secure=true
-                  - --set-authorization-header=true
-                  - --pass-authorization-header=true
-                  - --allowed-group=${GITHUB_ORG}:linkerd_admins
                 ports:
                   - containerPort: 4180
                 env:
+                  # Upstream Authorization header (already provisioned secret):
                   - name: OOPROXY_AUTHZ_B64
                     valueFrom:
                       secretKeyRef:
                         name: openobserve-upstream-auth
                         key: authorization_header_b64
+
                 volumeMounts:
                   - name: alpha-config
                     mountPath: /etc/oauth2-proxy/alpha
