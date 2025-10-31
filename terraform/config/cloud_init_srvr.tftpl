@@ -2025,7 +2025,7 @@ write_files:
               - name: otel-config-final
                 emptyDir: {}
 
-            # Render config without using ${...}
+            # Render config without using 
             initContainers:
               - name: render-config
                 image: alpine:3.20
