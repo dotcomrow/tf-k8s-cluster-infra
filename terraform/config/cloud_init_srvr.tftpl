@@ -2962,7 +2962,7 @@ write_files:
         annotations:
           teleport.dev/name: "openobserve-gui"
           teleport.dev/protocol: "http"
-          teleport.dev/public-addr: "jaeger.teleport.app.${RANCHER_DOMAIN}"
+          teleport.dev/public-addr: "openobserve.teleport.app.${RANCHER_DOMAIN}"
           teleport.dev/description: "OpenObserve GUI"
         labels:
           app: openobserve
@@ -3018,10 +3018,10 @@ write_files:
         name: oauth2-proxy
         namespace: linkerd-viz
         annotations:
-          teleport.dev/name: "Linkerd-GUI"
+          teleport.dev/name: "linkerd-gui"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "linkerd.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "Linkerd-GUI"
+          teleport.dev/description: "linkerd-gui"
         labels:
           app: linkerd
           app.kubernetes.io/name: linkerd
