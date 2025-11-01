@@ -2992,21 +2992,19 @@ write_files:
           upstreamConfig:
             upstreams:
               - id: oo
+                path: "^/"
                 uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
 
-          # Providers array (alpha schema)
           providers:
-            - provider: github
-              clientID: ${JAEGER_CLIENT_ID}
-              clientSecret: ${JAEGER_CLIENT_SECRET}
-              scope:
-                - user:email
-                - read:org
-              github:
+            - id: github
+              provider: github
+              clientID: "${JAEGER_CLIENT_ID}"
+              clientSecret: "${JAEGER_CLIENT_SECRET}"
+              scope: "user:email,read:org"
+              githubConfig:
                 org: ${GITHUB_ORG}
                 team: linkerd_admins
 
-          # Inject the upstream Authorization header from env
           injectRequestHeaders:
             - name: Authorization
               values:
@@ -3037,9 +3035,12 @@ write_files:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
                   - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
                   - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+                  - --email-domain=*
                 ports:
                   - containerPort: 4180
                 env:
+                  - name: OAUTH2_PROXY_COOKIE_SECRET
+                    value: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
                   - name: OOPROXY_AUTHZ_B64
                     valueFrom:
                       secretKeyRef:
