@@ -1965,7 +1965,7 @@ write_files:
 
           exporters:
             otlp/openobserve:
-              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
+              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
               headers:
                 # Will be replaced at pod start by initContainer:
                 Authorization: __AUTH_HEADER__
@@ -2545,15 +2545,15 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
 
       echo "🚀 Deploying OAuth2 Proxy..."
-      APISIX_BASIC=$(printf '%s:%s' "admin" "admin" | base64)
-      APISIX_AUTH_HEADER="Basic $APISIX_BASIC"
+      # Admin API key from apisix conf (change this!)
+      APISIX_ADMIN_KEY="edd1c9f034335f136f87ad84b625c8f1"
 
-      # store it in the same namespace as the collector
       sudo kubectl -n apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        create secret generic apisix-auth \
-        --from-literal=APISIX_AUTH_HEADER="$APISIX_AUTH_HEADER" \
-        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        create secret generic apisix-admin-key \
+        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY" \
+        --dry-run=client -o yaml | \
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
@@ -2566,11 +2566,14 @@ write_files:
           server:
             bindAddress: 0.0.0.0:4180
 
+          # Ensure all UI and /apisix/admin calls go through this upstream
           upstreamConfig:
             upstreams:
-              - id: apisix-dashboard
-                path: "^/"
-                uri: http://apisix-dashboard.apisix.svc.cluster.local
+              - id: apisix-ui-and-admin
+                path: /
+                # If you're using the embedded Dashboard, point to the APISIX admin service.
+                # In the official chart this is usually apisix-admin:9180
+                uri: http://apisix-admin.apisix.svc.cluster.local:9180
 
           providers:
             - id: github
@@ -2582,47 +2585,36 @@ write_files:
                 org: ${GITHUB_ORG}
                 team: linkerd_admins
 
+          # <-- inject Admin API key, not Basic auth
           injectRequestHeaders:
-            - name: Authorization
+            - name: X-API-KEY
               values:
-                - fromEnv: APISIXPROXY_AUTHZ_B64
+                - fromEnv: APISIX_ADMIN_KEY
       ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
         name: oauth2-proxy-apisix
         namespace: apisix
-        labels:
-          app: oauth2-proxy-apisix
       spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy-apisix
         template:
-          metadata:
-            labels:
-              app: oauth2-proxy-apisix
           spec:
             containers:
               - name: oauth2-proxy
                 image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
-                # Alpha config + only flags that are still valid alongside alpha-config
                 args:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
                   - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
                   - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
                   - --email-domain=*
-                ports:
-                  - containerPort: 4180
                 env:
                   - name: OAUTH2_PROXY_COOKIE_SECRET
                     value: ${OAUTH2_PROXY_COOKIE_SECRET}
-                  - name: APISIXPROXY_AUTHZ_B64
+                  - name: APISIX_ADMIN_KEY
                     valueFrom:
                       secretKeyRef:
-                        name: apisix-auth
-                        key: APISIX_AUTH_HEADER
+                        name: apisix-admin-key
+                        key: APISIX_ADMIN_KEY
                 volumeMounts:
                   - name: alpha-config
                     mountPath: /etc/oauth2-proxy/alpha
@@ -3047,7 +3039,7 @@ write_files:
           upstreamConfig:
             upstreams:
               - id: oo
-                path: "^/"
+                path: /
                 uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
 
           providers:
