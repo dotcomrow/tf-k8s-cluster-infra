@@ -2596,8 +2596,17 @@ write_files:
       metadata:
         name: oauth2-proxy-apisix
         namespace: apisix
+        labels:
+          app: oauth2-proxy-apisix
       spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy-apisix
         template:
+          metadata:
+            labels:
+              app: oauth2-proxy-apisix
           spec:
             containers:
               - name: oauth2-proxy
