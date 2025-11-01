@@ -2979,7 +2979,6 @@ write_files:
               values:
                 - fromEnv: OOPROXY_AUTHZ_B64
       ---
-      # ✅ Single alpha config (keep this one; remove the earlier duplicate)
       apiVersion: v1
       kind: ConfigMap
       metadata:
@@ -2988,7 +2987,7 @@ write_files:
       data:
         alpha.yaml: |
           server:
-            address: 0.0.0.0:4180
+            bindAddress: 0.0.0.0:4180
 
           upstreamConfig:
             upstreams:
@@ -2998,6 +2997,7 @@ write_files:
           providers:
             - id: github
               type: github
+              # These are replaced by Terraform, as you intended:
               clientID: ${JAEGER_CLIENT_ID}
               clientSecret: ${JAEGER_CLIENT_SECRET}
               scope: ["user:email","read:org"]
@@ -3005,15 +3005,21 @@ write_files:
               allowedGroups: ["${GITHUB_ORG}:linkerd_admins"]
               redirectURL: https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
 
-          cookie:
-            secret: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-            secure: true
-            samesite: lax
+          # ✅ Alpha config uses "session", not "cookie"
+          session:
+            type: cookie
+            cookie:
+              # Terraform will replace this secret value
+              secret: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+              secure: true
+              sameSite: lax
 
+          # Keep (alpha-format) header behaviors
           headers:
             setAuthorization: true
             passAuthorization: true
 
+          # Inject the upstream Basic header for OpenObserve from the env var
           injectRequestHeaders:
             - name: Authorization
               values:
