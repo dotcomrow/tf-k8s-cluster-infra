@@ -3014,11 +3014,6 @@ write_files:
               secure: true
               sameSite: lax
 
-          # Keep (alpha-format) header behaviors
-          headers:
-            setAuthorization: true
-            passAuthorization: true
-
           # Inject the upstream Basic header for OpenObserve from the env var
           injectRequestHeaders:
             - name: Authorization
