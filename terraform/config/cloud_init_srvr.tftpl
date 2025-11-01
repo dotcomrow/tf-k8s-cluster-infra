@@ -2994,30 +2994,24 @@ write_files:
               - id: oo
                 uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
 
+          # Providers array (alpha schema)
           providers:
             - provider: github
               clientID: ${JAEGER_CLIENT_ID}
               clientSecret: ${JAEGER_CLIENT_SECRET}
-              # Optional: tighten access by org/team (alpha supports GitHubOptions)
-              # githubConfig:
-              #   org: ${GITHUB_ORG}
-              #   team: linkerd_admins
-              allowedGroups: ["${GITHUB_ORG}:linkerd_admins"]
-              redirectURL: https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+              scope:
+                - user:email
+                - read:org
+              github:
+                org: ${GITHUB_ORG}
+                team: linkerd_admins
 
-          session:
-            cookie:
-              secret: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-              secure: true
-              sameSite: lax
-
-          # Inject the upstream Authorization header for OpenObserve
+          # Inject the upstream Authorization header from env
           injectRequestHeaders:
             - name: Authorization
               values:
                 - fromEnv: OOPROXY_AUTHZ_B64
       ---
-      # ✅ Only alpha-config in args (removed --http-address)
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -3038,8 +3032,11 @@ write_files:
             containers:
               - name: oauth2-proxy
                 image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                # Alpha config + only flags that are still valid alongside alpha-config
                 args:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
                 ports:
                   - containerPort: 4180
                 env:
