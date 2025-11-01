@@ -2995,26 +2995,23 @@ write_files:
                 uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
 
           providers:
-            - id: github
-              type: github
-              # These are replaced by Terraform, as you intended:
+            - provider: github
               clientID: ${JAEGER_CLIENT_ID}
               clientSecret: ${JAEGER_CLIENT_SECRET}
-              scope: ["user:email","read:org"]
-              emailDomains: ["*"]
+              # Optional: tighten access by org/team (alpha supports GitHubOptions)
+              # githubConfig:
+              #   org: ${GITHUB_ORG}
+              #   team: linkerd_admins
               allowedGroups: ["${GITHUB_ORG}:linkerd_admins"]
               redirectURL: https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
 
-          # ✅ Alpha config uses "session", not "cookie"
           session:
-            type: cookie
             cookie:
-              # Terraform will replace this secret value
               secret: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
               secure: true
               sameSite: lax
 
-          # Inject the upstream Basic header for OpenObserve from the env var
+          # Inject the upstream Authorization header for OpenObserve
           injectRequestHeaders:
             - name: Authorization
               values:
