@@ -2979,6 +2979,7 @@ write_files:
               values:
                 - fromEnv: OOPROXY_AUTHZ_B64
       ---
+      # ✅ Single alpha config (keep this one; remove the earlier duplicate)
       apiVersion: v1
       kind: ConfigMap
       metadata:
@@ -3018,6 +3019,7 @@ write_files:
               values:
                 - fromEnv: OOPROXY_AUTHZ_B64
       ---
+      # ✅ Only alpha-config in args (removed --http-address)
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -3039,18 +3041,15 @@ write_files:
               - name: oauth2-proxy
                 image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
                 args:
-                  - --http-address=0.0.0.0:4180
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
                 ports:
                   - containerPort: 4180
                 env:
-                  # Upstream Authorization header (already provisioned secret):
                   - name: OOPROXY_AUTHZ_B64
                     valueFrom:
                       secretKeyRef:
                         name: openobserve-upstream-auth
                         key: authorization_header_b64
-
                 volumeMounts:
                   - name: alpha-config
                     mountPath: /etc/oauth2-proxy/alpha
