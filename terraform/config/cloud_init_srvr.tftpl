@@ -2545,39 +2545,94 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
 
       echo "🚀 Deploying OAuth2 Proxy..."
+      APISIX_BASIC=$(printf '%s:%s' "admin" "admin" | base64)
+      APISIX_AUTH_HEADER="Basic $APISIX_BASIC"
+
+      # store it in the same namespace as the collector
+      sudo kubectl -n apisix \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        create secret generic apisix-auth \
+        --from-literal=APISIX_AUTH_HEADER="$APISIX_AUTH_HEADER" \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config
+        namespace: apisix
+      data:
+        alpha.yaml: |
+          server:
+            bindAddress: 0.0.0.0:4180
+
+          upstreamConfig:
+            upstreams:
+              - id: apisix-dashboard
+                path: "^/"
+                uri: http://apisix-dashboard.apisix.svc.cluster.local
+
+          providers:
+            - id: github
+              provider: github
+              clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
+              clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
+              scope: "user:email,read:org"
+              githubConfig:
+                org: ${GITHUB_ORG}
+                team: linkerd_admins
+
+          injectRequestHeaders:
+            - name: Authorization
+              values:
+                - fromEnv: APISIXPROXY_AUTHZ_B64
+      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
-        name: oauth2-proxy
+        name: oauth2-proxy-apisix
         namespace: apisix
+        labels:
+          app: oauth2-proxy-apisix
       spec:
         replicas: 1
         selector:
           matchLabels:
-            app: oauth2-proxy
+            app: oauth2-proxy-apisix
         template:
           metadata:
             labels:
-              app: oauth2-proxy
+              app: oauth2-proxy-apisix
           spec:
             containers:
               - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+                # Alpha config + only flags that are still valid alongside alpha-config
+                args:
+                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+                  - --email-domain=*
                 ports:
                   - containerPort: 4180
-                args:
-                  - --provider=github
-                  - --http-address=0.0.0.0:4180
-                  - --upstream=http://apisix-dashboard.apisix.svc.cluster.local
-                  - --email-domain=*
-                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
-                  - --client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}
-                  - --client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}
-                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
-                  - --scope=user:email,read:org
-                  - --cookie-secure=true
-                  - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
+                env:
+                  - name: OAUTH2_PROXY_COOKIE_SECRET
+                    value: ${OAUTH2_PROXY_COOKIE_SECRET}
+                  - name: APISIXPROXY_AUTHZ_B64
+                    valueFrom:
+                      secretKeyRef:
+                        name: apisix-auth
+                        key: APISIX_AUTH_HEADER
+                volumeMounts:
+                  - name: alpha-config
+                    mountPath: /etc/oauth2-proxy/alpha
+            volumes:
+              - name: alpha-config
+                configMap:
+                  name: oauth2-proxy-alpha-config
+                  items:
+                    - key: alpha.yaml
+                      path: alpha.yaml
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -3029,7 +3084,7 @@ write_files:
           spec:
             containers:
               - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
                 # Alpha config + only flags that are still valid alongside alpha-config
                 args:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
@@ -3097,7 +3152,7 @@ write_files:
           spec:
             containers:
               - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
                 ports:
                   - containerPort: 4180
                 args:
