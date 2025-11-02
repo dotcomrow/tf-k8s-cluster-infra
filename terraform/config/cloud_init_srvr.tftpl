@@ -1814,8 +1814,8 @@ write_files:
       sudo helm repo update
       sudo helm upgrade --install --kubeconfig=/etc/rancher/rke2/rke2.yaml --wait \
         --create-namespace -n openobserve openobserve openobserve/openobserve-standalone \
-        --set adminUsername="$OPENOBSERVE_USERNAME" \
-        --set adminPassword="$OPENOBSERVE_PASSWORD"
+        --set auth.rootUserEmail="$OPENOBSERVE_USERNAME" \
+        --set auth.initialPassword="$OPENOBSERVE_PASSWORD"
 
       sudo kubectl create namespace observability --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -2089,6 +2089,120 @@ write_files:
             port: 4318
             targetPort: 4318
             protocol: TCP
+      ---
+      # Alpha config to *force* Authorization header upstream to OpenObserve
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config
+        namespace: openobserve
+      data:
+        alpha.yaml: |
+          injectRequestHeaders:
+            - name: Authorization
+              values:
+                - fromEnv: OOPROXY_AUTHZ_B64
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config
+        namespace: openobserve
+      data:
+        alpha.yaml: |
+          server:
+            bindAddress: 0.0.0.0:4180
+
+          upstreamConfig:
+            upstreams:
+              - id: oo
+                path: /
+                uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
+
+          providers:
+            - id: github
+              provider: github
+              clientID: "${JAEGER_CLIENT_ID}"
+              clientSecret: "${JAEGER_CLIENT_SECRET}"
+              scope: "user:email,read:org"
+              githubConfig:
+                org: ${GITHUB_ORG}
+                team: linkerd_admins
+
+          injectRequestHeaders:
+            - name: Authorization
+              values:
+                - fromEnv: OOPROXY_AUTHZ_B64
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy-openobserve
+        namespace: openobserve
+        labels:
+          app: oauth2-proxy-openobserve
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy-openobserve
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy-openobserve
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+                # Alpha config + only flags that are still valid alongside alpha-config
+                args:
+                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+                  - --email-domain=*
+                ports:
+                  - containerPort: 4180
+                env:
+                  - name: OAUTH2_PROXY_COOKIE_SECRET
+                    value: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
+                  - name: OOPROXY_AUTHZ_B64
+                    valueFrom:
+                      secretKeyRef:
+                        name: oo-auth
+                        key: OO_AUTH_HEADER
+                volumeMounts:
+                  - name: alpha-config
+                    mountPath: /etc/oauth2-proxy/alpha
+            volumes:
+              - name: alpha-config
+                configMap:
+                  name: oauth2-proxy-alpha-config
+                  items:
+                    - key: alpha.yaml
+                      path: alpha.yaml
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy-openobserve
+        namespace: openobserve
+        annotations:
+          teleport.dev/name: "openobserve-gui"
+          teleport.dev/protocol: "http"
+          teleport.dev/public-addr: "openobserve.teleport.app.${RANCHER_DOMAIN}"
+          teleport.dev/description: "OpenObserve GUI"
+        labels:
+          app: openobserve
+          app.kubernetes.io/name: openobserve
+          app.kubernetes.io/component: openobserve
+          teleport.dev/enroll: "true"
+      spec:
+        selector:
+          app: oauth2-proxy-openobserve
+        ports:
+          - name: http
+            port: 80
+            targetPort: 4180
       EOF
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
@@ -2991,16 +3105,6 @@ write_files:
           namespace: scheduler-plugins
       EOF
 
-      OO_USER='root@example.com'
-      OO_PASS='Complexpass#123'
-      BASIC=$(echo -n "$OO_USER:$OO_PASS" | base64) 
-      HDR=$(echo -n "Basic $BASIC" | base64) 
-
-      # Store the base64 of the FULL header value ("Basic <...>") in the *openobserve* namespace
-      sudo kubectl create secret generic openobserve-upstream-auth \
-        --from-literal=authorization_header_b64="$HDR" \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve
-
       # adding apisix routes for linkerd and jaeger + oauth2-proxy alpha config + mounts
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: rbac.authorization.k8s.io/v1
@@ -3021,120 +3125,6 @@ write_files:
         - apiGroups: ["networking.k8s.io"]
           resources: ["ingresses", "ingressclasses"]
           verbs: ["get", "list", "watch"]
-      ---
-      # Alpha config to *force* Authorization header upstream to OpenObserve
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config
-        namespace: openobserve
-      data:
-        alpha.yaml: |
-          injectRequestHeaders:
-            - name: Authorization
-              values:
-                - fromEnv: OOPROXY_AUTHZ_B64
-      ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config
-        namespace: openobserve
-      data:
-        alpha.yaml: |
-          server:
-            bindAddress: 0.0.0.0:4180
-
-          upstreamConfig:
-            upstreams:
-              - id: oo
-                path: /
-                uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
-
-          providers:
-            - id: github
-              provider: github
-              clientID: "${JAEGER_CLIENT_ID}"
-              clientSecret: "${JAEGER_CLIENT_SECRET}"
-              scope: "user:email,read:org"
-              githubConfig:
-                org: ${GITHUB_ORG}
-                team: linkerd_admins
-
-          injectRequestHeaders:
-            - name: Authorization
-              values:
-                - fromEnv: OOPROXY_AUTHZ_B64
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy-openobserve
-        namespace: openobserve
-        labels:
-          app: oauth2-proxy-openobserve
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy-openobserve
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy-openobserve
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
-                # Alpha config + only flags that are still valid alongside alpha-config
-                args:
-                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
-                  - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
-                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - --email-domain=*
-                ports:
-                  - containerPort: 4180
-                env:
-                  - name: OAUTH2_PROXY_COOKIE_SECRET
-                    value: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - name: OOPROXY_AUTHZ_B64
-                    valueFrom:
-                      secretKeyRef:
-                        name: openobserve-upstream-auth
-                        key: authorization_header_b64
-                volumeMounts:
-                  - name: alpha-config
-                    mountPath: /etc/oauth2-proxy/alpha
-            volumes:
-              - name: alpha-config
-                configMap:
-                  name: oauth2-proxy-alpha-config
-                  items:
-                    - key: alpha.yaml
-                      path: alpha.yaml
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: oauth2-proxy-openobserve
-        namespace: openobserve
-        annotations:
-          teleport.dev/name: "openobserve-gui"
-          teleport.dev/protocol: "http"
-          teleport.dev/public-addr: "openobserve.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "OpenObserve GUI"
-        labels:
-          app: openobserve
-          app.kubernetes.io/name: openobserve
-          app.kubernetes.io/component: openobserve
-          teleport.dev/enroll: "true"
-      spec:
-        selector:
-          app: oauth2-proxy-openobserve
-        ports:
-          - name: http
-            port: 80
-            targetPort: 4180
       ---
       apiVersion: apps/v1
       kind: Deployment
