@@ -1836,6 +1836,12 @@ write_files:
         --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
+      sudo kubectl -n openobserve \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        create secret generic oo-auth \
+        --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
       apiVersion: v1
       kind: ServiceAccount
