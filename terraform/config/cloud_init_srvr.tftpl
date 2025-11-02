@@ -2131,8 +2131,7 @@ write_files:
           injectRequestHeaders:
             - name: Authorization
               values:
-                - valueFrom:
-                    env: OOPROXY_AUTHZ
+                - env: OOPROXY_AUTHZ
       ---
       apiVersion: apps/v1
       kind: Deployment
