@@ -2685,13 +2685,13 @@ write_files:
             upstreamConfig:
               upstreams:
                 - id: apisix-admin
-                  path: "^/apisix/admin"
+                  path: /apisix/admin
                   uri: http://apisix-admin.apisix.svc.cluster.local:9180
                   # keep path (no rewrite); the Admin API expects /apisix/admin/*
 
                 - id: apisix-dashboard-ui
                   # catch-all for the UI (static assets and index)
-                  path: "^/"
+                  path: /
                   uri: http://apisix-dashboard.apisix.svc.cluster.local:80
 
             providers:
