@@ -2660,12 +2660,11 @@ write_files:
       echo "🚀 Deploying OAuth2 Proxy..."
       # Admin API key from apisix conf (change this!)
       APISIX_ADMIN_KEY="edd1c9f034335f136f87ad84b625c8f1"
-      APISIX_ADMIN_KEY_B64=$(echo -n "$APISIX_ADMIN_KEY" | base64)
 
       sudo kubectl -n apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         create secret generic apisix-admin-key \
-        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY_B64" \
+        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY" \
         --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
