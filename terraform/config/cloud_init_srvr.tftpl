@@ -2688,13 +2688,11 @@ write_files:
                   path: "^/apisix/admin"
                   uri: http://apisix-admin.apisix.svc.cluster.local:9180
                   # keep path (no rewrite); the Admin API expects /apisix/admin/*
-                  preserveHost: false
 
                 - id: apisix-dashboard-ui
                   # catch-all for the UI (static assets and index)
                   path: "^/"
                   uri: http://apisix-dashboard.apisix.svc.cluster.local:80
-                  preserveHost: false
 
             providers:
               - id: github
@@ -2712,12 +2710,6 @@ write_files:
               - name: X-API-KEY
                 values:
                   - fromEnv: APISIX_ADMIN_KEY
-
-            # Serve UI at same origin with a cookie domain matching your hostname:
-            cookie:
-              name: "_oauth2_proxy"
-              domain: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-              # secure: true
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2787,7 +2779,7 @@ write_files:
         type: LoadBalancer
         loadBalancerIP: 10.0.0.111
         selector:
-          app: oauth2-proxy
+          app: oauth2-proxy-apisix
       EOF
 
       # --- Enable real client IP extraction everywhere ---------------------------
