@@ -2660,56 +2660,65 @@ write_files:
       echo "🚀 Deploying OAuth2 Proxy..."
       # Admin API key from apisix conf (change this!)
       APISIX_ADMIN_KEY="edd1c9f034335f136f87ad84b625c8f1"
+      APISIX_ADMIN_KEY_B64=$(echo -n "$APISIX_ADMIN_KEY" | base64)
 
       sudo kubectl -n apisix \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         create secret generic apisix-admin-key \
-        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY" \
+        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY_B64" \
         --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config
-        namespace: apisix
-      data:
-        alpha.yaml: |
-            server:
-              bindAddress: 0.0.0.0:4180
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth2-proxy-alpha-config
+  namespace: apisix
+data:
+  alpha.yaml: |
+      server:
+        bindAddress: 0.0.0.0:4180
 
-            # Two upstreams:
-            # 1) Admin API: match /apisix/admin and forward to admin service:9180
-            # 2) UI/static: match everything else and forward to the dashboard service (static files)
-            upstreamConfig:
-              upstreams:
-                - id: apisix-admin
-                  path: /apisix/admin
-                  uri: http://apisix-admin.apisix.svc.cluster.local:9180
-                  # keep path (no rewrite); the Admin API expects /apisix/admin/*
+      # Two upstreams:
+      # 1) Admin API: match /apisix/admin and forward to admin service:9180
+      # 2) UI/static: match everything else and forward to the dashboard service (static files)
+      upstreamConfig:
+        upstreams:
+          - id: apisix-admin
+            path: "/apisix/admin"
+            uri: http://apisix-admin.apisix.svc.cluster.local:9180
+            # keep path (no rewrite); the Admin API expects /apisix/admin/*
+            preserveHost: false
 
-                - id: apisix-dashboard-ui
-                  # catch-all for the UI (static assets and index)
-                  path: /
-                  uri: http://apisix-dashboard.apisix.svc.cluster.local:80
+          - id: apisix-dashboard-ui
+            # catch-all for the UI (static assets and index)
+            path: "/"
+            uri: http://apisix-dashboard.apisix.svc.cluster.local:80
+            preserveHost: false
 
-            providers:
-              - id: github
-                provider: github
-                clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
-                clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
-                scope: "user:email,read:org"
-                githubConfig:
-                  org: "${GITHUB_ORG}"
-                  team: linkerd_admins
+      providers:
+        - id: github
+          provider: github
+          clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
+          clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
+          scope: "user:email,read:org"
+          githubConfig:
+            org: "${GITHUB_ORG}"
+            team: linkerd_admins
 
-            # Inject the Admin API key header on upstream requests.
-            # (This will be sent to both upstreams; harmless for static assets).
-            injectRequestHeaders:
-              - name: X-API-KEY
-                values:
-                  - fromEnv: APISIX_ADMIN_KEY
+      # Inject the Admin API key header on upstream requests.
+      # (This will be sent to both upstreams; harmless for static assets).
+      injectRequestHeaders:
+        - name: X-API-KEY
+          values:
+            - fromEnv: APISIX_ADMIN_KEY
+
+      # Serve UI at same origin with a cookie domain matching your hostname:
+      cookie:
+        name: "_oauth2_proxy"
+        domain: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
+        # secure: true
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2779,7 +2788,7 @@ write_files:
         type: LoadBalancer
         loadBalancerIP: 10.0.0.111
         selector:
-          app: oauth2-proxy-apisix
+          app: oauth2-proxy
       EOF
 
       # --- Enable real client IP extraction everywhere ---------------------------
