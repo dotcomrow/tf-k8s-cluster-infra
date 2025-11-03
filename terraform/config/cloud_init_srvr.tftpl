@@ -2685,7 +2685,7 @@ write_files:
             upstreamConfig:
               upstreams:
                 - id: apisix-admin
-                  path: "/apisix/admin"
+                  path: /
                   uri: http://apisix-admin.apisix.svc.cluster.local:9180
 
             providers:
@@ -2721,7 +2721,7 @@ write_files:
             upstreamConfig:
               upstreams:
                 - id: apisix-dashboard-ui
-                  path: "/"
+                  path: /
                   uri: http://apisix-dashboard.apisix.svc.cluster.local:80
 
             providers:
@@ -2763,7 +2763,7 @@ write_files:
                 image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
                 args:
                   - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
-                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/apisix/admin/oauth2/callback
                   - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
                   - --email-domain=*
                 env:
@@ -2841,7 +2841,7 @@ write_files:
           teleport.dev/protocol: "http"
           teleport.dev/path: "apisix/admin"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX Gateway"
+          teleport.dev/description: "APISIX Gateway Admin API"
         labels:
           app: apisix-api
           app.kubernetes.io/name: apisix-api
@@ -2851,10 +2851,6 @@ write_files:
         ports:
           - port: 80
             targetPort: 4180
-        type: LoadBalancer
-        loadBalancerIP: 10.0.0.111
-        selector:
-          app: oauth2-proxy-apisix-api
       ---
       apiVersion: v1
       kind: Service
@@ -2865,7 +2861,7 @@ write_files:
           teleport.dev/name: "apisix-ui"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX Gateway"
+          teleport.dev/description: "APISIX Gateway UI"
         labels:
           app: apisix-ui
           app.kubernetes.io/name: apisix-ui
@@ -2875,10 +2871,6 @@ write_files:
         ports:
           - port: 80
             targetPort: 4180
-        type: LoadBalancer
-        loadBalancerIP: 10.0.0.111
-        selector:
-          app: oauth2-proxy-apisix-ui
       EOF
 
       # --- Enable real client IP extraction everywhere ---------------------------
