@@ -2672,7 +2672,7 @@ write_files:
       apiVersion: v1
       kind: ConfigMap
       metadata:
-        name: oauth2-proxy-alpha-config
+        name: oauth2-proxy-alpha-config-api
         namespace: apisix
       data:
         alpha.yaml: |
@@ -2688,6 +2688,38 @@ write_files:
                   path: "/apisix/admin"
                   uri: http://apisix-admin.apisix.svc.cluster.local:9180
 
+            providers:
+              - id: github
+                provider: github
+                clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
+                clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
+                scope: "user:email,read:org"
+                githubConfig:
+                  org: "${GITHUB_ORG}"
+                  team: linkerd_admins
+
+            # Inject the Admin API key header on upstream requests.
+            # (This will be sent to both upstreams; harmless for static assets).
+            injectRequestHeaders:
+              - name: X-API-KEY
+                values:
+                  - fromEnv: APISIX_ADMIN_KEY
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: oauth2-proxy-alpha-config-ui
+        namespace: apisix
+      data:
+        alpha.yaml: |
+            server:
+              bindAddress: 0.0.0.0:4180
+
+            # Two upstreams:
+            # 1) Admin API: match /apisix/admin and forward to admin service:9180
+            # 2) UI/static: match everything else and forward to the dashboard service (static files)
+            upstreamConfig:
+              upstreams:
                 - id: apisix-dashboard-ui
                   path: "/"
                   uri: http://apisix-dashboard.apisix.svc.cluster.local:80
@@ -2712,19 +2744,19 @@ write_files:
       apiVersion: apps/v1
       kind: Deployment
       metadata:
-        name: oauth2-proxy-apisix
+        name: oauth2-proxy-apisix-api
         namespace: apisix
         labels:
-          app: oauth2-proxy-apisix
+          app: oauth2-proxy-apisix-api
       spec:
         replicas: 1
         selector:
           matchLabels:
-            app: oauth2-proxy-apisix
+            app: oauth2-proxy-apisix-api
         template:
           metadata:
             labels:
-              app: oauth2-proxy-apisix
+              app: oauth2-proxy-apisix-api
           spec:
             containers:
               - name: oauth2-proxy
@@ -2748,7 +2780,51 @@ write_files:
             volumes:
               - name: alpha-config
                 configMap:
-                  name: oauth2-proxy-alpha-config
+                  name: oauth2-proxy-alpha-config-api
+                  items:
+                    - key: alpha.yaml
+                      path: alpha.yaml
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oauth2-proxy-apisix-ui
+        namespace: apisix
+        labels:
+          app: oauth2-proxy-apisix-ui
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oauth2-proxy-apisix-ui
+        template:
+          metadata:
+            labels:
+              app: oauth2-proxy-apisix-ui
+          spec:
+            containers:
+              - name: oauth2-proxy
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+                args:
+                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+                  - --email-domain=*
+                env:
+                  - name: OAUTH2_PROXY_COOKIE_SECRET
+                    value: ${OAUTH2_PROXY_COOKIE_SECRET}
+                  - name: APISIX_ADMIN_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: apisix-admin-key
+                        key: APISIX_ADMIN_KEY
+                volumeMounts:
+                  - name: alpha-config
+                    mountPath: /etc/oauth2-proxy/alpha
+            volumes:
+              - name: alpha-config
+                configMap:
+                  name: oauth2-proxy-alpha-config-ui
                   items:
                     - key: alpha.yaml
                       path: alpha.yaml
@@ -2758,7 +2834,31 @@ write_files:
       apiVersion: v1
       kind: Service
       metadata:
-        name: oauth2-proxy
+        name: oauth2-proxy-apisix-api
+        namespace: apisix
+        annotations:
+          teleport.dev/name: "apisix"
+          teleport.dev/protocol: "http"
+          teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}/apisix/admin/"
+          teleport.dev/description: "APISIX Gateway"
+        labels:
+          app: apisix
+          app.kubernetes.io/name: apisix
+          app.kubernetes.io/component: apisix
+          teleport.dev/enroll: "true"
+      spec:
+        ports:
+          - port: 80
+            targetPort: 4180
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.111
+        selector:
+          app: oauth2-proxy-apisix-api
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oauth2-proxy-apisix-ui
         namespace: apisix
         annotations:
           teleport.dev/name: "apisix"
@@ -2777,7 +2877,7 @@ write_files:
         type: LoadBalancer
         loadBalancerIP: 10.0.0.111
         selector:
-          app: oauth2-proxy-apisix
+          app: oauth2-proxy-apisix-ui
       EOF
 
       # --- Enable real client IP extraction everywhere ---------------------------
