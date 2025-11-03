@@ -2837,14 +2837,14 @@ write_files:
         name: oauth2-proxy-apisix-api
         namespace: apisix
         annotations:
-          teleport.dev/name: "apisix"
+          teleport.dev/name: "apisix-api"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}/apisix/admin/"
           teleport.dev/description: "APISIX Gateway"
         labels:
-          app: apisix
-          app.kubernetes.io/name: apisix
-          app.kubernetes.io/component: apisix
+          app: apisix-api
+          app.kubernetes.io/name: apisix-api
+          app.kubernetes.io/component: apisix-api
           teleport.dev/enroll: "true"
       spec:
         ports:
@@ -2861,14 +2861,14 @@ write_files:
         name: oauth2-proxy-apisix-ui
         namespace: apisix
         annotations:
-          teleport.dev/name: "apisix"
+          teleport.dev/name: "apisix-ui"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
           teleport.dev/description: "APISIX Gateway"
         labels:
-          app: apisix
-          app.kubernetes.io/name: apisix
-          app.kubernetes.io/component: apisix
+          app: apisix-ui
+          app.kubernetes.io/name: apisix-ui
+          app.kubernetes.io/component: apisix-ui
           teleport.dev/enroll: "true"
       spec:
         ports:
