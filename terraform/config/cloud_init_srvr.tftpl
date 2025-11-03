@@ -2839,7 +2839,8 @@ write_files:
         annotations:
           teleport.dev/name: "apisix-api"
           teleport.dev/protocol: "http"
-          teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}/apisix/admin/"
+          teleport.dev/path: "apisix/admin"
+          teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
           teleport.dev/description: "APISIX Gateway"
         labels:
           app: apisix-api
