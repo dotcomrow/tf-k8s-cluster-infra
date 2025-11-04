@@ -2658,219 +2658,65 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
 
       echo "🚀 Deploying OAuth2 Proxy..."
-      # Admin API key from apisix conf (change this!)
-      APISIX_ADMIN_KEY="edd1c9f034335f136f87ad84b625c8f1"
-
-      sudo kubectl -n apisix \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        create secret generic apisix-admin-key \
-        --from-literal=APISIX_ADMIN_KEY="$APISIX_ADMIN_KEY" \
-        --dry-run=client -o yaml | \
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config-api
-        namespace: apisix
-      data:
-        alpha.yaml: |
-            server:
-              bindAddress: 0.0.0.0:4180
-
-            # Two upstreams:
-            # 1) Admin API: match /apisix/admin and forward to admin service:9180
-            # 2) UI/static: match everything else and forward to the dashboard service (static files)
-            upstreamConfig:
-              upstreams:
-                - id: apisix-admin
-                  path: /
-                  uri: http://apisix-admin.apisix.svc.cluster.local:9180
-
-            providers:
-              - id: github
-                provider: github
-                clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
-                clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
-                scope: "user:email,read:org"
-                githubConfig:
-                  org: "${GITHUB_ORG}"
-                  team: linkerd_admins
-
-            # Inject the Admin API key header on upstream requests.
-            # (This will be sent to both upstreams; harmless for static assets).
-            injectRequestHeaders:
-              - name: X-API-KEY
-                values:
-                  - fromEnv: APISIX_ADMIN_KEY
-      ---
-      apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config-ui
-        namespace: apisix
-      data:
-        alpha.yaml: |
-            server:
-              bindAddress: 0.0.0.0:4180
-
-            # Two upstreams:
-            # 1) Admin API: match /apisix/admin and forward to admin service:9180
-            # 2) UI/static: match everything else and forward to the dashboard service (static files)
-            upstreamConfig:
-              upstreams:
-                - id: apisix-dashboard-ui
-                  path: /
-                  uri: http://apisix-dashboard.apisix.svc.cluster.local:80
-
-            providers:
-              - id: github
-                provider: github
-                clientID: "${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}"
-                clientSecret: "${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}"
-                scope: "user:email,read:org"
-                githubConfig:
-                  org: "${GITHUB_ORG}"
-                  team: linkerd_admins
-
-            # Inject the Admin API key header on upstream requests.
-            # (This will be sent to both upstreams; harmless for static assets).
-            injectRequestHeaders:
-              - name: X-API-KEY
-                values:
-                  - fromEnv: APISIX_ADMIN_KEY
-      ---
       apiVersion: apps/v1
       kind: Deployment
       metadata:
-        name: oauth2-proxy-apisix-api
+        name: oauth2-proxy
         namespace: apisix
-        labels:
-          app: oauth2-proxy-apisix-api
       spec:
         replicas: 1
         selector:
           matchLabels:
-            app: oauth2-proxy-apisix-api
+            app: oauth2-proxy
         template:
           metadata:
             labels:
-              app: oauth2-proxy-apisix-api
+              app: oauth2-proxy
           spec:
             containers:
               - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
+                image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+                ports:
+                  - containerPort: 4180
                 args:
-                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
-                  - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/apisix/admin/oauth2/callback
-                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+                  - --provider=github
+                  - --http-address=0.0.0.0:4180
+                  - --upstream=http://apisix-dashboard.apisix.svc.cluster.local
                   - --email-domain=*
-                env:
-                  - name: OAUTH2_PROXY_COOKIE_SECRET
-                    value: ${OAUTH2_PROXY_COOKIE_SECRET}
-                  - name: APISIX_ADMIN_KEY
-                    valueFrom:
-                      secretKeyRef:
-                        name: apisix-admin-key
-                        key: APISIX_ADMIN_KEY
-                volumeMounts:
-                  - name: alpha-config
-                    mountPath: /etc/oauth2-proxy/alpha
-            volumes:
-              - name: alpha-config
-                configMap:
-                  name: oauth2-proxy-alpha-config-api
-                  items:
-                    - key: alpha.yaml
-                      path: alpha.yaml
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy-apisix-ui
-        namespace: apisix
-        labels:
-          app: oauth2-proxy-apisix-ui
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy-apisix-ui
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy-apisix-ui
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
-                args:
-                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
+                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
+                  - --client-id=${GATEWAY_MANAGER_OAUTH2_CLIENT_ID}
+                  - --client-secret=${GATEWAY_MANAGER_OAUTH2_CLIENT_SECRET}
                   - --redirect-url=https://gateway-manager.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
-                  - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET}
-                  - --email-domain=*
-                env:
-                  - name: OAUTH2_PROXY_COOKIE_SECRET
-                    value: ${OAUTH2_PROXY_COOKIE_SECRET}
-                  - name: APISIX_ADMIN_KEY
-                    valueFrom:
-                      secretKeyRef:
-                        name: apisix-admin-key
-                        key: APISIX_ADMIN_KEY
-                volumeMounts:
-                  - name: alpha-config
-                    mountPath: /etc/oauth2-proxy/alpha
-            volumes:
-              - name: alpha-config
-                configMap:
-                  name: oauth2-proxy-alpha-config-ui
-                  items:
-                    - key: alpha.yaml
-                      path: alpha.yaml
+                  - --scope=user:email,read:org
+                  - --cookie-secure=true
+                  - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Service
       metadata:
-        name: oauth2-proxy-apisix-api
+        name: oauth2-proxy
         namespace: apisix
         annotations:
-          teleport.dev/name: "apisix-api"
+          teleport.dev/name: "apisix"
           teleport.dev/protocol: "http"
-          teleport.dev/path: "apisix/admin"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX Gateway Admin API"
+          teleport.dev/description: "APISIX Gateway"
         labels:
-          app: apisix-api
-          app.kubernetes.io/name: apisix-api
-          app.kubernetes.io/component: apisix-api
+          app: apisix
+          app.kubernetes.io/name: apisix
+          app.kubernetes.io/component: apisix
           teleport.dev/enroll: "true"
       spec:
         ports:
           - port: 80
             targetPort: 4180
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: oauth2-proxy-apisix-ui
-        namespace: apisix
-        annotations:
-          teleport.dev/name: "apisix-ui"
-          teleport.dev/protocol: "http"
-          teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX Gateway UI"
-        labels:
-          app: apisix-ui
-          app.kubernetes.io/name: apisix-ui
-          app.kubernetes.io/component: apisix-ui
-          teleport.dev/enroll: "true"
-      spec:
-        ports:
-          - port: 80
-            targetPort: 4180
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.111
+        selector:
+          app: oauth2-proxy
       EOF
 
       # --- Enable real client IP extraction everywhere ---------------------------
