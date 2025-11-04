@@ -2753,7 +2753,7 @@ write_files:
                 name: always_on
               # Point at your Linkerd Jaeger collector (OTLP/HTTP).
               collector:
-                address: collector.linkerd-jaeger.svc.cluster.local:4318
+                address: otel-collector.observability.svc.cluster.local:4318
               # Optional but helpful: add resource attributes so traces are labeled nicely.
               resource:
                 service.name: apisix-gateway
