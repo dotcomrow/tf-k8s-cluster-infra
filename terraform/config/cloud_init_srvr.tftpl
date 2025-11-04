@@ -2540,7 +2540,7 @@ write_files:
           opentelemetry:
             collector:
               # OTLP/HTTP endpoint on your Linkerd Jaeger collector
-              address: http://collector.linkerd-jaeger.svc.cluster.local:4318
+              address: otel-collector.observability.svc.cluster.local:4318
       YAML
 
       echo "🚀 Installing APISIX Gateway and Dashboard..."
