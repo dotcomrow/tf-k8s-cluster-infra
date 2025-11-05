@@ -1879,7 +1879,7 @@ write_files:
           name: otel-collector
           namespace: observability
       ---
-      apiVersion: policy.linkerd.io/v1beta3
+      apiVersion: policy.linkerd.io/v1beta1
       kind: Server
       metadata:
         name: otlp-grpc
@@ -1891,7 +1891,7 @@ write_files:
         port: 4317
         proxyProtocol: grpc
       ---
-      apiVersion: policy.linkerd.io/v1beta3
+      apiVersion: policy.linkerd.io/v1beta1
       kind: Server
       metadata:
         name: otlp-http
@@ -1903,7 +1903,7 @@ write_files:
         port: 4318
         proxyProtocol: http/1
       ---
-      apiVersion: policy.linkerd.io/v1beta3
+      apiVersion: policy.linkerd.io/v1beta1
       kind: ServerAuthorization
       metadata:
         name: allow-mesh-to-otel
@@ -1916,7 +1916,7 @@ write_files:
             identities:
               - "*"
       ---
-      apiVersion: policy.linkerd.io/v1beta3
+      apiVersion: policy.linkerd.io/v1beta1
       kind: ServerAuthorization
       metadata:
         name: allow-mesh-to-otel-http
