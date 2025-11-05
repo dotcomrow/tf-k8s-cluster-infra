@@ -1955,10 +1955,10 @@ write_files:
                       regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
                     - action: labelmap
                       regex: __meta_kubernetes_pod_label_(.+)
-                      replacement: __tmp_pod_label_$1
+                      replacement: __tmp_pod_label_$$1
                     - action: labelmap
                       regex: __tmp_pod_label_linkerd_io_(.+)
-                      replacement:  __tmp_pod_label_$1
+                      replacement:  __tmp_pod_label_$$1
                     - action: labeldrop
                       regex: __tmp_pod_label_linkerd_io_(.+)
                     - action: labelmap
