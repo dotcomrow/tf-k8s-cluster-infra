@@ -1971,8 +1971,13 @@ write_files:
                 http:
 
           processors:
-            batch: {}
+            batch: 
+              timeout: 10s
+              send_batch_size: 1024
+              send_batch_max_size: 2048
             memory_limiter:
+              limit_mib: 512        # pick something that fits your container limit
+              spike_limit_mib: 128  # soft headroom before throttling
               check_interval: 5s
               limit_percentage: 75
               spike_limit_percentage: 25
@@ -1980,10 +1985,9 @@ write_files:
           exporters:
             otlphttp/openobserve:
               # Base URL only; per-signal paths come next
-              endpoint: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
-              traces_endpoint: /api/otlp/v1/traces
-              metrics_endpoint: /api/otlp/v1/metrics
-              logs_endpoint: /api/otlp/v1/logs
+              traces_endpoint:  "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081/api/otlp/v1/traces"
+              metrics_endpoint: "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081/api/otlp/v1/metrics"
+              logs_endpoint:    "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081/api/otlp/v1/logs"
               headers:
                 # Gets injected by your initContainer replacement of __AUTH_HEADER__
                 Authorization: __AUTH_HEADER__
