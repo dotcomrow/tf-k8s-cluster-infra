@@ -1811,17 +1811,8 @@ write_files:
         exit 1
       fi
 
-      sudo helm repo update
-      sudo helm upgrade --install \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --wait \
-        -n openobserve \
-        --create-namespace \
-        openobserve openobserve/openobserve-standalone \
-        --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
-        --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
-        --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
-        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD"
+      sudo kubectl create namespace openobserve --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | \
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       sudo kubectl create namespace observability --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
@@ -1833,6 +1824,17 @@ write_files:
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      sudo helm repo update
+      sudo helm upgrade --install \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --wait \
+        -n openobserve \
+        openobserve openobserve/openobserve-standalone \
+        --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
+        --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
+        --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
+        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD"
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
       OO_AUTH_HEADER="Basic $OO_BASIC"
