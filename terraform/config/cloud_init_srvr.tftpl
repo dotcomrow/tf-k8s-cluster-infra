@@ -1887,7 +1887,7 @@ write_files:
       spec:
         podSelector:
           matchLabels:
-            app.kubernetes.io/name: otel-collector
+            app: otel-collector
         port: 4317
         proxyProtocol: gRPC
       ---
@@ -1899,7 +1899,7 @@ write_files:
       spec:
         podSelector:
           matchLabels:
-            app.kubernetes.io/name: otel-collector
+            app: otel-collector
         port: 4318
         proxyProtocol: HTTP/1
       ---
@@ -2123,9 +2123,9 @@ write_files:
                 image: otel/opentelemetry-collector-contrib:0.104.0
                 args: ["--config=/etc/otelcol/config.yaml"]
                 ports:
-                  - name: otlp-grpc
+                  - name: grpc
                     containerPort: 4317
-                  - name: otlp-http
+                  - name: http
                     containerPort: 4318
                 volumeMounts:
                   - name: otel-config-final
@@ -2154,11 +2154,11 @@ write_files:
         selector:
           app: otel-collector
         ports:
-          - name: otlp-grpc
+          - name: grpc
             port: 4317
             targetPort: 4317
             protocol: TCP
-          - name: otlp-http
+          - name: http
             port: 4318
             targetPort: 4318
             protocol: TCP
