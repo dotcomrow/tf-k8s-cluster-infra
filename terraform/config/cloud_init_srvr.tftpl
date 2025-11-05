@@ -1901,7 +1901,7 @@ write_files:
           matchLabels:
             app.kubernetes.io/name: otel-collector
         port: 4318
-        proxyProtocol: http/1
+        proxyProtocol: HTTP/1
       ---
       apiVersion: policy.linkerd.io/v1beta1
       kind: ServerAuthorization
