@@ -1826,11 +1826,10 @@ write_files:
       sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo helm repo update
-      sudo helm upgrade --install \
+      sudo sudo helm upgrade --install openobserve openobserve/openobserve-standalone \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --wait \
         -n openobserve \
-        openobserve/openobserve-standalone \
         --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
         --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
         --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
