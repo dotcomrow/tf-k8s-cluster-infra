@@ -1978,15 +1978,20 @@ write_files:
               spike_limit_percentage: 25
 
           exporters:
-            otlp/openobserve:
-              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+            otlphttp/openobserve:
+              # Base URL only; per-signal paths come next
+              endpoint: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+              traces_endpoint: /api/otlp/v1/traces
+              metrics_endpoint: /api/otlp/v1/metrics
+              logs_endpoint: /api/otlp/v1/logs
               headers:
-                # Will be replaced at pod start by initContainer:
+                # Gets injected by your initContainer replacement of __AUTH_HEADER__
                 Authorization: __AUTH_HEADER__
                 organization: default
                 stream-name: default
-              tls:
-                insecure: true
+              compression: gzip
+              timeout: 15s
+
             debug:
               verbosity: detailed
 
@@ -1995,11 +2000,11 @@ write_files:
               metrics:
                 receivers: [prometheus/linkerd]
                 processors: [batch, memory_limiter]
-                exporters: [debug, otlp/openobserve]
+                exporters: [debug, otlphttp/openobserve]
               traces:
                 receivers: [otlp]
                 processors: [batch, memory_limiter]
-                exporters: [debug, otlp/openobserve]
+                exporters: [debug, otlphttp/openobserve]
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2061,7 +2066,7 @@ write_files:
 
             containers:
               - name: otel-collector
-                image: otel/opentelemetry-collector:latest
+                image: otel/opentelemetry-collector-contrib:0.104.0
                 args: ["--config=/etc/otelcol/config.yaml"]
                 ports:
                   - name: otlp-grpc
