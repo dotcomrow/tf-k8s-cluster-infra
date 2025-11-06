@@ -2030,18 +2030,14 @@ write_files:
               send_batch_max_size: 2048
 
           exporters:
-            otlphttp/openobserve:
-              traces_endpoint:  "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/otlp/v1/traces"
-              metrics_endpoint: "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/otlp/v1/metrics"
-              # If you add a logs pipeline, this is ready to go:
-              logs_endpoint:    "http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/otlp/v1/logs"
+            otlp/openobserve:
+              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
               headers:
                 Authorization: __AUTH_HEADER__
                 organization: default
                 stream-name: default
-              compression: gzip
-              timeout: 15s
-
+              tls:
+                insecure: true
             debug:
               verbosity: detailed
 
@@ -2050,16 +2046,15 @@ write_files:
               metrics:
                 receivers: [prometheus/linkerd]
                 processors: [memory_limiter, batch]
-                exporters: [debug, otlphttp/openobserve]
+                exporters: [debug, otlp/openobserve]
               traces:
                 receivers: [otlp]
                 processors: [memory_limiter, batch]
-                exporters: [debug, otlphttp/openobserve]
-              # Uncomment if you want logs via OTLP as well:
+                exporters: [debug, otlp/openobserve]
               logs:
                 receivers: [otlp]
                 processors: [memory_limiter, batch]
-                exporters: [debug, otlphttp/openobserve]
+                exporters: [debug, otlp/openobserve]
       ---
       apiVersion: apps/v1
       kind: Deployment
