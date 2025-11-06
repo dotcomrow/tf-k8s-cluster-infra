@@ -3237,7 +3237,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=srvr-node"
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
       ---
       # PVC for backing NFS server
       apiVersion: v1
