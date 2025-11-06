@@ -2757,14 +2757,14 @@ write_files:
         name: oauth2-proxy
         namespace: apisix
         annotations:
-          teleport.dev/name: "apisix"
+          teleport.dev/name: "apisix-external-gateway"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX Gateway"
+          teleport.dev/description: "APISIX External Gateway"
         labels:
-          app: apisix
-          app.kubernetes.io/name: apisix
-          app.kubernetes.io/component: apisix
+          app: apisix-external-gateway
+          app.kubernetes.io/name: apisix-external-gateway
+          app.kubernetes.io/component: apisix-external-gateway
           teleport.dev/enroll: "true"
       spec:
         ports:
