@@ -1811,29 +1811,28 @@ write_files:
         exit 1
       fi
 
-      sudo kubectl create namespace openobserve --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | \
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      sudo helm repo update
+      sudo helm upgrade --install \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --wait \
+        -n openobserve \
+        --create-namespace \
+        openobserve openobserve/openobserve-standalone \
+        --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
+        --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
+        --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
+        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD"
 
       sudo kubectl create namespace observability --kubeconfig=/etc/rancher/rke2/rke2.yaml --dry-run=client -o yaml | \
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       sudo kubectl annotate namespace observability field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace observability scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace observability linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace observability linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace openobserve linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
-      sudo helm repo update
-      sudo sudo helm upgrade --install openobserve openobserve/openobserve-standalone \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --wait \
-        -n openobserve \
-        --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
-        --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
-        --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
-        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD"
+      sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
       OO_AUTH_HEADER="Basic $OO_BASIC"
@@ -1880,56 +1879,6 @@ write_files:
           name: otel-collector
           namespace: observability
       ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: Server
-      metadata:
-        name: otlp-grpc
-        namespace: observability
-      spec:
-        podSelector:
-          matchLabels:
-            app: otel-collector
-        port: 4317
-        proxyProtocol: gRPC
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: Server
-      metadata:
-        name: otlp-http
-        namespace: observability
-      spec:
-        podSelector:
-          matchLabels:
-            app: otel-collector
-        port: 4318
-        proxyProtocol: HTTP/1
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-mesh-to-otel
-        namespace: observability
-      spec:
-        server:
-          name: otlp-grpc
-        client:
-          meshTLS:
-            identities:
-              - "*"
-      ---
-      apiVersion: policy.linkerd.io/v1beta1
-      kind: ServerAuthorization
-      metadata:
-        name: allow-mesh-to-otel-http
-        namespace: observability
-      spec:
-        server:
-          name: otlp-http
-        client:
-          meshTLS:
-            identities:
-              - "*"
-      ---
       # TEMPLATE ConfigMap (note the literal __AUTH_HEADER__ token)
       apiVersion: v1
       kind: ConfigMap
@@ -1946,98 +1895,103 @@ write_files:
                 global:
                   evaluation_interval: 10s
                   scrape_interval: 10s
-                  scrape_timeout: 9s
+                  scrape_timeout: 10s
                 scrape_configs:
                   - job_name: 'linkerd-controller'
                     kubernetes_sd_configs:
-                      - role: pod
-                        namespaces:
-                          names:
-                            # include the namespaces you actually use
-                            - linkerd
-                            - linkerd-jaeger
-                            - linkerd-viz
+                    - role: pod
+                      namespaces:
+                        names:
+                        - 'linkerd'
+                        - 'linkerd-viz'
                     relabel_configs:
-                      - source_labels: [__meta_kubernetes_pod_container_port_name]
-                        action: keep
-                        regex: (admin|admin-http)
-                      - source_labels: [__meta_kubernetes_pod_container_name]
-                        action: replace
-                        target_label: component
+                    - source_labels:
+                      - __meta_kubernetes_pod_container_port_name
+                      action: keep
+                      regex: admin
+                    - source_labels: [__meta_kubernetes_pod_container_name]
+                      action: replace
+                      target_label: component
 
                   - job_name: 'linkerd-multicluster-controller'
                     kubernetes_sd_configs:
-                      - role: pod
+                    - role: pod
                     relabel_configs:
-                      - source_labels:
-                          [__meta_kubernetes_pod_label_component, __meta_kubernetes_pod_container_port_name]
-                        action: keep
-                        regex: (linkerd-service-mirror|controller);admin(-http)?$
+                    - source_labels:
+                      - __meta_kubernetes_pod_label_component
+                      - __meta_kubernetes_pod_container_port_name
+                      action: keep
+                      regex: (linkerd-service-mirror|controller);admin$
+                    - source_labels: [__meta_kubernetes_pod_container_name]
+                      action: replace
+                      target_label: component
 
                   - job_name: 'linkerd-proxy'
                     kubernetes_sd_configs:
-                      - role: pod
+                    - role: pod
                     relabel_configs:
-                      - source_labels:
-                          [__meta_kubernetes_pod_container_name,
-                          __meta_kubernetes_pod_container_port_name,
-                          __meta_kubernetes_pod_label_linkerd_io_control_plane_ns]
-                        action: keep
-                        # allow either linkerd or linkerd-jaeger as control-plane ns
-                        regex: ^linkerd-proxy;linkerd-admin;(linkerd|linkerd-jaeger)$
-                      - source_labels: [__meta_kubernetes_namespace]
-                        action: replace
-                        target_label: namespace
-                      - source_labels: [__meta_kubernetes_pod_name]
-                        action: replace
-                        target_label: pod
-                      - source_labels: [__meta_kubernetes_pod_label_linkerd_io_proxy_job]
-                        action: replace
-                        target_label: k8s_job
-                      - action: labeldrop
-                        regex: __meta_kubernetes_pod_label_linkerd_io_proxy_job
-                      # Map *only once* from linkerd_io labels to normal labels
-                      - action: labelmap
-                        regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
-                      # Bring over the rest of pod labels
-                      - action: labelmap
-                        regex: __meta_kubernetes_pod_label_(.+)
-                        replacement: __tmp_pod_label_$$1
-                      - action: labelmap
-                        regex: __tmp_pod_label_linkerd_io_(.+)
-                        replacement: __tmp_pod_label_$$1
-                      - action: labeldrop
-                        regex: __tmp_pod_label_linkerd_io_(.+)
-                      - action: labelmap
-                        regex: __tmp_pod_label_(.+)
+                    - source_labels:
+                      - __meta_kubernetes_pod_container_name
+                      - __meta_kubernetes_pod_container_port_name
+                      - __meta_kubernetes_pod_label_linkerd_io_control_plane_ns
+                      action: keep
+                      regex: ^linkerd-proxy;linkerd-admin;linkerd$
+                    - source_labels: [__meta_kubernetes_namespace]
+                      action: replace
+                      target_label: namespace
+                    - source_labels: [__meta_kubernetes_pod_name]
+                      action: replace
+                      target_label: pod
+                    - source_labels: [__meta_kubernetes_pod_label_linkerd_io_proxy_job]
+                      action: replace
+                      target_label: k8s_job
+                    - action: labeldrop
+                      regex: __meta_kubernetes_pod_label_linkerd_io_proxy_job
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labeldrop
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __meta_kubernetes_pod_label_(.+)
+                      replacement: __tmp_pod_label_$1
+                    - action: labelmap
+                      regex: __tmp_pod_label_linkerd_io_(.+)
+                      replacement:  __tmp_pod_label_$1
+                    - action: labeldrop
+                      regex: __tmp_pod_label_linkerd_io_(.+)
+                    - action: labelmap
+                      regex: __tmp_pod_label_(.+)
 
+            # Accept OTLP from Linkerd proxies/apps
             otlp:
               protocols:
                 grpc:
-                  endpoint: 0.0.0.0:4317
                 http:
-                  endpoint: 0.0.0.0:4318
 
           processors:
+            batch: {}
             memory_limiter:
-              # Choose either percentages OR MiB. Here we use percentages.
+              check_interval: 5s
               limit_percentage: 75
               spike_limit_percentage: 25
-              check_interval: 5s
-            batch:
-              timeout: 10s
-              send_batch_size: 1024
-              send_batch_max_size: 2048
 
           exporters:
-            otlp/openobserve:
-              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+            otlphttp/openobserve:
+              # Base URL only; per-signal paths come next
+              endpoint: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+              traces_endpoint: /api/otlp/v1/traces
+              metrics_endpoint: /api/otlp/v1/metrics
+              logs_endpoint: /api/otlp/v1/logs
               headers:
+                # Gets injected by your initContainer replacement of __AUTH_HEADER__
                 Authorization: __AUTH_HEADER__
                 organization: default
                 stream-name: default
-              tls:
-                insecure: true
+              compression: gzip
+              timeout: 15s
+
             debug:
               verbosity: detailed
 
@@ -2045,16 +1999,12 @@ write_files:
             pipelines:
               metrics:
                 receivers: [prometheus/linkerd]
-                processors: [memory_limiter, batch]
-                exporters: [debug, otlp/openobserve]
+                processors: [batch, memory_limiter]
+                exporters: [debug, otlphttp/openobserve]
               traces:
                 receivers: [otlp]
-                processors: [memory_limiter, batch]
-                exporters: [debug, otlp/openobserve]
-              logs:
-                receivers: [otlp]
-                processors: [memory_limiter, batch]
-                exporters: [debug, otlp/openobserve]
+                processors: [batch, memory_limiter]
+                exporters: [debug, otlphttp/openobserve]
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -2119,9 +2069,9 @@ write_files:
                 image: otel/opentelemetry-collector-contrib:0.104.0
                 args: ["--config=/etc/otelcol/config.yaml"]
                 ports:
-                  - name: grpc
+                  - name: otlp-grpc
                     containerPort: 4317
-                  - name: http
+                  - name: otlp-http
                     containerPort: 4318
                 volumeMounts:
                   - name: otel-config-final
@@ -2150,11 +2100,11 @@ write_files:
         selector:
           app: otel-collector
         ports:
-          - name: grpc
+          - name: otlp-grpc
             port: 4317
             targetPort: 4317
             protocol: TCP
-          - name: http
+          - name: otlp-http
             port: 4318
             targetPort: 4318
             protocol: TCP
@@ -2757,14 +2707,14 @@ write_files:
         name: oauth2-proxy
         namespace: apisix
         annotations:
-          teleport.dev/name: "apisix-external-gateway"
+          teleport.dev/name: "apisix"
           teleport.dev/protocol: "http"
           teleport.dev/public-addr: "gateway-manager.teleport.app.${RANCHER_DOMAIN}"
-          teleport.dev/description: "APISIX External Gateway"
+          teleport.dev/description: "APISIX Gateway"
         labels:
-          app: apisix-external-gateway
-          app.kubernetes.io/name: apisix-external-gateway
-          app.kubernetes.io/component: apisix-external-gateway
+          app: apisix
+          app.kubernetes.io/name: apisix
+          app.kubernetes.io/component: apisix
           teleport.dev/enroll: "true"
       spec:
         ports:
@@ -2791,7 +2741,9 @@ write_files:
               source: http_x_forwarded_for
               recursive: true                
               trusted_addresses:
-                - "10.0.0.0/24"              
+                - "10.0.0.0/24"    # Host/node network
+                - "10.42.0.0/16"   # Pod network (cluster network 1)
+                - "10.43.0.0/16"   # Service network (cluster network 2)           
       EOF
 
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
