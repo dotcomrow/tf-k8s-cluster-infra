@@ -1773,7 +1773,8 @@ write_files:
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
-        --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,2379\,8200" \
+        --set proxyInit.ignoreOutboundPorts="4567\,4568\,4317\,4318\,2379\,8200" \
+        --set proxyInit.ignoreInboundPorts="4567\,4568\,4317\,4318\,2379\,8200" \
         --set-string global.tracing.enabled=true \
         --set proxy.tracing.enabled=true \
         --set-string proxy.tracing.otlp.endpoint="otel-collector.observability.svc.cluster.local:4317" \
