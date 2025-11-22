@@ -741,6 +741,9 @@ write_files:
         - "--reserved-cpus=0,1"
       EOF
 
+      sudo systemctl enable rke2-server
+      sudo systemctl start rke2-server
+
   - path: /etc/security/limits.d/99-nofile.conf
     permissions: '0644'
     content: |
