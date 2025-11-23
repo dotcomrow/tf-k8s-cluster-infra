@@ -305,3 +305,27 @@ variable "GHCR_PAT" {
   type        = string
   default     = "your-ghcr-personal-access-token"
 }
+
+variable srvr_vmid {
+  description = "The VMID of the srvr-node VM"
+  type        = number
+  default     = 101
+}
+
+variable ctrl_vmid {
+  description = "The VMID of the ctrl-node VM"
+  type        = number
+  default     = 102
+}
+
+variable etcd_vmid {
+  description = "The VMID of the etcd-node VM"
+  type        = number
+  default     = 103
+}
+
+variable work_vmid {
+  description = "The VMID of the work-node VM"
+  type        = number
+  default     = 104
+}
