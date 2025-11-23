@@ -182,7 +182,10 @@ jobs:
             done
 
             echo "🧼 Cleaning up cloud-init snippets..."
-            rm -f /var/lib/vz/snippets/cloud_init_*.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_srvr_node.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_work_node.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_etcd_node.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_ctrl_node.yaml || true
           '
 
       - name: Trigger Terraform Destroy
