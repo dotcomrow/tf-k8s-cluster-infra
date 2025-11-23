@@ -8,6 +8,11 @@ variable "srvr_cpu_sockets" {
   default = 1
 }
 
+variable "srvr_memory_gb" {
+  type    = number
+  default = 100
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
   content_type = "snippets"
@@ -92,13 +97,13 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-9"
-    memory     = 102400  # 100 GiB
+    memory     = var.srvr_memory_gb * 1024  # 100 GiB in MiB
     hostnodes  = "3"
     policy     = "bind"
   }
 
   memory {
-    dedicated = 102400       # fixed RAM allocation in MiB
+    dedicated = var.srvr_memory_gb * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 

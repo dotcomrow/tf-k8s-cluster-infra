@@ -8,6 +8,11 @@ variable "ctrl_cpu_sockets" {
   default = 1
 }
 
+variable "ctrl_memory_gb" {
+  type    = number
+  default = 61
+}
+
 resource "random_integer" "delay_seconds_ctrl" {
   min = 120
   max = 180
@@ -93,13 +98,13 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-9"
-    memory     = 63488
+    memory     = varl.ctrl_memory_gb * 1024  # 61 GiB in MiB
     hostnodes  = "2"
     policy     = "bind"
   }
 
   memory {
-    dedicated = 63488       # fixed RAM allocation in MiB
+    dedicated = var.ctrl_memory_gb * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 

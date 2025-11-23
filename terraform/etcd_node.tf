@@ -8,6 +8,11 @@ variable "etcd_cpu_sockets" {
   default = 1
 }
 
+variable "etcd_memory_gb" {
+  type    = number
+  default = 61
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "etcd_cloud_init_config" {
   content_type = "snippets"
@@ -62,13 +67,13 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-9"
-    memory     = 63488  # 62 GiB in MiB
+    memory     = var.etcd_memory_gb * 1024  # 61 GiB in MiB
     hostnodes  = "2"
     policy     = "bind"
   }
 
   memory {
-    dedicated = 63488       # fixed RAM allocation in MiB
+    dedicated = var.etcd_memory_gb * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
 

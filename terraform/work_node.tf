@@ -8,6 +8,16 @@ variable "work_cpu_sockets" {
   default = 2
 }
 
+variable "work_memory_gb_node0" {
+  type    = number
+  default = 124
+}
+
+variable "work_memory_gb_node1" {
+  type    = number
+  default = 124
+}
+
 resource "random_integer" "delay_seconds_work" {
   min = 181
   max = 240
@@ -94,7 +104,7 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   numa {
     device = "numa0"
     cpus   = "0-19"
-    memory = 124928  # 122 GiB in MiB
+    memory = var.work_memory_gb_node0 * 1024  # 122 GiB in MiB
     hostnodes = "0"
     policy    = "bind"
   }
@@ -102,13 +112,13 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
   numa {
     device = "numa1"
     cpus   = "20-39"
-    memory = 124928  # 124 GiB in MiB
+    memory = var.work_memory_gb_node1 * 1024  # 124 GiB in MiB
     hostnodes = "1"
     policy    = "bind"
   }
 
   memory {
-    dedicated = 249856       # fixed RAM allocation in MiB
+    dedicated = var.work_memory_gb_node0 * 1024 + var.work_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
