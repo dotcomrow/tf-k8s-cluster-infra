@@ -563,8 +563,10 @@ write_files:
       # Load TOML and parse
       doc = parse(Path(TOML_PATH).read_text())
 
-      # Registry section
-      cri_registry = doc["plugins"]["io.containerd.grpc.v1.cri"]["registry"]
+      # Ensure registry section exists (containerd defaults may omit it)
+      plugins = doc.get("plugins", table())
+      cri_plugin = plugins.get("io.containerd.grpc.v1.cri", table())
+      cri_registry = cri_plugin.get("registry", table())
 
       # Configs
       configs = cri_registry.get("configs", table())
@@ -591,7 +593,9 @@ write_files:
           }
 
       cri_registry["mirrors"] = mirrors
-      doc["plugins"]["io.containerd.grpc.v1.cri"]["registry"] = cri_registry
+      cri_plugin["registry"] = cri_registry
+      plugins["io.containerd.grpc.v1.cri"] = cri_plugin
+      doc["plugins"] = plugins
 
       # Dump raw TOML
       raw_toml = dumps(doc)
