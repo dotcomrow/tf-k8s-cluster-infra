@@ -70,7 +70,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
   node_name = var.node_name
   stop_on_destroy = false
   on_boot = true
-  vm_id  = var.srvr_vm_id
+  vm_id  = var.srvr_vmid
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support

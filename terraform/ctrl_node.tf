@@ -71,7 +71,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   node_name = var.node_name
   stop_on_destroy = false
   on_boot = true
-  vm_id  = var.ctrl_vm_id
+  vm_id  = var.ctrl_vmid
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
