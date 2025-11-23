@@ -98,7 +98,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   numa {
     device     = "numa0"
     cpus       = "0-9"
-    memory     = varl.ctrl_memory_gb * 1024  # 61 GiB in MiB
+    memory     = var.ctrl_memory_gb * 1024  # 61 GiB in MiB
     hostnodes  = "2"
     policy     = "bind"
   }
