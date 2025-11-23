@@ -10,7 +10,7 @@ variable "work_cpu_sockets" {
 
 variable "work_memory_gb_node0" {
   type    = number
-  default = 124
+  default = 122
 }
 
 variable "work_memory_gb_node1" {
