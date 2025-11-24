@@ -1450,7 +1450,7 @@ write_files:
         --set ingress.tls.source=rancher \
         --set ingress.enabled=true 
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/rancher -n cattle-system
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=8000s deployment/rancher -n cattle-system
 
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
