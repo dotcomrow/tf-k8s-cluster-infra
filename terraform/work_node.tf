@@ -10,12 +10,12 @@ variable "work_cpu_sockets" {
 
 variable "work_memory_gb_node0" {
   type    = number
-  default = 122
+  default = 123
 }
 
 variable "work_memory_gb_node1" {
   type    = number
-  default = 124
+  default = 123
 }
 
 resource "random_integer" "delay_seconds_work" {
