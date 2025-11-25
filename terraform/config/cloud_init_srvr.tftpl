@@ -1327,6 +1327,8 @@ write_files:
         archiveOnDelete: "false"
       EOF
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
+
   - path: /etc/systemd/system/k8s-addons.service
     permissions: '0644'
     content: |
