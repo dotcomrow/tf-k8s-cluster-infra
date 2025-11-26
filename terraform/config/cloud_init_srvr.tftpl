@@ -4264,6 +4264,17 @@ write_files:
               automated:
                 prune: true
                 selfHeal: true
+              syncOptions:
+              - PrunePropagationPolicy=foreground
+              - PruneLast=true
+              - ApplyOutOfSyncOnly=true
+              - RespectResourceOrder=true
+              retry:
+                limit: 5
+                backoff:
+                  duration: 5s
+                  factor: 2
+                  maxDuration: 3m
           EOF
 
           echo "Removing APISIX access route to move access to Teleport"
@@ -4692,39 +4703,9 @@ write_files:
             port: 80
             protocol: TCP
             targetPort: 8080
-      # ---
-      # apiVersion: v1
-      # kind: Service
-      # metadata:
-      #   name: argocd-dex-svc
-      #   namespace: argocd
-      #   annotations:
-      #     teleport.dev/name: "argocd-dex"
-      #     teleport.dev/protocol: "http"
-      #     teleport.dev/public-addr: "argocd-dex.teleport.app.${RANCHER_DOMAIN}"
-      #     teleport.dev/description: "ArgoCD DEX Service"
-      #   labels:
-      #     app: argocd-dex
-      #     app.kubernetes.io/name: argocd-dex
-      #     app.kubernetes.io/component: argocd-dex
-      #     teleport.dev/enroll: "true"
-      # spec:
-      #   selector:
-      #     app: argocd-dex
-      #   ports:
-      #     - name: argocd-dex
-      #       port: 80
-      #       targetPort: argocd-dex
       EOF
 
       echo "Adding annotations to services that are installed through helm..."
-      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc argocd-server --type merge \
-      #   -p '{"metadata":{"annotations":{"teleport.dev/name":"argocd","teleport.dev/protocol":"http","teleport.dev/public-addr":"argocd.teleport.app.suncoast.systems","teleport.dev/description":"ArgoCD Service"},"labels":{"app":"argocd","app.kubernetes.io/name":"argocd","app.kubernetes.io/component":"argocd","teleport.dev/enroll":"true"}}}' \
-      #   -n argocd
-
-      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc argocd-dex-server --type merge \
-      #   -p '{"metadata":{"annotations":{"teleport.dev/name":"argocd-dex","teleport.dev/protocol":"http","teleport.dev/public-addr":"argocd-dex.teleport.app.suncoast.systems","teleport.dev/description":"ArgoCD DEX Service"},"labels":{"app":"argocd-dex","app.kubernetes.io/name":"argocd-dex","app.kubernetes.io/component":"argocd-dex","teleport.dev/enroll":"true"}}}' \
-      #   -n argocd
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc policy-reporter-ui --type merge \
         -p '{"metadata":{"annotations":{"teleport.dev/name":"policy-reporter-ui","teleport.dev/protocol":"http","teleport.dev/public-addr":"policy-reporter-ui.teleport.app.suncoast.systems","teleport.dev/description":"Policy Reporter UI Service"},"labels":{"app":"policy-reporter-ui","app.kubernetes.io/name":"policy-reporter-ui","app.kubernetes.io/component":"policy-reporter-ui","teleport.dev/enroll":"true"}}}' \
