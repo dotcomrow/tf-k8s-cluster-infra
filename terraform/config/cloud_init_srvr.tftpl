@@ -93,6 +93,8 @@ write_files:
       systemctl enable disable-swap.service
       systemctl start disable-swap.service
 
+      systemctl restart systemd-journald || true
+
       systemctl enable setup-hosts-dns.service
       systemctl start setup-hosts-dns.service
 
@@ -584,6 +586,15 @@ write_files:
       LimitNPROC=65536
       TasksMax=infinity
 
+  - path: /etc/systemd/journald.conf.d/99-retention.conf
+    permissions: '0644'
+    content: |
+      [Journal]
+      SystemMaxUse=2G
+      RuntimeMaxUse=500M
+      MaxRetentionSec=259200
+      SystemMaxFileSize=200M
+
   - path: /etc/systemd/system/rke2-server.service.d/override.conf
     permissions: '0644'
     content: |
@@ -1063,6 +1074,8 @@ write_files:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
+        - "--container-log-max-size=10Mi"
+        - "--container-log-max-files=3"
       EOF
 
       systemctl enable rke2-server
@@ -1328,6 +1341,20 @@ write_files:
       EOF
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
+
+      echo "🚫 Disabling Longhorn scheduling on control/etcd/srvr nodes..."
+      for NODE in ${CTRL_HOSTNAME} ${ETCD_HOSTNAME} ${SRVR_HOSTNAME}; do
+        for i in {1..12}; do
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io "$NODE" >/dev/null 2>&1; then
+            if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch nodes.longhorn.io "$NODE" --type=merge -p '{"spec":{"allowScheduling":false}}'; then
+              echo "✅ Longhorn scheduling disabled on $NODE"
+              break
+            fi
+          fi
+          echo "⏳ Waiting for Longhorn node $NODE to be ready ($i/12)..."
+          sleep 10
+        done
+      done
 
   - path: /etc/systemd/system/k8s-addons.service
     permissions: '0644'
@@ -1840,7 +1867,12 @@ write_files:
         --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
         --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
         --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
-        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD"
+        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD" \
+        --set-string extraEnv[2].name=ZO_DATA_RETENTION_DAYS \
+        --set-string extraEnv[2].value="14" \
+        --set persistence.enabled=true \
+        --set persistence.storageClass=longhorn \
+        --set persistence.size=200Gi
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
       OO_AUTH_HEADER="Basic $OO_BASIC"

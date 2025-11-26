@@ -80,6 +80,7 @@ write_files:
       systemctl enable setup-hosts-dns.service
       systemctl start setup-hosts-dns.service
       systemctl enable --now mount-shared-storage.service
+      systemctl restart systemd-journald || true
       /usr/local/bin/setup-docker.sh
       /usr/local/bin/setup-fluentbit.sh
       /usr/local/bin/setup-rke2.sh
@@ -881,6 +882,8 @@ write_files:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
+        - "--container-log-max-size=10Mi"
+        - "--container-log-max-files=3"
       EOF
 
       sudo systemctl enable rke2-server
@@ -899,6 +902,15 @@ write_files:
       LimitNOFILE=1048576
       LimitNPROC=65536
       TasksMax=infinity
+
+  - path: /etc/systemd/journald.conf.d/99-retention.conf
+    permissions: '0644'
+    content: |
+      [Journal]
+      SystemMaxUse=2G
+      RuntimeMaxUse=500M
+      MaxRetentionSec=259200
+      SystemMaxFileSize=200M
 
   - path: /etc/systemd/system/rke2-server.service.d/override.conf
     permissions: '0644'

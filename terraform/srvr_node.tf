@@ -64,6 +64,9 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         VAULT_OIDC_CLIENT_ID = var.VAULT_OIDC_CLIENT_ID
         VAULT_OIDC_CLIENT_SECRET = var.VAULT_OIDC_CLIENT_SECRET
         KUBECTL_IMAGE_VERSION = var.k8s_base_version
+        CTRL_HOSTNAME = var.ctrl_hostname
+        ETCD_HOSTNAME = var.etcd_hostname
+        SRVR_HOSTNAME = var.srvr_hostname
       })
     file_name = "cloud_init_srvr.yaml"
   }
@@ -117,7 +120,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     interface    = "scsi0"           # ✅ Use SCSI for iothread support
     iothread     = true              # ✅ Improve I/O parallelism
     discard      = "on"
-    size         = 300
+    size         = 180
     file_format  = "raw"             # ✅ Best raw performance
     cache     = "unsafe"
   }

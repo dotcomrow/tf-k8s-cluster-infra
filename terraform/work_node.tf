@@ -132,9 +132,20 @@ resource "proxmox_virtual_environment_vm" "work_rancher_vm" {
     interface    = "scsi0"            # ✅ More efficient than virtio0
     iothread     = true               # ✅ Enable I/O thread for this disk
     discard      = "on"              # ✅ TRIM support
-    size         = 1065
+    size         = 180
     file_format  = "raw"              # ✅ Raw for speed
     cache     = "unsafe"
+  }
+
+  # Dedicated data disk for Longhorn payloads
+  disk {
+    datastore_id = var.VM_DISK_STORAGE
+    interface    = "scsi2"
+    iothread     = true
+    discard      = "on"
+    size         = 1200
+    file_format  = "raw"
+    cache        = "unsafe"
   }
 
   scsi_hardware = "virtio-scsi-single" # ✅ Optimal SCSI controller

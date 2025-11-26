@@ -42,6 +42,7 @@ packages:
   - ubuntu-drivers-common
   - dnsmasq
   - ethtool
+  - xfsprogs
 
 growpart:
   mode: auto
@@ -93,6 +94,8 @@ write_files:
 
       /usr/local/bin/setup-nfs-modules.sh
       systemctl enable --now mount-shared-storage.service
+      /usr/local/bin/setup-longhorn-disk.sh
+      systemctl restart systemd-journald || true
       /usr/local/bin/setup-docker.sh
       /usr/local/bin/setup-nvidia.sh
       /usr/local/bin/setup-fluentbit.sh
@@ -510,6 +513,49 @@ write_files:
       systemctl daemon-reload
       systemctl enable load-nfs-modules.service
 
+  - path: /usr/local/bin/setup-longhorn-disk.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Prepare and mount the dedicated Longhorn data disk at /var/lib/longhorn
+      set -euo pipefail
+
+      TARGET="/var/lib/longhorn"
+      mkdir -p "$TARGET"
+
+      ROOT_SRC=$(readlink -f "$(findmnt -n -o SOURCE /)")
+      ROOT_DISK=$(lsblk -no PKNAME "$ROOT_SRC" 2>/dev/null || true)
+
+      DATA_DISK=$(lsblk -ndo NAME,TYPE | awk -v root="$ROOT_DISK" '$2=="disk" && $1!=root {print $1; exit}')
+      if [ -z "$DATA_DISK" ]; then
+        echo "⚠️  No secondary data disk found; skipping Longhorn disk setup."
+        exit 0
+      fi
+
+      DEV="/dev/${DATA_DISK}"
+      MOUNTED=$(findmnt -rn -S "$DEV" -o TARGET 2>/dev/null || true)
+      if [ "$MOUNTED" != "" ] && [ "$MOUNTED" != "$TARGET" ]; then
+        echo "⚠️  $DEV already mounted on $MOUNTED; not remounting to $TARGET."
+        exit 0
+      fi
+
+      FSTYPE=$(blkid -s TYPE -o value "$DEV" 2>/dev/null || true)
+      if [ -z "$FSTYPE" ]; then
+        echo "🧹 Creating xfs filesystem on $DEV for Longhorn data..."
+        mkfs.xfs -f "$DEV"
+        FSTYPE="xfs"
+      fi
+
+      UUID=$(blkid -s UUID -o value "$DEV")
+      if ! grep -q "$TARGET" /etc/fstab; then
+        echo "UUID=$UUID $TARGET $FSTYPE defaults,noatime 0 2" >> /etc/fstab
+      fi
+
+      echo "⏫ Mounting $DEV to $TARGET..."
+      mount -a
+      chown -R root:root "$TARGET"
+      echo "✅ Longhorn data disk mounted at $TARGET"
+
   - path: /usr/local/bin/setup-docker.sh
     permissions: '0755'
     content: |
@@ -528,6 +574,15 @@ write_files:
 
       systemctl restart containerd
       systemctl enable containerd
+
+  - path: /etc/systemd/journald.conf.d/99-retention.conf
+    permissions: '0644'
+    content: |
+      [Journal]
+      SystemMaxUse=2G
+      RuntimeMaxUse=500M
+      MaxRetentionSec=259200
+      SystemMaxFileSize=200M
 
   - path: /etc/rancher/rke2/registries.yaml
     permissions: '0755'
@@ -743,6 +798,8 @@ write_files:
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
+        - "--container-log-max-size=10Mi"
+        - "--container-log-max-files=3"
       EOF
 
       sudo systemctl enable rke2-server
