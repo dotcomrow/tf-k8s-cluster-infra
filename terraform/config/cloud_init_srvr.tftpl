@@ -1299,7 +1299,20 @@ write_files:
       echo "📥 Installing Longhorn..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
 
+      # Wait for the Longhorn settings CRD before patching defaults
+      for i in {1..30}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get settings.longhorn.io default-replica-count >/dev/null 2>&1; then
+          break
+        fi
+        echo "⏳ Waiting for Longhorn settings to become available ($i/30)..."
+        sleep 10
+      done
+
+      echo "🔧 Forcing Longhorn default replica count to 1..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
+
+      echo "🔄 Recreating Longhorn StorageClasses with 1 replica..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete storageclass longhorn --ignore-not-found
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: storage.k8s.io/v1
