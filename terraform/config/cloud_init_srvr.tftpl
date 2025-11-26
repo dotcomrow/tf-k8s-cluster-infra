@@ -4603,9 +4603,14 @@ write_files:
       spec:
         chart: argo-cd
         repo: https://argoproj.github.io/argo-helm
-        version: 8.0.3
+        version: 9.1.4      # matches Argo CD v3.2.0
         targetNamespace: argocd
         valuesContent: |-
+          global:
+            image:
+              repository: quay.io/argoproj/argocd
+              tag: v3.2.0          # applies to controller/server/appset/dex/redis-ha
+
           server:
             service:
               type: ClusterIP
