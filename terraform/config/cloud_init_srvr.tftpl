@@ -1299,6 +1299,8 @@ write_files:
       echo "📥 Installing Longhorn..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
+
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
@@ -1339,8 +1341,6 @@ write_files:
       parameters:
         archiveOnDelete: "false"
       EOF
-
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
 
       echo "🚫 Disabling Longhorn scheduling on control/etcd/srvr nodes..."
       for NODE in ${CTRL_HOSTNAME} ${ETCD_HOSTNAME} ${SRVR_HOSTNAME}; do
