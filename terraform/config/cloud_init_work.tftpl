@@ -532,7 +532,7 @@ write_files:
         exit 0
       fi
 
-      DEV="/dev/${DATA_DISK}"
+      DEV="/dev/$DATA_DISK"
       MOUNTED=$(findmnt -rn -S "$DEV" -o TARGET 2>/dev/null || true)
       if [ "$MOUNTED" != "" ] && [ "$MOUNTED" != "$TARGET" ]; then
         echo "⚠️  $DEV already mounted on $MOUNTED; not remounting to $TARGET."
