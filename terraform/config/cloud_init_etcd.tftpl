@@ -94,6 +94,26 @@ write_files:
       systemctl enable qemu-guest-agent
       systemctl start qemu-guest-agent
       systemctl daemon-reload
+      /usr/local/bin/cleanup-install-services.sh
+
+  - path: /usr/local/bin/cleanup-install-services.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      INSTALL_SERVICES=(
+        initial-setup.service
+        setup-hosts-dns.service
+        rke2-preload-images.service
+      )
+
+      for svc in "${INSTALL_SERVICES[@]}"; do
+        if systemctl list-unit-files "$svc" >/dev/null 2>&1; then
+          systemctl disable "$svc" || true
+          systemctl reset-failed "$svc" || true
+        fi
+      done
       
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
