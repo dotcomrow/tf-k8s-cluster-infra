@@ -149,7 +149,7 @@ write_files:
         post-install.service
       )
 
-      for svc in "${INSTALL_SERVICES[@]}"; do
+      for svc in "$INSTALL_SERVICES[@]"; do
         if systemctl list-unit-files "$svc" >/dev/null 2>&1; then
           systemctl disable "$svc" || true
           systemctl reset-failed "$svc" || true
