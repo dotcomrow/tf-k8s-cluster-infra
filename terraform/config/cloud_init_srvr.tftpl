@@ -2441,7 +2441,7 @@ write_files:
               continue
             fi
 
-            HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
+            HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%http_code' \
               -H "Authorization: $OO_AUTH_HEADER" \
               -H "Content-Type: application/json" \
               --data-binary "@$TMP_JSON" \
