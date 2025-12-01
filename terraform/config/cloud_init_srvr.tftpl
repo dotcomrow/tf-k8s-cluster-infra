@@ -2207,6 +2207,8 @@ write_files:
           metadata:
             labels:
               app: otel-collector
+            annotations:
+              config.linkerd.io/opaque-ports: "4317,4318"
           spec:
             serviceAccountName: otel-collector
 
@@ -2280,16 +2282,18 @@ write_files:
         namespace: observability
         labels:
           app: otel-collector
+        annotations:
+          config.linkerd.io/opaque-ports: "4317,4318"
       spec:
         type: ClusterIP
         selector:
           app: otel-collector
         ports:
-          - name: grpc
+          - name: otlp-grpc
             port: 4317
             targetPort: 4317
             protocol: TCP
-          - name: http
+          - name: otlp-http
             port: 4318
             targetPort: 4318
             protocol: TCP
