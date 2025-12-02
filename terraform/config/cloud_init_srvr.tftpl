@@ -2434,7 +2434,7 @@ write_files:
 
             SANITIZED_NAME=$(printf '%s' "$DASH_FILE" | tr ' /' '__')
             TMP_JSON="/tmp/openobserve-dashboard-$SANITIZED_NAME"
-            RESPONSE_FILE="${TMP_JSON}.resp"
+            RESPONSE_FILE="$TMP_JSON.resp"
 
             if ! curl -fsSL "$DASH_URL" -o "$TMP_JSON"; then
               echo "⚠️  Failed to download dashboard: $FOLDER/$DASH_FILE"
