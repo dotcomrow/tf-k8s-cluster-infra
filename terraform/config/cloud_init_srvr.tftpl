@@ -2402,7 +2402,7 @@ write_files:
 
       echo "📊 Installing OpenObserve community dashboards..."
       OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
-      OO_DASHBOARD_API="http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/default/dashboards?folder=${OO_DASHBOARD_FOLDER}"
+      OO_DASHBOARD_API="http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/default/dashboards?folder=$OO_DASHBOARD_FOLDER"
       OO_DASHBOARD_LIST_SCRIPT=$'import json\nimport sys\nimport urllib.request\nimport urllib.parse\nfolder = sys.argv[1]\nencoded = urllib.parse.quote(folder, safe="")\nurl = f"https://api.github.com/repos/openobserve/dashboards/contents/{encoded}?ref=main"\ntry:\n    with urllib.request.urlopen(url) as resp:\n        data = json.load(resp)\nexcept Exception as exc:\n    sys.stderr.write(str(exc))\n    sys.exit(1)\nitems = []\nfor entry in data:\n    if entry.get("type") == "file" and entry.get("name", "").endswith(".dashboard.json"):\n        name = entry.get("name")\n        download_url = entry.get("download_url")\n        items.append(f"{name}|{download_url}")\nsys.stdout.write("\\n".join(items))\n'
 
       DASHBOARD_FOLDERS=(
