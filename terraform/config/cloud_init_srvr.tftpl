@@ -2443,11 +2443,14 @@ write_files:
               continue
             fi
 
-            HTTP_CODE=$(curl -sS -o "$RESPONSE_FILE" -w '%{http_code}' \
+            HEADER_FILE=$(mktemp)
+            curl -sS -D "$HEADER_FILE" -o "$RESPONSE_FILE" \
               -H "Authorization: $OO_AUTH_HEADER" \
               -H "Content-Type: application/json" \
               --data-binary "@$TMP_JSON" \
-              "$OO_DASHBOARD_API")
+              "$OO_DASHBOARD_API"
+            HTTP_CODE=$(awk 'NR==1 {print $2}' "$HEADER_FILE")
+            rm -f "$HEADER_FILE"
 
             if [[ "$HTTP_CODE" =~ ^20[01]$ ]]; then
               echo "✅ Imported dashboard '$FOLDER/$DASH_FILE' (HTTP $HTTP_CODE)"
