@@ -1475,6 +1475,11 @@ write_files:
       set -e
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
+      echo "🌐 Patching Rancher server URL to https://rancher.suncoast.systems ..."
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io server-url \
+        --type merge \
+        -p '{"value":"https://k8s-platform.suncoast.systems"}'
+
       echo "📦 Installing NGINX Ingress Controller..."
 
       # 1. Create your values.yaml inline
