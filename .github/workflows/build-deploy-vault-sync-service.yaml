@@ -40,3 +40,8 @@ jobs:
           cd src/vault-sync-svc
           docker push ghcr.io/${{ github.repository_owner }}/vault-sync-run-container:${{ steps.set-tag.outputs.tag }}
 
+      # Remove the locally built image to free runner disk space
+      - name: Clean up local Docker image
+        run: |
+          docker rmi ghcr.io/${{ github.repository_owner }}/vault-sync-run-container:${{ steps.set-tag.outputs.tag }} || true
+          docker image prune -f
