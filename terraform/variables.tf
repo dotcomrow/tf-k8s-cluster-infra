@@ -204,7 +204,7 @@ variable "JAEGER_GITHUB_AUTH_TEAM" {
 }
 
 variable "NFS_DRIVE_STORAGE" {
-  default = "200Gi"
+  default = "300Gi"
 }
 
 variable "LINODE_TOKEN" {
