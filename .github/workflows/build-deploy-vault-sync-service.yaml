@@ -47,6 +47,6 @@ jobs:
           
       - name: Prune old images for this repo
         run: |
-          docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
-            | awk '/^ghcr.io\/${{ github.repository_owner }}\/vault-sync-run-container:/ {print $2}' \
+          docker images ghcr.io/${{ github.repository_owner }}/vault-sync-run-container --format '{{.ID}} {{.Tag}}' \
+            | awk '$2=="<none>" {print $1}' \
             | xargs -r docker rmi
