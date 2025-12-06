@@ -44,4 +44,7 @@ jobs:
       - name: Clean up local Docker image
         run: |
           docker rmi ghcr.io/${{ github.repository_owner }}/vault-sync-run-container:${{ steps.set-tag.outputs.tag }} || true
-          docker image prune -f
+          
+      - name: Prune old images for this repo
+        run: |
+          docker image prune -a -f --filter="reference=ghcr.io/${{ github.repository_owner }}/vault-sync-run-container:*"
