@@ -1972,7 +1972,7 @@ write_files:
         --set-string extraEnv[2].name=ZO_DATA_RETENTION_DAYS \
         --set-string extraEnv[2].value="14" \
         --set persistence.enabled=true \
-        --set persistence.storageClass=longhorn \
+        --set persistence.storageClass=nfs-client \
         --set persistence.size=200Gi
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
