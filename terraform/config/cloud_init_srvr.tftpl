@@ -1924,7 +1924,6 @@ write_files:
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       # 5) install openobserve
-
       # Generate random username and password
       export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)@suncoast.systems"
       export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
@@ -2160,7 +2159,8 @@ write_files:
 
           processors:
             memory_limiter:
-              # Choose either percentages OR MiB. Here we use percentages.
+              # Using percentages so this scales with pod limit.
+              # With a 512Mi limit, 75% ~= 384Mi, giving ~50% headroom over your current ~220Mi usage.
               limit_percentage: 75
               spike_limit_percentage: 25
               check_interval: 5s
@@ -2178,6 +2178,15 @@ write_files:
                 stream-name: default
               tls:
                 insecure: true
+              sending_queue:
+                enabled: true
+                num_consumers: 4
+                queue_size: 5000
+              retry_on_failure:
+                enabled: true
+                initial_interval: 5s
+                max_interval: 30s
+                max_elapsed_time: 300s
             debug:
               verbosity: detailed
 
@@ -2271,11 +2280,11 @@ write_files:
                     readOnly: true
                 resources:
                   requests:
-                    cpu: 100m
-                    memory: 128Mi
-                  limits:
-                    cpu: 500m
+                    cpu: 250m
                     memory: 256Mi
+                  limits:
+                    cpu: "1"
+                    memory: 512Mi
                 securityContext:
                   runAsNonRoot: true
                   allowPrivilegeEscalation: false
@@ -2403,6 +2412,31 @@ write_files:
           - name: http
             port: 80
             targetPort: 4180
+      ---
+      # Linkerd policy fixes for prometheus-admin access from otel-collector
+      apiVersion: policy.linkerd.io/v1alpha1
+      kind: MeshTLSAuthentication
+      metadata:
+        name: otel-collector-mtls
+        namespace: linkerd-viz
+      spec:
+        identities:
+          - "otel-collector.observability.serviceaccount.identity.linkerd.cluster.local"
+      ---
+      apiVersion: policy.linkerd.io/v1alpha1
+      kind: AuthorizationPolicy
+      metadata:
+        name: prometheus-admin-otel-collector
+        namespace: linkerd-viz
+      spec:
+        targetRef:
+          group: policy.linkerd.io
+          kind: Server
+          name: prometheus-admin
+        requiredAuthenticationRefs:
+          - group: policy.linkerd.io
+            kind: MeshTLSAuthentication
+            name: otel-collector-mtls
       EOF
 
       echo "📊 Installing OpenObserve community dashboards..."
