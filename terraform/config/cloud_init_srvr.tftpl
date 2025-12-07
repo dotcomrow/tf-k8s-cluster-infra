@@ -1791,15 +1791,23 @@ write_files:
 
       echo "⏳ Waiting for Rancher to register 'linodecredentialConfig' schema..."
       get_rancher_token() {
-        local password
-        password=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
-          -o jsonpath='{.data.bootstrapPassword}' | base64 -d | tr -d '\n')
+        local password token
         for i in {1..30}; do
+          # Wait for bootstrap secret to exist and read its password
+          if ! password=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get secret bootstrap-secret \
+            -o jsonpath='{.data.bootstrapPassword}' 2>/dev/null | base64 -d | tr -d '\n'); then
+            echo "🔄 Waiting for bootstrap-secret to be available ($i/30)..."
+            sleep 10
+            continue
+          fi
+
+          # Try to exchange for a token; ignore jq parse errors and keep retrying
           token=$(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
             -H 'Content-Type: application/json' \
             -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-            -d "{\"username\":\"admin\",\"password\":\"$password\"}" \
-            2>/dev/null | jq -r '.token // empty' 2>/dev/null)
+            -d "{\"username\":\"admin\",\"password\":\"$password\"}" 2>/dev/null \
+            | jq -r '.token // empty' 2>/dev/null || true)
+
           if [[ -n "$token" ]]; then
             echo "$token"
             return 0
