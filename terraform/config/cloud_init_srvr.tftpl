@@ -1805,25 +1805,25 @@ write_files:
 
           svc_ip=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get svc rancher -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
           if [[ -n "$svc_ip" ]]; then
-            login_url="https://${svc_ip}/v3-public/localProviders/local?action=login"
+            login_url="https://$svc_ip/v3-public/localProviders/local?action=login"
           else
             login_url="https://10.0.0.110/v3-public/localProviders/local?action=login"
           fi
 
           # Try to exchange for a token; ignore jq parse errors and keep retrying
           echo "🔑 Requesting Rancher token (attempt $i)..."
-          http_status=$(curl -sk -w '%{http_code}' -o /tmp/rancher-login.json "$login_url" \
+          curl -sk -D /tmp/rancher-login.headers -o /tmp/rancher-login.json "$login_url" \
             -H 'Content-Type: application/json' \
             -H "Host: rancher.cattle-system.svc" \
-            -d "{\"username\":\"admin\",\"password\":\"$password\"}" 2>/dev/null \
-            || true)
+            -d "{\"username\":\"admin\",\"password\":\"$password\"}" 2>/dev/null || true
+          http_status=$(awk 'NR==1 {print $2}' /tmp/rancher-login.headers 2>/dev/null || true)
           token=$(jq -r '.token // empty' /tmp/rancher-login.json 2>/dev/null || true)
 
           if [[ -n "$token" ]]; then
             echo "$token"
             return 0
           fi
-          echo "⚠️  Token empty on attempt $i (HTTP ${http_status:-?}); body: $(head -c 120 /tmp/rancher-login.json 2>/dev/null)"
+          echo "⚠️  Token empty on attempt $i (HTTP $http_status); body: $(head -c 120 /tmp/rancher-login.json 2>/dev/null)"
           sleep 10
         done
         return 1
