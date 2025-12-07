@@ -1567,6 +1567,11 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
         --cert=tls.crt --key=tls.key
 
+      echo "📜 Installing Rancher CRDs..."
+      sudo helm upgrade --install rancher-crd rancher-stable/rancher-crd \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --namespace cattle-system
+
       sudo helm upgrade --install rancher rancher-stable/rancher \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace cattle-system \
