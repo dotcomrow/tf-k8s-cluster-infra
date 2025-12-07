@@ -1475,11 +1475,6 @@ write_files:
       set -e
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
-      echo "🌐 Patching Rancher server URL to https://rancher.suncoast.systems ..."
-      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io server-url \
-        --type merge \
-        -p '{"value":"https://k8s-platform.suncoast.systems"}'
-
       echo "📦 Installing NGINX Ingress Controller..."
 
       # 1. Create your values.yaml inline
@@ -1581,6 +1576,41 @@ write_files:
         --set ingress.enabled=true 
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=8000s deployment/rancher -n cattle-system
+
+      echo "🌐 Patching Rancher server URL to https://k8s-platform.suncoast.systems ..."
+      # Wait for the settings CRD to be registered, then patch with retries
+      SETTINGS_READY=false
+      for i in {1..30}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml api-resources | grep -q '^settings.management.cattle.io'; then
+          SETTINGS_READY=true
+          break
+        fi
+        echo "⏳ Waiting for settings.management.cattle.io to be ready ($i/30)..."
+        sleep 10
+      done
+
+      if [[ "$SETTINGS_READY" != true ]]; then
+        echo "❌ settings.management.cattle.io CRD not ready after waiting."
+        exit 1
+      fi
+
+      PATCHED=false
+      for i in {1..20}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch settings.management.cattle.io server-url \
+          --type merge \
+          -p '{"value":"https://k8s-platform.suncoast.systems"}'; then
+          echo "✅ Rancher server URL patched"
+          PATCHED=true
+          break
+        fi
+        echo "🔄 Retry patching Rancher server URL ($i/20)..."
+        sleep 10
+      done
+
+      if [[ "$PATCHED" != true ]]; then
+        echo "❌ Failed to patch Rancher server URL after multiple attempts."
+        exit 1
+      fi
 
       cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
