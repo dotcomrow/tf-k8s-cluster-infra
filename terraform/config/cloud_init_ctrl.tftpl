@@ -555,7 +555,7 @@ write_files:
       containerd config default > /etc/containerd/config.toml
 
       sudo apt install python3-pip -y
-      sudo pip install tomlkit
+      sudo apt install python3-tomlkit
       sudo python3 /usr/local/bin/patch.py
 
       systemctl restart containerd
