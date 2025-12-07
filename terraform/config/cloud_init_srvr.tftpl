@@ -1813,7 +1813,7 @@ write_files:
       TOKEN="$(get_rancher_token)" || { echo "❌ Failed to obtain Rancher token"; exit 1; }
 
       until curl -sk \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Authorization: Bearer $TOKEN" \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         https://10.0.0.110/v3/schemas | grep -q linodecredentialConfig; do
         echo "🔄 Waiting for linodecredentialConfig schema..."
@@ -1823,7 +1823,7 @@ write_files:
 
       echo "📥 Installing Linode token..."
       curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Authorization: Bearer $TOKEN" \
         -H 'Content-Type: application/json' \
         -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
         -d "{
