@@ -1581,16 +1581,19 @@ write_files:
       # Wait for the settings CRD to be registered, then patch with retries
       SETTINGS_READY=false
       for i in {1..30}; do
-        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml api-resources | grep -q '^settings.management.cattle.io'; then
-          SETTINGS_READY=true
-          break
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get crd settings.management.cattle.io >/dev/null 2>&1; then
+          # Ensure the API is actually served and the Setting resource is reachable
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get settings.management.cattle.io server-url >/dev/null 2>&1; then
+            SETTINGS_READY=true
+            break
+          fi
         fi
-        echo "⏳ Waiting for settings.management.cattle.io to be ready ($i/30)..."
+        echo "⏳ Waiting for Rancher settings CRD/API to be ready ($i/30)..."
         sleep 10
       done
 
       if [[ "$SETTINGS_READY" != true ]]; then
-        echo "❌ settings.management.cattle.io CRD not ready after waiting."
+        echo "❌ settings.management.cattle.io CRD/API not ready after waiting."
         exit 1
       fi
 
