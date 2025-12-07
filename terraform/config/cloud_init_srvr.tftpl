@@ -1798,7 +1798,7 @@ write_files:
           token=$(curl -sk "https://10.0.0.110/v3-public/localProviders/local?action=login" \
             -H 'Content-Type: application/json' \
             -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-            -d "{\"username\":\"admin\",\"password\":\"${password}\"}" \
+            -d "{\"username\":\"admin\",\"password\":\"$password\"}" \
             2>/dev/null | jq -r '.token // empty' 2>/dev/null)
           if [[ -n "$token" ]]; then
             echo "$token"
