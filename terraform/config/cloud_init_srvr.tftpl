@@ -1567,11 +1567,6 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
         --cert=tls.crt --key=tls.key
 
-      echo "📜 Installing Rancher CRDs..."
-      sudo helm upgrade --install rancher-crd rancher-stable/rancher-crd \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --namespace cattle-system
-
       sudo helm upgrade --install rancher rancher-stable/rancher \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace cattle-system \
@@ -1585,15 +1580,15 @@ write_files:
       echo "🌐 Patching Rancher server URL to https://k8s-platform.suncoast.systems ..."
       # Wait for the settings CRD to be registered, then patch with retries
       SETTINGS_READY=false
-      for i in {1..30}; do
+      for i in {1..60}; do
         if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get crd settings.management.cattle.io >/dev/null 2>&1; then
           # Ensure the API is actually served and the Setting resource is reachable
-          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get settings.management.cattle.io server-url >/dev/null 2>&1; then
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get --raw /apis/management.cattle.io/v3/settings/server-url >/dev/null 2>&1; then
             SETTINGS_READY=true
             break
           fi
         fi
-        echo "⏳ Waiting for Rancher settings CRD/API to be ready ($i/30)..."
+        echo "⏳ Waiting for Rancher settings CRD/API to be ready ($i/60)..."
         sleep 10
       done
 
