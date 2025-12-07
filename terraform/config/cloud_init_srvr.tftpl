@@ -1835,7 +1835,7 @@ write_files:
       SCHEMA_URL="https://10.0.0.110/v3/schemas"
       svc_ip=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get svc rancher -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
       if [[ -n "$svc_ip" ]]; then
-        SCHEMA_URL="https://${svc_ip}/v3/schemas"
+        SCHEMA_URL="https://$svc_ip/v3/schemas"
       fi
 
       until curl -sk \
@@ -1850,10 +1850,10 @@ write_files:
       echo "📥 Installing Linode token..."
       API_BASE="https://10.0.0.110"
       if [[ -n "$svc_ip" ]]; then
-        API_BASE="https://${svc_ip}"
+        API_BASE="https://$svc_ip"
       fi
 
-      curl -sk -X POST "${API_BASE}/v3/cloudcredentials" \
+      curl -sk -X POST "$API_BASE/v3/cloudcredentials" \
         -H "Authorization: Bearer $TOKEN" \
         -H 'Content-Type: application/json' \
         -H "Host: rancher.cattle-system.svc" \
