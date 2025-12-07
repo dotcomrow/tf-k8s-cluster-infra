@@ -1831,20 +1831,32 @@ write_files:
 
       TOKEN="$(get_rancher_token)" || { echo "❌ Failed to obtain Rancher token"; exit 1; }
 
+      # Prefer service ClusterIP for schema check to avoid ingress timing issues
+      SCHEMA_URL="https://10.0.0.110/v3/schemas"
+      svc_ip=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system get svc rancher -o jsonpath='{.spec.clusterIP}' 2>/dev/null || true)
+      if [[ -n "$svc_ip" ]]; then
+        SCHEMA_URL="https://${svc_ip}/v3/schemas"
+      fi
+
       until curl -sk \
         -H "Authorization: Bearer $TOKEN" \
-        -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
-        https://10.0.0.110/v3/schemas | grep -q linodecredentialConfig; do
+        -H "Host: rancher.cattle-system.svc" \
+        "$SCHEMA_URL" | grep -q linodecredentialConfig; do
         echo "🔄 Waiting for linodecredentialConfig schema..."
         sleep 60
       done
       echo "✅ 'linodecredentialConfig' schema registered."
 
       echo "📥 Installing Linode token..."
-      curl -sk -X POST "https://10.0.0.110/v3/cloudcredentials" \
+      API_BASE="https://10.0.0.110"
+      if [[ -n "$svc_ip" ]]; then
+        API_BASE="https://${svc_ip}"
+      fi
+
+      curl -sk -X POST "${API_BASE}/v3/cloudcredentials" \
         -H "Authorization: Bearer $TOKEN" \
         -H 'Content-Type: application/json' \
-        -H "Host: ${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}" \
+        -H "Host: rancher.cattle-system.svc" \
         -d "{
           \"name\": \"suncoast-systems-dotcomrow-credential\",
           \"type\": \"cloudCredential\",
