@@ -1968,8 +1968,7 @@ write_files:
         --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
         --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
         --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD" \
-        --set-string extraEnv[2].name=ZO_DATA_RETENTION_DAYS \
-        --set-string extraEnv[2].value="14" \
+        --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set persistence.enabled=true \
         --set persistence.storageClass=nfs-client \
         --set persistence.size=200Gi
