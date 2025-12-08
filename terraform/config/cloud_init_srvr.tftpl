@@ -2030,6 +2030,7 @@ write_files:
       sudo helm repo update
       sudo sudo helm upgrade --install openobserve openobserve/openobserve-standalone \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        --timeout 2h \
         --wait \
         -n openobserve \
         --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
