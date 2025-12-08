@@ -1811,7 +1811,6 @@ write_files:
           fi
 
           # Try to exchange for a token; ignore jq parse errors and keep retrying
-          echo "🔑 Requesting Rancher token (attempt $i)..."
           curl -sk -D /tmp/rancher-login.headers -o /tmp/rancher-login.json "$login_url" \
             -H 'Content-Type: application/json' \
             -H "Host: rancher.cattle-system.svc" \
