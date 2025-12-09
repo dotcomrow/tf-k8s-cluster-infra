@@ -2264,7 +2264,8 @@ write_files:
 
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      # Keep Linkerd off by default in openobserve to avoid blocking CNPG init Jobs; opt-in per component via pod annotations.
+      sudo kubectl annotate namespace openobserve linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
@@ -2296,6 +2297,11 @@ write_files:
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
+        --set-string 'podAnnotations.ingester.linkerd\.io/inject=enabled' \
+        --set-string 'podAnnotations.querier.linkerd\.io/inject=enabled' \
+        --set-string 'podAnnotations.compactor.linkerd\.io/inject=enabled' \
+        --set-string 'podAnnotations.router.linkerd\.io/inject=enabled' \
+        --set-string 'podAnnotations.alertmanager.linkerd\.io/inject=enabled' \
         --set-string ingester.persistence.storageClass=nfs-client \
         --set-string ingester.persistence.size=200Gi \
         --set-string querier.persistence.storageClass=nfs-client \
