@@ -2810,12 +2810,74 @@ write_files:
       if [[ -z "$OO_AUTH_HEADER" ]]; then
         echo "⚠️  OO_AUTH_HEADER is empty; skipping dashboard import."
       else
-        DASHBOARD_FOLDERS_B64="$(printf '%s' "$DASHBOARD_FOLDERS" | base64 | tr -d '\r\n')"
+        DASHBOARD_FOLDERS=$(cat <<'EOF'
+          Kubernetes(kube-prometheus-stack)
+          Kubernetes(openobserve-collector)
+          NVIDIA GPU Monitoring
+        EOF
+        )
+        DASHBOARD_FOLDERS_B64=$(printf '%s' "$DASHBOARD_FOLDERS" | base64 | tr -d '\r\n')
+
+        # run import in-cluster
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
           --image=python:3-alpine \
           --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
           --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
-          -- /bin/sh -c "cat <<'PY' | python -\nimport base64, json, os, sys, urllib.parse, urllib.request\n\nauth = os.environ.get('OO_AUTH_HEADER')\nfolders_raw = os.environ.get('OO_DASHBOARD_FOLDERS_B64', '')\nif not auth:\n    sys.exit('missing OO_AUTH_HEADER')\ntry:\n    folders_text = base64.b64decode(folders_raw).decode()\nexcept Exception as exc:\n    sys.exit(f'unable to decode folders list: {exc}')\nfolders = [f.strip() for f in folders_text.splitlines() if f.strip()]\nrepo_base = 'https://api.github.com/repos/openobserve/dashboards/contents/'\ntarget_folder = urllib.parse.quote('default', safe='')\ntarget_url = f'http://openobserve-router:5080/api/default/dashboards?folder={target_folder}'\nheaders = {'Authorization': auth, 'Content-Type': 'application/json'}\n\ndef fetch_json(url):\n    with urllib.request.urlopen(url) as resp:\n        return json.load(resp)\n\ndef fetch_bytes(url):\n    with urllib.request.urlopen(url) as resp:\n        return resp.read()\n\nsuccess = 0\nfor folder in folders:\n    encoded_folder = urllib.parse.quote(folder, safe='() ')\n    list_url = f\"{repo_base}{encoded_folder}?ref=main\"\n    try:\n        entries = fetch_json(list_url)\n    except Exception as exc:\n        print(f\"❌ List failed for {folder}: {exc}\", file=sys.stderr)\n        continue\n    for entry in entries:\n        if entry.get('type') != 'file':\n            continue\n        name = entry.get('name', '')\n        if not name.endswith('.dashboard.json'):\n            continue\n        download_url = entry.get('download_url')\n        if not download_url:\n            continue\n        try:\n            payload = fetch_bytes(download_url)\n            req = urllib.request.Request(target_url, data=payload, headers=headers, method='POST')\n            with urllib.request.urlopen(req) as resp:\n                print(f\"✅ {folder}/{name} -> HTTP {resp.status}\")\n                success += 1\n        except Exception as exc:\n            print(f\"❌ Import failed {folder}/{name}: {exc}\", file=sys.stderr)\nprint(f\"Total imported: {success}\")\nPY"
+          -- /bin/sh <<'EOF'
+        cat <<'PY' | python -
+        import base64, json, os, sys, urllib.parse, urllib.request
+
+        auth = os.environ.get('OO_AUTH_HEADER')
+        folders_raw = os.environ.get('OO_DASHBOARD_FOLDERS_B64', '')
+        if not auth:
+            sys.exit('missing OO_AUTH_HEADER')
+        try:
+            folders_text = base64.b64decode(folders_raw).decode()
+        except Exception as exc:
+            sys.exit(f'unable to decode folders list: {exc}')
+        folders = [f.strip() for f in folders_text.splitlines() if f.strip()]
+        repo_base = 'https://api.github.com/repos/openobserve/dashboards/contents/'
+        target_folder = urllib.parse.quote('default', safe='')
+        target_url = f'http://openobserve-router:5080/api/default/dashboards?folder={target_folder}'
+        headers = {'Authorization': auth, 'Content-Type': 'application/json'}
+
+        def fetch_json(url):
+            with urllib.request.urlopen(url) as resp:
+                return json.load(resp)
+
+        def fetch_bytes(url):
+            with urllib.request.urlopen(url) as resp:
+                return resp.read()
+
+        success = 0
+        for folder in folders:
+            encoded_folder = urllib.parse.quote(folder, safe='() ')
+            list_url = f"{repo_base}{encoded_folder}?ref=main"
+            try:
+                entries = fetch_json(list_url)
+            except Exception as exc:
+                print(f"❌ List failed for {folder}: {exc}", file=sys.stderr)
+                continue
+            for entry in entries:
+                if entry.get('type') != 'file':
+                    continue
+                name = entry.get('name', '')
+                if not name.endswith('.dashboard.json'):
+                    continue
+                download_url = entry.get('download_url')
+                if not download_url:
+                    continue
+                try:
+                    payload = fetch_bytes(download_url)
+                    req = urllib.request.Request(target_url, data=payload, headers=headers, method='POST')
+                    with urllib.request.urlopen(req) as resp:
+                        print(f"✅ {folder}/{name} -> HTTP {resp.status}")
+                        success += 1
+                except Exception as exc:
+                    print(f"❌ Import failed {folder}/{name}: {exc}", file=sys.stderr)
+        print(f"Total imported: {success}")
+        PY
+        EOF
       fi
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
