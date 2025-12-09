@@ -2805,61 +2805,17 @@ write_files:
         OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
       fi
 
-      OO_DASHBOARD_API="http://openobserve-openobserve-router.openobserve.svc.cluster.local:5080/api/default/dashboards?folder=$OO_DASHBOARD_FOLDER"
-      OO_DASHBOARD_LIST_SCRIPT=$'import json\nimport sys\nimport urllib.request\nimport urllib.parse\nfolder = sys.argv[1]\nencoded = urllib.parse.quote(folder, safe="")\nurl = f"https://api.github.com/repos/openobserve/dashboards/contents/{encoded}?ref=main"\ntry:\n    with urllib.request.urlopen(url) as resp:\n        data = json.load(resp)\nexcept Exception as exc:\n    sys.stderr.write(str(exc))\n    sys.exit(1)\nitems = []\nfor entry in data:\n    if entry.get("type") == "file" and entry.get("name", "").endswith(".dashboard.json"):\n        name = entry.get("name")\n        download_url = entry.get("download_url")\n        items.append(f"{name}|{download_url}")\nsys.stdout.write("\\n".join(items))\n'
-
       DASHBOARD_FOLDERS=$'Kubernetes(kube-prometheus-stack)\nKubernetes(openobserve-collector)\nNVIDIA GPU Monitoring'
 
       if [[ -z "$OO_AUTH_HEADER" ]]; then
         echo "⚠️  OO_AUTH_HEADER is empty; skipping dashboard import."
-      elif ! command -v python3 >/dev/null 2>&1; then
-        echo "⚠️  python3 not available; cannot encode dashboard paths."
       else
-        printf '%s\n' "$DASHBOARD_FOLDERS" | while IFS= read -r FOLDER; do
-          [[ -z "$FOLDER" ]] && continue
-          echo "📁 Syncing dashboards from '$FOLDER'..."
-
-          if ! DASHBOARD_LIST=$(python3 -c "$OO_DASHBOARD_LIST_SCRIPT" "$FOLDER" 2>&1); then
-            echo "❌ Failed to list dashboards in '$FOLDER': $DASHBOARD_LIST"
-            continue
-          fi
-
-          if [[ -z "$DASHBOARD_LIST" ]]; then
-            echo "ℹ️  No dashboards found in '$FOLDER'."
-            continue
-          fi
-
-          while IFS='|' read -r DASH_FILE DASH_URL; do
-            [[ -z "$DASH_FILE" || -z "$DASH_URL" ]] && continue
-
-            SANITIZED_NAME=$(printf '%s' "$DASH_FILE" | tr ' /' '__')
-            TMP_JSON="/tmp/openobserve-dashboard-$SANITIZED_NAME"
-            RESPONSE_FILE="$TMP_JSON.resp"
-
-            if ! curl -fsSL "$DASH_URL" -o "$TMP_JSON"; then
-              echo "⚠️  Failed to download dashboard: $FOLDER/$DASH_FILE"
-              continue
-            fi
-
-            HEADER_FILE=$(mktemp)
-            curl -sS -D "$HEADER_FILE" -o "$RESPONSE_FILE" \
-              -H "Authorization: $OO_AUTH_HEADER" \
-              -H "Content-Type: application/json" \
-              --data-binary "@$TMP_JSON" \
-              "$OO_DASHBOARD_API"
-            HTTP_CODE=$(awk 'NR==1 {print $2}' "$HEADER_FILE")
-            rm -f "$HEADER_FILE"
-
-            if [[ "$HTTP_CODE" =~ ^20[01]$ ]]; then
-              echo "✅ Imported dashboard '$FOLDER/$DASH_FILE' (HTTP $HTTP_CODE)"
-            elif grep -qi "already exists" "$RESPONSE_FILE"; then
-              echo "ℹ️  Dashboard '$FOLDER/$DASH_FILE' already exists; skipping"
-            else
-              echo "❌ Failed to import dashboard '$FOLDER/$DASH_FILE' (HTTP $HTTP_CODE)"
-              cat "$RESPONSE_FILE"
-            fi
-          done <<< "$DASHBOARD_LIST"
-        done
+        DASHBOARD_FOLDERS_B64="$(printf '%s' "$DASHBOARD_FOLDERS" | base64 | tr -d '\r\n')"
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
+          --image=python:3-alpine \
+          --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+          --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
+          -- /bin/sh -c "python - <<'PY'\nimport base64, json, os, sys, urllib.parse, urllib.request\n\nauth = os.environ.get('OO_AUTH_HEADER')\nfolders_raw = os.environ.get('OO_DASHBOARD_FOLDERS_B64', '')\nif not auth:\n    sys.exit('missing OO_AUTH_HEADER')\ntry:\n    folders_text = base64.b64decode(folders_raw).decode()\nexcept Exception as exc:\n    sys.exit(f'unable to decode folders list: {exc}')\nfolders = [f.strip() for f in folders_text.splitlines() if f.strip()]\nrepo_base = 'https://api.github.com/repos/openobserve/dashboards/contents/'\ntarget_folder = urllib.parse.quote('default', safe='')\ntarget_url = f'http://openobserve-router:5080/api/default/dashboards?folder={target_folder}'\nheaders = {'Authorization': auth, 'Content-Type': 'application/json'}\n\ndef fetch_json(url):\n    with urllib.request.urlopen(url) as resp:\n        return json.load(resp)\n\ndef fetch_bytes(url):\n    with urllib.request.urlopen(url) as resp:\n        return resp.read()\n\nsuccess = 0\nfor folder in folders:\n    encoded_folder = urllib.parse.quote(folder, safe='() ')\n    list_url = f\"{repo_base}{encoded_folder}?ref=main\"\n    try:\n        entries = fetch_json(list_url)\n    except Exception as exc:\n        print(f\"❌ List failed for {folder}: {exc}\", file=sys.stderr)\n        continue\n    for entry in entries:\n        if entry.get('type') != 'file':\n            continue\n        name = entry.get('name', '')\n        if not name.endswith('.dashboard.json'):\n            continue\n        download_url = entry.get('download_url')\n        if not download_url:\n            continue\n        try:\n            payload = fetch_bytes(download_url)\n            req = urllib.request.Request(target_url, data=payload, headers=headers, method='POST')\n            with urllib.request.urlopen(req) as resp:\n                print(f\"✅ {folder}/{name} -> HTTP {resp.status}\")\n                success += 1\n        except Exception as exc:\n            print(f\"❌ Import failed {folder}/{name}: {exc}\", file=sys.stderr)\nprint(f\"Total imported: {success}\")\nPY"
       fi
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
