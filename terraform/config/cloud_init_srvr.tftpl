@@ -2231,6 +2231,9 @@ write_files:
       # Generate random username and password
       export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)@suncoast.systems"
       export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
+      export OPENOBSERVE_PG_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
+      export OPENOBSERVE_MINIO_USER="oo$(openssl rand -hex 4)"
+      export OPENOBSERVE_MINIO_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
 
       echo "🏗️ Installing OpenObserve..."
       RETRIES=5
@@ -2263,20 +2266,41 @@ write_files:
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
+      echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
+
       sudo helm repo update
-      sudo sudo helm upgrade --install openobserve openobserve/openobserve-standalone \
+      sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --timeout 2h \
         --wait \
         -n openobserve \
-        --set-string extraEnv[0].name=ZO_ROOT_USER_EMAIL \
-        --set-string extraEnv[0].value="$OPENOBSERVE_USERNAME" \
-        --set-string extraEnv[1].name=ZO_ROOT_USER_PASSWORD \
-        --set-string extraEnv[1].value="$OPENOBSERVE_PASSWORD" \
+        --set enterprise.enabled=false \
+        --set minio.enabled=true \
+        --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
+        --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
+        --set-string minio.mode=standalone \
+        --set minio.replicas=1 \
+        --set-string minio.persistence.storageClass=nfs-client \
+        --set-string minio.persistence.size=200Gi \
+        --set-string minio.buckets[0].name=openobserve \
+        --set-string minio.buckets[0].policy=none \
+        --set minio.buckets[0].purge=false \
+        --set-string auth.ZO_ROOT_USER_EMAIL="$OPENOBSERVE_USERNAME" \
+        --set-string auth.ZO_ROOT_USER_PASSWORD="$OPENOBSERVE_PASSWORD" \
+        --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:${OPENOBSERVE_PG_PASSWORD}@openobserve-openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
+        --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:${OPENOBSERVE_PG_PASSWORD}@openobserve-openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
+        --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
-        --set persistence.enabled=true \
-        --set persistence.storageClass=nfs-client \
-        --set persistence.size=200Gi
+        --set-string config.ZO_S3_BUCKET_NAME=openobserve \
+        --set-string ingester.persistence.storageClass=nfs-client \
+        --set-string ingester.persistence.size=200Gi \
+        --set-string querier.persistence.storageClass=nfs-client \
+        --set-string querier.persistence.size=200Gi \
+        --set-string alertmanager.persistence.storageClass=nfs-client \
+        --set-string alertmanager.persistence.size=200Gi \
+        --set-string nats.config.jetstream.fileStore.pvc.storageClassName=nfs-client \
+        --set-string nats.config.jetstream.fileStore.pvc.size=50Gi
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
       OO_AUTH_HEADER="Basic $OO_BASIC"
@@ -2475,7 +2499,7 @@ write_files:
 
           exporters:
             otlp/openobserve:
-              endpoint: openobserve-openobserve-standalone.openobserve.svc.cluster.local:5081
+              endpoint: openobserve-openobserve-router.openobserve.svc.cluster.local:5081
               headers:
                 Authorization: __AUTH_HEADER__
                 organization: default
@@ -2630,7 +2654,7 @@ write_files:
             upstreams:
               - id: oo
                 path: /
-                uri: http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080
+                uri: http://openobserve-openobserve-router.openobserve.svc.cluster.local:5080
 
           providers:
             - id: github
@@ -2750,7 +2774,7 @@ write_files:
         OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
       fi
 
-      OO_DASHBOARD_API="http://openobserve-openobserve-standalone.openobserve.svc.cluster.local:5080/api/default/dashboards?folder=$OO_DASHBOARD_FOLDER"
+      OO_DASHBOARD_API="http://openobserve-openobserve-router.openobserve.svc.cluster.local:5080/api/default/dashboards?folder=$OO_DASHBOARD_FOLDER"
       OO_DASHBOARD_LIST_SCRIPT=$'import json\nimport sys\nimport urllib.request\nimport urllib.parse\nfolder = sys.argv[1]\nencoded = urllib.parse.quote(folder, safe="")\nurl = f"https://api.github.com/repos/openobserve/dashboards/contents/{encoded}?ref=main"\ntry:\n    with urllib.request.urlopen(url) as resp:\n        data = json.load(resp)\nexcept Exception as exc:\n    sys.stderr.write(str(exc))\n    sys.exit(1)\nitems = []\nfor entry in data:\n    if entry.get("type") == "file" and entry.get("name", "").endswith(".dashboard.json"):\n        name = entry.get("name")\n        download_url = entry.get("download_url")\n        items.append(f"{name}|{download_url}")\nsys.stdout.write("\\n".join(items))\n'
 
       DASHBOARD_FOLDERS=$'Kubernetes(kube-prometheus-stack)\nKubernetes(openobserve-collector)\nNVIDIA GPU Monitoring'
