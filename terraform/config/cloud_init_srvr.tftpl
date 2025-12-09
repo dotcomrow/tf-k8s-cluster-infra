@@ -2276,8 +2276,6 @@ write_files:
       sudo helm repo update
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --timeout 2h \
-        --wait \
         -n openobserve \
         --set enterprise.enabled=false \
         --set minio.enabled=true \
@@ -2315,17 +2313,24 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-minio --timeout=120s
 
       MINIO_USER=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
-        get secret openobserve-minio -o jsonpath='{.data.rootUser}' | base64 -d)
+          get secret openobserve-minio -o jsonpath='{.data.rootUser}' | base64 -d)
       MINIO_PASS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
         get secret openobserve-minio -o jsonpath='{.data.rootPassword}' | base64 -d)
 
       # create bucket using mc image (idempotent with -p)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run minio-mc --rm -i --restart=Never \
-        --image quay.io/minio/mc --command -- /bin/sh -c "
-          mc alias set local http://openobserve-minio:9000 \"$MINIO_USER\" \"$MINIO_PASS\" >/dev/null &&
-          mc mb -p local/openobserve &&
-          mc ls local
-        "
+          --image quay.io/minio/mc --command -- /bin/sh -c "
+            mc alias set local http://openobserve-minio:9000 \"$MINIO_USER\" \"$MINIO_PASS\" >/dev/null &&
+            mc mb -p local/openobserve &&
+            mc ls local
+          "
+
+      # now wait for the main OpenObserve workloads after bucket creation
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-ingester --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-querier --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-compactor --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-alertmanager --timeout=600s
       echo "✔️ OpenObserve installed."
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
