@@ -2805,80 +2805,67 @@ write_files:
         OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
       fi
 
-      DASHBOARD_FOLDERS=$'Kubernetes(kube-prometheus-stack)\nKubernetes(openobserve-collector)\nNVIDIA GPU Monitoring'
-
       if [[ -z "$OO_AUTH_HEADER" ]]; then
         echo "⚠️  OO_AUTH_HEADER is empty; skipping dashboard import."
       else
-        DASHBOARD_FOLDERS=$(cat <<'EOF'
-          Kubernetes(kube-prometheus-stack)
-          Kubernetes(openobserve-collector)
-          NVIDIA GPU Monitoring
-        EOF
-        )
-        DASHBOARD_FOLDERS_B64=$(printf '%s' "$DASHBOARD_FOLDERS" | base64 | tr -d '\r\n')
+          # 2) Folders (no heredoc)
+          DASHBOARD_FOLDERS_B64=$(printf '%s\n' \
+            "Kubernetes(kube-prometheus-stack)" \
+            "Kubernetes(openobserve-collector)" \
+            "NVIDIA GPU Monitoring" | base64 | tr -d '\r\n')
 
-        # run import in-cluster
+          # 3) Python script as a single variable (no heredoc)
+          DASHBOARD_SCRIPT=$'import base64, json, os, sys, urllib.parse, urllib.request\n'
+          DASHBOARD_SCRIPT+=$'auth = os.environ.get("OO_AUTH_HEADER")\n'
+          DASHBOARD_SCRIPT+=$'folders_raw = os.environ.get("OO_DASHBOARD_FOLDERS_B64", "")\n'
+          DASHBOARD_SCRIPT+=$'if not auth: sys.exit("missing OO_AUTH_HEADER")\n'
+          DASHBOARD_SCRIPT+=$'try: folders_text = base64.b64decode(folders_raw).decode()\n'
+          DASHBOARD_SCRIPT+=$'except Exception as exc: sys.exit(f"unable to decode folders list: {exc}")\n'
+          DASHBOARD_SCRIPT+=$'folders = [f.strip() for f in folders_text.splitlines() if f.strip()]\n'
+          DASHBOARD_SCRIPT+=$'repo_base = "https://api.github.com/repos/openobserve/dashboards/contents/"\n'
+          DASHBOARD_SCRIPT+=$'target_url = "http://openobserve-router:5080/api/default/dashboards?folder=default"\n'
+          DASHBOARD_SCRIPT+=$'headers = {"Authorization": auth, "Content-Type": "application/json"}\n'
+          DASHBOARD_SCRIPT+=$'def fetch_json(url):\n    with urllib.request.urlopen(url) as resp: return json.load(resp)\n'
+          DASHBOARD_SCRIPT+=$'def fetch_bytes(url):\n    with urllib.request.urlopen(url) as resp: return resp.read()\n'
+          DASHBOARD_SCRIPT+=$'success = 0\n'
+          DASHBOARD_SCRIPT+=$'for folder in folders:\n'
+          DASHBOARD_SCRIPT+=$'    encoded_folder = urllib.parse.quote(folder, safe="()")\n'
+          DASHBOARD_SCRIPT+=$'    list_url = f"{repo_base}{encoded_folder}?ref=main"\n'
+          DASHBOARD_SCRIPT+=$'    try:\n        entries = fetch_json(list_url)\n'
+          DASHBOARD_SCRIPT+=$'    except Exception as exc:\n        print(f"❌ List failed for {folder}: {exc}", file=sys.stderr)\n        continue\n'
+          DASHBOARD_SCRIPT+=$'    for entry in entries:\n'
+          DASHBOARD_SCRIPT+=$'        if entry.get("type") != "file": continue\n'
+          DASHBOARD_SCRIPT+=$'        name = entry.get("name", "")\n'
+          DASHBOARD_SCRIPT+=$'        if not name.endswith(".dashboard.json"): continue\n'
+          DASHBOARD_SCRIPT+=$'        download_url = entry.get("download_url")\n'
+          DASHBOARD_SCRIPT+=$'        if not download_url: continue\n'
+          DASHBOARD_SCRIPT+=$'        try:\n'
+          DASHBOARD_SCRIPT+=$'            payload = fetch_bytes(download_url)\n'
+          DASHBOARD_SCRIPT+=$'            req = urllib.request.Request(target_url, data=payload, headers=headers, method="POST")\n'
+          DASHBOARD_SCRIPT+=$'            with urllib.request.urlopen(req) as resp:\n'
+          DASHBOARD_SCRIPT+=$'                print(f"✅ {folder}/{name} -> HTTP {resp.status}")\n'
+          DASHBOARD_SCRIPT+=$'                success += 1\n'
+          DASHBOARD_SCRIPT+=$'        except Exception as exc:\n'
+          DASHBOARD_SCRIPT+=$'            print(f"❌ Import failed {folder}/{name}: {exc}", file=sys.stderr)\n'
+          DASHBOARD_SCRIPT+=$'print(f"Total imported: {success}")\n'
+
+          DASHBOARD_SCRIPT64=$(printf '%s' "$DASHBOARD_SCRIPT" | base64 | tr -d '\r\n')
+
+          # 4) Run in cluster (no heredoc, no multiline quoting)
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
+            --image=python:3-alpine \
+            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+            --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
+            --env DASHBOARD_SCRIPT64="$DASHBOARD_SCRIPT64" \
+            -- /bin/sh -c 'python - <<EOF'  # remove and instead run:
+
+        # run inside cluster (no heredocs)
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
           --image=python:3-alpine \
           --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
           --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
-          -- /bin/sh <<'EOF'
-            cat > /tmp/oo-dash-import.py <<'PY'
-              import base64, json, os, sys, urllib.parse, urllib.request
-
-              auth = os.environ.get('OO_AUTH_HEADER')
-              folders_raw = os.environ.get('OO_DASHBOARD_FOLDERS_B64', '')
-              if not auth:
-                  sys.exit('missing OO_AUTH_HEADER')
-              try:
-                  folders_text = base64.b64decode(folders_raw).decode()
-              except Exception as exc:
-                  sys.exit(f'unable to decode folders list: {exc}')
-              folders = [f.strip() for f in folders_text.splitlines() if f.strip()]
-              repo_base = 'https://api.github.com/repos/openobserve/dashboards/contents/'
-              target_folder = urllib.parse.quote('default', safe='')
-              target_url = f'http://openobserve-router:5080/api/default/dashboards?folder={target_folder}'
-              headers = {'Authorization': auth, 'Content-Type': 'application/json'}
-
-              def fetch_json(url):
-                  with urllib.request.urlopen(url) as resp:
-                      return json.load(resp)
-
-              def fetch_bytes(url):
-                  with urllib.request.urlopen(url) as resp:
-                      return resp.read()
-
-              success = 0
-              for folder in folders:
-                  encoded_folder = urllib.parse.quote(folder, safe='()')
-                  list_url = f"{repo_base}{encoded_folder}?ref=main"
-                  try:
-                      entries = fetch_json(list_url)
-                  except Exception as exc:
-                      print(f"❌ List failed for {folder}: {exc}", file=sys.stderr)
-                      continue
-                  for entry in entries:
-                      if entry.get('type') != 'file':
-                          continue
-                      name = entry.get('name', '')
-                      if not name.endswith('.dashboard.json'):
-                          continue
-                      download_url = entry.get('download_url')
-                      if not download_url:
-                          continue
-                      try:
-                          payload = fetch_bytes(download_url)
-                          req = urllib.request.Request(target_url, data=payload, headers=headers, method='POST')
-                          with urllib.request.urlopen(req) as resp:
-                              print(f"✅ {folder}/{name} -> HTTP {resp.status}")
-                              success += 1
-                      except Exception as exc:
-                          print(f"❌ Import failed {folder}/{name}: {exc}", file=sys.stderr)
-              print(f"Total imported: {success}")
-            PY
-            python /tmp/oo-dash-import.py
-          EOF
+          --env DASHBOARD_SCRIPT64="$DASHBOARD_SCRIPT64" \
+          -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"DASHBOARD_SCRIPT64\"]).decode())"'
       fi
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
