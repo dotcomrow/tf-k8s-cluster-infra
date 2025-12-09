@@ -2269,6 +2269,9 @@ write_files:
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
 
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=300s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system wait --for=condition=Available deploy/cnpg-controller-manager --timeout=60s
+
       sudo helm repo update
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
