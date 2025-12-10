@@ -2279,6 +2279,8 @@ write_files:
       export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
+      # Public URL for Dex/OIDC
+      export OO_DEX_URL="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
 
       sudo helm repo update
       OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG}"
@@ -2332,6 +2334,11 @@ write_files:
         --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string dex.config.frontend.issuer="OpenObserve" \
+        --set-string dex.ingress.enabled=true \
+        --set-string dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string dex.ingress.hosts[0].paths[0].path="/" \
+        --set-string dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string dex.ingress.tls[0].secretName="dex-openobserve-tls" \
         --set-string dex.config.staticClients[0].id="o2-client" \
         --set-string dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
         --set-string dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
@@ -2733,87 +2740,9 @@ write_files:
             protocol: TCP
       ---
       apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: oauth2-proxy-alpha-config
-        namespace: openobserve
-      data:
-        alpha.yaml: |
-          server:
-            bindAddress: 0.0.0.0:4180
-
-          upstreamConfig:
-            upstreams:
-              - id: oo
-                path: /
-                uri: http://openobserve-router.openobserve.svc.cluster.local:5080
-
-          providers:
-            - id: github
-              provider: github
-              clientID: "${JAEGER_CLIENT_ID}"
-              clientSecret: "${JAEGER_CLIENT_SECRET}"
-              scope: "user:email,read:org"
-              githubConfig:
-                org: ${GITHUB_ORG}
-                team: linkerd_admins
-
-          injectRequestHeaders:
-            - name: Authorization
-              values:
-                - fromEnv: OOPROXY_AUTHZ
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: oauth2-proxy-openobserve
-        namespace: openobserve
-        labels:
-          app: oauth2-proxy-openobserve
-      spec:
-        replicas: 1
-        selector:
-          matchLabels:
-            app: oauth2-proxy-openobserve
-        template:
-          metadata:
-            labels:
-              app: oauth2-proxy-openobserve
-          spec:
-            containers:
-              - name: oauth2-proxy
-                image: quay.io/oauth2-proxy/oauth2-proxy:v7.12.0
-                # Alpha config + only flags that are still valid alongside alpha-config
-                args:
-                  - --alpha-config=/etc/oauth2-proxy/alpha/alpha.yaml
-                  - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
-                  - --cookie-secret=${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - --email-domain=*
-                ports:
-                  - containerPort: 4180
-                env:
-                  - name: OAUTH2_PROXY_COOKIE_SECRET
-                    value: ${JAEGER_OAUTH2_PROXY_COOKIE_SECRET}
-                  - name: OOPROXY_AUTHZ
-                    valueFrom:
-                      secretKeyRef:
-                        name: oo-auth
-                        key: OO_AUTH_HEADER
-                volumeMounts:
-                  - name: alpha-config
-                    mountPath: /etc/oauth2-proxy/alpha
-            volumes:
-              - name: alpha-config
-                configMap:
-                  name: oauth2-proxy-alpha-config
-                  items:
-                    - key: alpha.yaml
-                      path: alpha.yaml
-      ---
-      apiVersion: v1
       kind: Service
       metadata:
-        name: oauth2-proxy-openobserve
+        name: openobserve-gui
         namespace: openobserve
         annotations:
           teleport.dev/name: "openobserve-gui"
@@ -2827,11 +2756,13 @@ write_files:
           teleport.dev/enroll: "true"
       spec:
         selector:
-          app: oauth2-proxy-openobserve
+          app.kubernetes.io/instance: openobserve
+          app.kubernetes.io/name: openobserve
         ports:
           - name: http
-            port: 80
-            targetPort: 4180
+            port: 5080
+            protocol: TCP
+            targetPort: http
       ---
       # Linkerd policy fixes for prometheus-admin access from otel-collector
       apiVersion: policy.linkerd.io/v1alpha1
@@ -5104,6 +5035,10 @@ write_files:
       EOF
 
       echo "Adding annotations to services that are installed through helm..."
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc openobserve-dex --type merge \
+        -p '{"metadata":{"annotations":{"teleport.dev/name":"openobserve-dex","teleport.dev/protocol":"http","teleport.dev/public-addr":"openobserve-dex.teleport.app.suncoast.systems","teleport.dev/description":"OpenObserve Dex Service"},"labels":{"app":"openobserve-dex","app.kubernetes.io/name":"openobserve-dex","app.kubernetes.io/component":"openobserve-dex","teleport.dev/enroll":"true"}}}' \
+        -n openobserve
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc policy-reporter-ui --type merge \
         -p '{"metadata":{"annotations":{"teleport.dev/name":"policy-reporter-ui","teleport.dev/protocol":"http","teleport.dev/public-addr":"policy-reporter-ui.teleport.app.suncoast.systems","teleport.dev/description":"Policy Reporter UI Service"},"labels":{"app":"policy-reporter-ui","app.kubernetes.io/name":"policy-reporter-ui","app.kubernetes.io/component":"policy-reporter-ui","teleport.dev/enroll":"true"}}}' \
