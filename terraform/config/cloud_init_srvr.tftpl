@@ -2317,7 +2317,7 @@ write_files:
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=nfs-client \
         --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
         --set dex.enabled=true \
-        --set-string dex.parameters.O2_CALLBACK_URL="${OO_PUBLIC_URL}/web/cb" \
+        --set-string dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string dex.parameters.O2_DEX_DEFAULT_ORG=default \
         --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
