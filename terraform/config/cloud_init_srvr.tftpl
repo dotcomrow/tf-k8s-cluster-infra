@@ -2387,6 +2387,51 @@ write_files:
         template:
           spec:
             restartPolicy: Never
+            initContainers:
+            - name: bootstrap-meta-tables
+              image: postgres:16-alpine
+              env:
+                - name: PGPASSWORD
+                  value: "$OPENOBSERVE_PG_PASSWORD"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  cat <<'SQL' > /tmp/bootstrap.sql
+                  CREATE TABLE IF NOT EXISTS organizations (
+                    identifier TEXT PRIMARY KEY,
+                    org_name TEXT NOT NULL,
+                    org_type SMALLINT NOT NULL,
+                    created_at BIGINT NOT NULL DEFAULT 0,
+                    updated_at BIGINT NOT NULL DEFAULT 0,
+                    trial_ends_at BIGINT DEFAULT 0
+                  );
+                  CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    first_name TEXT NOT NULL DEFAULT '',
+                    last_name TEXT NOT NULL DEFAULT '',
+                    password TEXT NOT NULL DEFAULT '',
+                    salt TEXT NOT NULL DEFAULT '',
+                    is_root BOOLEAN NOT NULL DEFAULT FALSE,
+                    password_ext TEXT,
+                    user_type SMALLINT NOT NULL DEFAULT 0,
+                    created_at BIGINT NOT NULL DEFAULT 0,
+                    updated_at BIGINT NOT NULL DEFAULT 0
+                  );
+                  CREATE TABLE IF NOT EXISTS org_users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    role SMALLINT NOT NULL DEFAULT 0,
+                    token TEXT NOT NULL DEFAULT '',
+                    rum_token TEXT,
+                    created_at BIGINT NOT NULL DEFAULT 0,
+                    updated_at BIGINT NOT NULL DEFAULT 0
+                  );
+                  SQL
+                  psql "host=openobserve-postgres-rw.openobserve.svc.cluster.local port=5432 dbname=app user=openobserve sslmode=disable" -f /tmp/bootstrap.sql
             containers:
             - name: migrate
               image: o2cr.ai/openobserve/openobserve:$OO_IMAGE_TAG
