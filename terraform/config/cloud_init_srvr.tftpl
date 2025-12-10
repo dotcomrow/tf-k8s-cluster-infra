@@ -2346,9 +2346,13 @@ write_files:
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM"
 
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster openobserve-postgres --type merge -p '{
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
         "metadata": { "annotations": { "linkerd.io/inject": "disabled" }},
-        "spec": { "instances": [ { "metadata": { "annotations": { "linkerd.io/inject": "disabled" }}} ]}
+        "spec": {
+          "podTemplate": {
+            "metadata": { "annotations": { "linkerd.io/inject": "disabled" }}
+          }
+        }
       }' || true
 
       # wait for minio to be ready
@@ -2368,7 +2372,7 @@ write_files:
           "
 
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster/openobserve-postgres --timeout=300s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=300s
 
       echo "⚙️ Running OpenObserve DB migrations..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete job/openobserve-db-migrate --ignore-not-found
