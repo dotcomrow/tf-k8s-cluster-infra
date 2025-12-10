@@ -2391,6 +2391,31 @@ write_files:
             - name: migrate
               image: o2cr.ai/openobserve/openobserve:$OO_IMAGE_TAG
               command: ["/openobserve", "upgrade-db"]
+              env:
+                - name: ZO_META_STORE
+                  value: postgres
+                - name: ZO_META_POSTGRES_DSN
+                  value: "postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable"
+                - name: ZO_META_POSTGRES_RO_DSN
+                  value: "postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable"
+                - name: ZO_ROOT_USER_EMAIL
+                  value: "$OPENOBSERVE_USERNAME"
+                - name: ZO_ROOT_USER_PASSWORD
+                  value: "$OPENOBSERVE_PASSWORD"
+                - name: ZO_S3_PROVIDER
+                  value: minio
+                - name: ZO_S3_BUCKET_NAME
+                  value: openobserve
+                - name: ZO_S3_ENDPOINT
+                  value: http://openobserve-minio:9000
+                - name: ZO_S3_REGION
+                  value: us-east-1
+                - name: ZO_S3_FORCE_PATH_STYLE
+                  value: "true"
+                - name: ZO_S3_ACCESS_KEY
+                  value: "$OPENOBSERVE_MINIO_USER"
+                - name: ZO_S3_SECRET_KEY
+                  value: "$OPENOBSERVE_MINIO_PASSWORD"
               envFrom:
                 - configMapRef:
                     name: openobserve
