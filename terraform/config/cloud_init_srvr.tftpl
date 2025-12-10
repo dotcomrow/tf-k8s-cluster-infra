@@ -2281,10 +2281,14 @@ write_files:
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
 
       sudo helm repo update
+      OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG:-v0.20.1}"
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
-        --set enterprise.enabled=false \
+        --set-string image.oss.tag="$OO_IMAGE_TAG" \
+        --set-string image.enterprise.tag="$OO_IMAGE_TAG" \
+        --set enterprise.enabled=true \
+        --set enterprise.dex.enabled=true \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -2297,16 +2301,23 @@ write_files:
         --set minio.buckets[0].purge=false \
         --set-string auth.ZO_ROOT_USER_EMAIL="$OPENOBSERVE_USERNAME" \
         --set-string auth.ZO_ROOT_USER_PASSWORD="$OPENOBSERVE_PASSWORD" \
-        --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
-        --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
+        --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
+        --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
+        --set-string config.ZO_PROMETHEUS_ENABLE=true \
         --set-string 'podAnnotations.ingester.linkerd\.io/inject=enabled' \
         --set-string 'podAnnotations.querier.linkerd\.io/inject=enabled' \
         --set-string 'podAnnotations.compactor.linkerd\.io/inject=enabled' \
         --set-string 'podAnnotations.router.linkerd\.io/inject=enabled' \
         --set-string 'podAnnotations.alertmanager.linkerd\.io/inject=enabled' \
+        --set replicaCount.ingester=0 \
+        --set replicaCount.querier=0 \
+        --set replicaCount.router=0 \
+        --set replicaCount.compactor=0 \
+        --set replicaCount.alertmanager=0 \
+        --set replicaCount.dex=0 \
         --set-string ingester.persistence.storageClass=nfs-client \
         --set-string ingester.persistence.size=200Gi \
         --set-string querier.persistence.storageClass=nfs-client \
@@ -2356,7 +2367,49 @@ write_files:
             mc ls local
           "
 
-      # now wait for the main OpenObserve workloads after bucket creation
+      echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster/openobserve-postgres --timeout=300s
+
+      echo "⚙️ Running OpenObserve DB migrations..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete job/openobserve-db-migrate --ignore-not-found
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: openobserve-db-migrate
+        namespace: openobserve
+      spec:
+        backoffLimit: 3
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - name: migrate
+              image: o2cr.ai/openobserve/openobserve:${OO_IMAGE_TAG}
+              command: ["/openobserve", "upgrade-db"]
+              envFrom:
+                - configMapRef:
+                    name: openobserve
+                - configMapRef:
+                    name: openobserve-router
+                - secretRef:
+                    name: openobserve
+      EOF
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=complete job/openobserve-db-migrate --timeout=600s
+
+      echo "🚀 Scaling OpenObserve workloads up after DB migrations..."
+      sudo helm upgrade openobserve openobserve/openobserve \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        -n openobserve \
+        --reuse-values \
+        --set replicaCount.ingester=1 \
+        --set replicaCount.querier=1 \
+        --set replicaCount.router=1 \
+        --set replicaCount.compactor=1 \
+        --set replicaCount.alertmanager=1 \
+        --set replicaCount.dex=1
+
+      # now wait for the main OpenObserve workloads after scaling up
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-ingester --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-querier --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-compactor --timeout=600s
@@ -2561,7 +2614,7 @@ write_files:
 
           exporters:
             otlp/openobserve:
-              endpoint: openobserve-openobserve-router.openobserve.svc.cluster.local:5081
+              endpoint: openobserve-router.openobserve.svc.cluster.local:5081
               headers:
                 Authorization: __AUTH_HEADER__
                 organization: default
