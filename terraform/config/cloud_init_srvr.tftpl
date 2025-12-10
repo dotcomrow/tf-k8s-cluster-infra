@@ -2264,14 +2264,22 @@ write_files:
 
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/node-selector="dedicated=srvr-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      # Keep Linkerd off by default in openobserve to avoid blocking CNPG init Jobs; opt-in per component via pod annotations.
-      sudo kubectl annotate namespace openobserve linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      # Enable Linkerd at the namespace level for metrics/visibility, but keep CNPG/Postgres uninjected via per-resource annotations.
+      sudo kubectl annotate namespace openobserve linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=300s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system wait --for=condition=Available deploy/cnpg-controller-manager --timeout=60s
+
+      export OO_GH_CLIENT_ID="${JAEGER_CLIENT_ID}"
+      export OO_GH_CLIENT_SECRET="${JAEGER_CLIENT_SECRET}"
+      export OO_GH_ORG="${GITHUB_ORG}"
+      export OO_GH_ADMIN_TEAM="openobserve_admin_users"   # e.g., platform-admins
+      export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
+      # Public URL OpenObserve users hit (used in redirects)
+      export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
 
       sudo helm repo update
       sudo helm upgrade --install openobserve openobserve/openobserve \
@@ -2307,7 +2315,31 @@ write_files:
         --set-string alertmanager.persistence.storageClass=nfs-client \
         --set-string alertmanager.persistence.size=200Gi \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=nfs-client \
-        --set-string nats.config.jetstream.fileStore.pvc.size=50Gi
+        --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
+        --set dex.enabled=true \
+        --set-string dex.parameters.O2_CALLBACK_URL="${OO_PUBLIC_URL}/web/cb" \
+        --set-string dex.parameters.O2_DEX_DEFAULT_ORG=default \
+        --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
+        --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
+        --set-string dex.config.frontend.issuer="OpenObserve" \
+        --set-string dex.config.staticClients[0].id="o2-client" \
+        --set-string dex.config.staticClients[0].secret="${OO_GH_CLIENT_SECRET}" \
+        --set-string dex.config.staticClients[0].redirectURIs[0]="${OO_PUBLIC_URL}/config/redirect" \
+        --set-string dex.config.connectors[0].type="github" \
+        --set-string dex.config.connectors[0].id="github" \
+        --set-string dex.config.connectors[0].name="GitHub" \
+        --set-string dex.config.connectors[0].config.clientID="${OO_GH_CLIENT_ID}" \
+        --set-string dex.config.connectors[0].config.clientSecret="${OO_GH_CLIENT_SECRET}" \
+        --set-string dex.config.connectors[0].config.redirectURI="${OO_PUBLIC_URL}/dex/callback" \
+        --set-string dex.config.connectors[0].config.orgs[0].name="${OO_GH_ORG}" \
+        --set-string dex.config.connectors[0].config.orgs[0].teams[0]="${OO_GH_ADMIN_TEAM}" \
+        --set-string dex.config.connectors[0].config.orgs[0].teams[1]="${OO_GH_USER_TEAM}"
+
+      # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster openobserve-postgres --type merge -p '{
+        "metadata": { "annotations": { "linkerd.io/inject": "disabled" }},
+        "spec": { "instances": [ { "metadata": { "annotations": { "linkerd.io/inject": "disabled" }}} ]}
+      }' || true
 
       # wait for minio to be ready
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-minio --timeout=120s
