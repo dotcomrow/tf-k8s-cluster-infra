@@ -67,6 +67,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         CTRL_HOSTNAME = var.ctrl_hostname
         ETCD_HOSTNAME = var.etcd_hostname
         SRVR_HOSTNAME = var.srvr_hostname
+        OPENOBSERVE_IMAGE_TAG = var.OPENOBSERVE_IMAGE_TAG
       })
     file_name = "cloud_init_srvr.yaml"
   }

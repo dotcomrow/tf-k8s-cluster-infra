@@ -2281,7 +2281,7 @@ write_files:
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
 
       sudo helm repo update
-      OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG:-v0.20.1}"
+      OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG}"
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
@@ -2385,7 +2385,7 @@ write_files:
             restartPolicy: Never
             containers:
             - name: migrate
-              image: o2cr.ai/openobserve/openobserve:${OO_IMAGE_TAG}
+              image: o2cr.ai/openobserve/openobserve:$OO_IMAGE_TAG
               command: ["/openobserve", "upgrade-db"]
               envFrom:
                 - configMapRef:

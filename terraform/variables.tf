@@ -329,3 +329,9 @@ variable work_vmid {
   type        = number
   default     = 104
 }
+
+variable "OPENOBSERVE_IMAGE_TAG" {
+  description = "The OpenObserve image tag to use"
+  type        = string
+  default     = "v0.20.3"
+}
