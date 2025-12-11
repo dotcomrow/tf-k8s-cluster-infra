@@ -2354,7 +2354,7 @@ write_files:
         --set-string dex.config.connectors[0].name="GitHub" \
         --set-string dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
         --set-string dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string dex.config.connectors[0].config.redirectURI="$OO_PUBLIC_URL/dex/callback" \
+        --set-string dex.config.connectors[0].config.redirectURI="$OO_DEX_URL/dex/callback" \
         --set-string dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
@@ -2369,7 +2369,7 @@ write_files:
         --set-string enterprise.dex.config.connectors[0].name="GitHub" \
         --set-string enterprise.dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
         --set-string enterprise.dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string enterprise.dex.config.connectors[0].config.redirectURI="$OO_PUBLIC_URL/dex/callback" \
+        --set-string enterprise.dex.config.connectors[0].config.redirectURI="$OO_DEX_URL/dex/callback" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
