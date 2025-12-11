@@ -2291,6 +2291,9 @@ write_files:
         --set-string image.enterprise.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=true \
         --set enterprise.dex.enabled=true \
+        --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
+        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_URL/dex" \
+        --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -2334,6 +2337,7 @@ write_files:
         --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string dex.config.frontend.issuer="OpenObserve" \
+        --set-string dex.config.issuer="$OO_DEX_URL/dex" \
         --set-string dex.ingress.enabled=true \
         --set-string dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string dex.ingress.hosts[0].paths[0].path="/" \
@@ -2350,7 +2354,17 @@ write_files:
         --set-string dex.config.connectors[0].config.redirectURI="$OO_PUBLIC_URL/dex/callback" \
         --set-string dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
-        --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM"
+        --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
+        --set-string enterprise.dex.config.issuer="$OO_DEX_URL/dex" \
+        --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
+        --set-string enterprise.dex.config.staticClients[0].name="o2-client" \
+        --set-string enterprise.dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
+        --set-string enterprise.dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
+        --set-string enterprise.dex.ingress.enabled=true \
+        --set-string enterprise.dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
+        --set-string enterprise.dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls"
 
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
