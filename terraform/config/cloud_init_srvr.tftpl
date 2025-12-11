@@ -2341,6 +2341,7 @@ write_files:
         --set-string dex.ingress.enabled=true \
         --set-string dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string dex.ingress.hosts[0].paths[0].path="/" \
+        --set-string dex.ingress.hosts[0].paths[0].pathType="Prefix" \
         --set-string dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string dex.ingress.tls[0].secretName="dex-openobserve-tls" \
         --set-string dex.config.staticClients[0].id="o2-client" \
@@ -2363,6 +2364,7 @@ write_files:
         --set-string enterprise.dex.ingress.enabled=true \
         --set-string enterprise.dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
+        --set-string enterprise.dex.ingress.hosts[0].paths[0].pathType="Prefix" \
         --set-string enterprise.dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls"
 
