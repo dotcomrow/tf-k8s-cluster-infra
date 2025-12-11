@@ -2339,7 +2339,7 @@ write_files:
         --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
         --set-string dex.config.frontend.issuer="OpenObserve" \
         --set-string dex.config.issuer="$OO_DEX_URL/dex" \
-        --set-string dex.config.enablePasswordDB=false \
+        --set dex.config.enablePasswordDB=false \
         --set-string dex.ingress.enabled=true \
         --set-string dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string dex.ingress.hosts[0].paths[0].path="/" \
@@ -2359,7 +2359,7 @@ write_files:
         --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
         --set-string enterprise.dex.config.issuer="$OO_DEX_URL/dex" \
-        --set-string enterprise.dex.config.enablePasswordDB=false \
+        --set enterprise.dex.config.enablePasswordDB=false \
         --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
         --set-string enterprise.dex.config.staticClients[0].name="o2-client" \
         --set-string enterprise.dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
