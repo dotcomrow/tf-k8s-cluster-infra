@@ -2284,7 +2284,8 @@ write_files:
       export OO_DEX_ISSUER_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
       # Dex callback host for GitHub OAuth (keep Teleport by default)
       export OO_DEX_CALLBACK_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
-      export OO_DEX_DISCOVERY_URL="http://$OO_DEX_DISCOVERY_HOST:5556/dex/.well-known/openid-configuration"
+      export OO_DEX_DISCOVERY_BASE="http://$OO_DEX_DISCOVERY_HOST:5556/dex"
+      export OO_DEX_DISCOVERY_URL="$OO_DEX_DISCOVERY_BASE/.well-known/openid-configuration"
       export OO_DEX_ISSUER_URL="https://$OO_DEX_ISSUER_HOST"
       export OO_DEX_CALLBACK_URL="https://$OO_DEX_CALLBACK_HOST"
 
@@ -2298,7 +2299,7 @@ write_files:
         --set enterprise.enabled=true \
         --set enterprise.dex.enabled=true \
         --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
-        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
+        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_DISCOVERY_BASE" \
         --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
@@ -2387,7 +2388,9 @@ write_files:
         --set-string enterprise.dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
         --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls" \
         --set-string extraEnv[0].name=O2_DEX_DISCOVERY_URL \
-        --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL"
+        --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL" \
+        --set-string extraEnv[1].name=O2_DEX_BASE_URL \
+        --set-string extraEnv[1].value="$OO_DEX_DISCOVERY_BASE"
 
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
