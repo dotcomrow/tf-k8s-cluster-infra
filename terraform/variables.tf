@@ -187,11 +187,11 @@ variable "LINKERD_GITHUB_AUTH_TEAM" {
   default = "k8s_cluster_admins"
 }
 
-variable "JAEGER_CLIENT_ID" {
+variable "OPENOBSERVE_CLIENT_ID" {
   default = "jaeger"
 }
 
-variable "JAEGER_CLIENT_SECRET" {
+variable "OPENOBSERVE_CLIENT_SECRET" {
   default = "jaeger"
 }
 

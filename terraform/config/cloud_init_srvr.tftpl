@@ -2268,12 +2268,11 @@ write_files:
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
-
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=300s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system wait --for=condition=Available deploy/cnpg-controller-manager --timeout=60s
 
-      export OO_GH_CLIENT_ID="${JAEGER_CLIENT_ID}"
-      export OO_GH_CLIENT_SECRET="${JAEGER_CLIENT_SECRET}"
+      export OO_GH_CLIENT_ID="${OPENOBSERVE_CLIENT_ID}"
+      export OO_GH_CLIENT_SECRET="${OPENOBSERVE_CLIENT_SECRET}"
       export OO_GH_ORG="${GITHUB_ORG}"
       export OO_GH_ADMIN_TEAM="openobserve_admin_users"   # e.g., platform-admins
       export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
@@ -2312,11 +2311,6 @@ write_files:
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
-        --set-string 'podAnnotations.ingester.linkerd\.io/inject=enabled' \
-        --set-string 'podAnnotations.querier.linkerd\.io/inject=enabled' \
-        --set-string 'podAnnotations.compactor.linkerd\.io/inject=enabled' \
-        --set-string 'podAnnotations.router.linkerd\.io/inject=enabled' \
-        --set-string 'podAnnotations.alertmanager.linkerd\.io/inject=enabled' \
         --set replicaCount.ingester=0 \
         --set replicaCount.querier=0 \
         --set replicaCount.router=0 \
