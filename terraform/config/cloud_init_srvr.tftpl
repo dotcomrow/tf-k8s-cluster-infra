@@ -2367,6 +2367,8 @@ write_files:
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
+        --set-string enterprise.dex.config.connectors[0].config.scopes[0]=read:org \
+        --set-string enterprise.dex.config.connectors[0].config.scopes[1]=user:email \
         --set-string enterprise.dex.ingress.enabled=true \
         --set-string enterprise.dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
