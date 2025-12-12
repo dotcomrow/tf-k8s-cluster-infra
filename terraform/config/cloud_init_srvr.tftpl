@@ -2304,8 +2304,12 @@ write_files:
         --set-string enterprise.dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ORG=default \
         --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
+        --set-string enterprise.dex.parameters.O2_DEX_GROUP_ATTRIBUTE=groups \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
+        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=role \
+        --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
+        --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
