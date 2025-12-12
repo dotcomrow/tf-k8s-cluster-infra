@@ -2282,8 +2282,8 @@ write_files:
       export OO_DEX_DISCOVERY_HOST="openobserve-dex.openobserve.svc.cluster.local:5556"
       # Dex callback host for GitHub OAuth (keep Teleport by default)
       export OO_DEX_CALLBACK_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
-      export OO_DEX_URL="http://${OO_DEX_DISCOVERY_HOST}"
-      export OO_DEX_CALLBACK_URL="https://${OO_DEX_CALLBACK_HOST}"
+      export OO_DEX_URL="http://$OO_DEX_DISCOVERY_HOST"
+      export OO_DEX_CALLBACK_URL="https://$OO_DEX_CALLBACK_HOST"
 
       sudo helm repo update
       OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG}"
