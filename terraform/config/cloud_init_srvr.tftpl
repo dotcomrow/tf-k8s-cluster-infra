@@ -2278,8 +2278,12 @@ write_files:
       export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
-      # Public URL for Dex/OIDC
-      export OO_DEX_URL="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
+      # Dex discovery/issuer host (override OPENOBSERVE_DEX_DISCOVERY_HOST to bypass Teleport)
+      export OO_DEX_DISCOVERY_HOST="openobserve-dex.openobserve.svc.cluster.local:5556"
+      # Dex callback host for GitHub OAuth (keep Teleport by default)
+      export OO_DEX_CALLBACK_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
+      export OO_DEX_URL="http://${OO_DEX_DISCOVERY_HOST}"
+      export OO_DEX_CALLBACK_URL="https://${OO_DEX_CALLBACK_HOST}"
 
       sudo helm repo update
       OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG}"
@@ -2335,10 +2339,10 @@ write_files:
         --set-string dex.config.issuer="$OO_DEX_URL/dex" \
         --set dex.config.enablePasswordDB=false \
         --set-string dex.ingress.enabled=true \
-        --set-string dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string dex.ingress.hosts[0].host="$OO_DEX_DISCOVERY_HOST" \
         --set-string dex.ingress.hosts[0].paths[0].path="/" \
         --set-string dex.ingress.hosts[0].paths[0].pathType="Prefix" \
-        --set-string dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
         --set-string dex.ingress.tls[0].secretName="dex-openobserve-tls" \
         --set-string dex.config.staticClients[0].id="o2-client" \
         --set-string dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
@@ -2348,7 +2352,7 @@ write_files:
         --set-string dex.config.connectors[0].name="GitHub" \
         --set-string dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
         --set-string dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string dex.config.connectors[0].config.redirectURI="$OO_DEX_URL/dex/callback" \
+        --set-string dex.config.connectors[0].config.redirectURI="$OO_DEX_CALLBACK_URL/dex/callback" \
         --set-string dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
@@ -2365,7 +2369,7 @@ write_files:
         --set-string enterprise.dex.config.connectors[0].name="GitHub" \
         --set-string enterprise.dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
         --set-string enterprise.dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string enterprise.dex.config.connectors[0].config.redirectURI="$OO_DEX_URL/dex/callback" \
+        --set-string enterprise.dex.config.connectors[0].config.redirectURI="$OO_DEX_CALLBACK_URL/dex/callback" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
@@ -2374,10 +2378,10 @@ write_files:
         --set-string enterprise.dex.config.connectors[0].config.scopes[0]=read:org \
         --set-string enterprise.dex.config.connectors[0].config.scopes[1]=user:email \
         --set-string enterprise.dex.ingress.enabled=true \
-        --set-string enterprise.dex.ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string enterprise.dex.ingress.hosts[0].host="$OO_DEX_DISCOVERY_HOST" \
         --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
         --set-string enterprise.dex.ingress.hosts[0].paths[0].pathType="Prefix" \
-        --set-string enterprise.dex.ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set-string enterprise.dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
         --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls"
 
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
