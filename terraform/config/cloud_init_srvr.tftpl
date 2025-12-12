@@ -2301,6 +2301,11 @@ write_files:
         --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
         --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
+        --set-string enterprise.dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
+        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ORG=default \
+        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
+        --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
+        --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -2802,6 +2807,22 @@ write_files:
             port: 5080
             protocol: TCP
             targetPort: http
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: openobserve-dex-external
+        namespace: openobserve
+      spec:
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.113
+        selector:
+          app: dex
+        ports:
+          - name: http
+            port: 5556
+            protocol: TCP
+            targetPort: 5556
       ---
       # Linkerd policy fixes for prometheus-admin access from otel-collector
       apiVersion: policy.linkerd.io/v1alpha1
