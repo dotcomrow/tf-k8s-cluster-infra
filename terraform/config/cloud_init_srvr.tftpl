@@ -2279,10 +2279,10 @@ write_files:
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
       # Dex discovery/issuer host (override OPENOBSERVE_DEX_DISCOVERY_HOST to bypass Teleport)
-      export OO_DEX_DISCOVERY_HOST="openobserve-dex.openobserve.svc.cluster.local:5556"
+      export OO_DEX_DISCOVERY_HOST="openobserve-dex.openobserve.svc.cluster.local"
       # Dex callback host for GitHub OAuth (keep Teleport by default)
       export OO_DEX_CALLBACK_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
-      export OO_DEX_URL="http://$OO_DEX_DISCOVERY_HOST"
+      export OO_DEX_URL="http://$OO_DEX_DISCOVERY_HOST:5556"
       export OO_DEX_CALLBACK_URL="https://$OO_DEX_CALLBACK_HOST"
 
       sudo helm repo update
