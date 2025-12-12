@@ -2278,11 +2278,14 @@ write_files:
       export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
-      # Dex discovery/issuer host (override OPENOBSERVE_DEX_DISCOVERY_HOST to bypass Teleport)
+      # Dex discovery host (where OpenObserve fetches .well-known; can be internal)
       export OO_DEX_DISCOVERY_HOST="openobserve-dex.openobserve.svc.cluster.local"
+      # Dex issuer/authorize host (external — Teleport by default)
+      export OO_DEX_ISSUER_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
       # Dex callback host for GitHub OAuth (keep Teleport by default)
       export OO_DEX_CALLBACK_HOST="openobserve-dex.teleport.app.${RANCHER_DOMAIN}"
-      export OO_DEX_URL="http://$OO_DEX_DISCOVERY_HOST:5556"
+      export OO_DEX_DISCOVERY_URL="http://$OO_DEX_DISCOVERY_HOST:5556/dex/.well-known/openid-configuration"
+      export OO_DEX_ISSUER_URL="https://$OO_DEX_ISSUER_HOST"
       export OO_DEX_CALLBACK_URL="https://$OO_DEX_CALLBACK_HOST"
 
       sudo helm repo update
@@ -2295,7 +2298,7 @@ write_files:
         --set enterprise.enabled=true \
         --set enterprise.dex.enabled=true \
         --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
-        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_URL/dex" \
+        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
         --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
@@ -2336,7 +2339,7 @@ write_files:
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
         --set-string dex.config.frontend.issuer="OpenObserve" \
-        --set-string dex.config.issuer="$OO_DEX_URL/dex" \
+        --set-string dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
         --set dex.config.enablePasswordDB=false \
         --set-string dex.ingress.enabled=true \
         --set-string dex.ingress.hosts[0].host="$OO_DEX_DISCOVERY_HOST" \
@@ -2358,7 +2361,7 @@ write_files:
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
         --set dex.config.connectors[0].config.loadAllGroups=true \
         --set-string dex.config.connectors[0].config.teamNameField=slug \
-        --set-string enterprise.dex.config.issuer="$OO_DEX_URL/dex" \
+        --set-string enterprise.dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
         --set enterprise.dex.config.enablePasswordDB=false \
         --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
         --set-string enterprise.dex.config.staticClients[0].name="o2-client" \
@@ -2382,7 +2385,9 @@ write_files:
         --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
         --set-string enterprise.dex.ingress.hosts[0].paths[0].pathType="Prefix" \
         --set-string enterprise.dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
-        --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls"
+        --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls" \
+        --set-string extraEnv[0].name=O2_DEX_DISCOVERY_URL \
+        --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL"
 
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
