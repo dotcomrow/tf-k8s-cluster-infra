@@ -2307,7 +2307,7 @@ write_files:
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_ATTRIBUTE=groups \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
-        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=groups \
+        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=role \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
         --set minio.enabled=true \
@@ -2859,6 +2859,11 @@ write_files:
         OO_DASHBOARD_FOLDER="default"
       else
         OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
+      fi
+
+      # Try to hydrate OO_AUTH_HEADER from the stored secret if it is empty
+      if [[ -z "$OO_AUTH_HEADER" ]]; then
+        OO_AUTH_HEADER="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret oo-auth -o jsonpath='{.data.OO_AUTH_HEADER}' 2>/dev/null | base64 -d || true)"
       fi
 
       if [[ -z "$OO_AUTH_HEADER" ]]; then
