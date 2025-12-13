@@ -2301,13 +2301,14 @@ write_files:
         --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
         --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
+        --set-string enterprise.dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
         --set-string enterprise.dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ORG=default \
         --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_ATTRIBUTE=groups \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
-        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=groups \
+        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=role \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
         --set minio.enabled=true \
@@ -2348,6 +2349,7 @@ write_files:
         --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
         --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
+        --set-string dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
         --set-string dex.config.frontend.issuer="OpenObserve" \
         --set-string dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
         --set dex.config.enablePasswordDB=false \
@@ -2877,27 +2879,24 @@ write_files:
 
           # 3) Python script as a single variable (no heredoc)
           DASHBOARD_SCRIPT=$'import base64, json, os, sys, urllib.parse, urllib.request\n'
-          DASHBOARD_SCRIPT+=$'auth = os.environ.get("OO_AUTH_HEADER")\n'
           DASHBOARD_SCRIPT+=$'user = os.environ.get("OO_USERNAME")\n'
           DASHBOARD_SCRIPT+=$'pwd = os.environ.get("OO_PASSWORD")\n'
           DASHBOARD_SCRIPT+=$'target_url = os.environ.get("OO_TARGET_URL", "http://openobserve-router:5080/api/default/dashboards?folder=default")\n'
           DASHBOARD_SCRIPT+=$'folders_raw = os.environ.get("OO_DASHBOARD_FOLDERS_B64", "")\n'
+          DASHBOARD_SCRIPT+=$'if not (user and pwd):\n'
+          DASHBOARD_SCRIPT+=$'    sys.exit("missing OO_USERNAME/OO_PASSWORD for dashboard import auth")\n'
           DASHBOARD_SCRIPT+=$'token = None\n'
-          DASHBOARD_SCRIPT+=$'if user and pwd:\n'
-          DASHBOARD_SCRIPT+=$'    try:\n'
-          DASHBOARD_SCRIPT+=$'        login_body = json.dumps({"email": user, "password": pwd}).encode()\n'
-          DASHBOARD_SCRIPT+=$'        req = urllib.request.Request("http://openobserve-router:5080/api/default/login/basic", data=login_body, headers={"Content-Type": "application/json"}, method="POST")\n'
-          DASHBOARD_SCRIPT+=$'        with urllib.request.urlopen(req) as resp:\n'
-          DASHBOARD_SCRIPT+=$'            payload = json.load(resp)\n'
-          DASHBOARD_SCRIPT+=$'            token = payload.get("token") or payload.get("access_token")\n'
-          DASHBOARD_SCRIPT+=$'    except Exception as exc:\n'
-          DASHBOARD_SCRIPT+=$'        print(f"⚠️ token fetch failed: {exc}", file=sys.stderr)\n'
-          DASHBOARD_SCRIPT+=$'if token:\n'
-          DASHBOARD_SCRIPT+=$'    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}\n'
-          DASHBOARD_SCRIPT+=$'elif auth:\n'
-          DASHBOARD_SCRIPT+=$'    headers = {"Authorization": auth, "Content-Type": "application/json"}\n'
-          DASHBOARD_SCRIPT+=$'else:\n'
-          DASHBOARD_SCRIPT+=$'    sys.exit("missing auth")\n'
+          DASHBOARD_SCRIPT+=$'try:\n'
+          DASHBOARD_SCRIPT+=$'    login_body = json.dumps({"email": user, "password": pwd}).encode()\n'
+          DASHBOARD_SCRIPT+=$'    req = urllib.request.Request("http://openobserve-router:5080/api/default/login/basic", data=login_body, headers={"Content-Type": "application/json"}, method="POST")\n'
+          DASHBOARD_SCRIPT+=$'    with urllib.request.urlopen(req) as resp:\n'
+          DASHBOARD_SCRIPT+=$'        payload = json.load(resp)\n'
+          DASHBOARD_SCRIPT+=$'        token = payload.get("token") or payload.get("access_token")\n'
+          DASHBOARD_SCRIPT+=$'except Exception as exc:\n'
+          DASHBOARD_SCRIPT+=$'    sys.exit(f"token fetch failed: {exc}")\n'
+          DASHBOARD_SCRIPT+=$'if not token:\n'
+          DASHBOARD_SCRIPT+=$'    sys.exit("token fetch returned empty")\n'
+          DASHBOARD_SCRIPT+=$'headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}\n'
           DASHBOARD_SCRIPT+=$'try: folders_text = base64.b64decode(folders_raw).decode()\n'
           DASHBOARD_SCRIPT+=$'except Exception as exc: sys.exit(f"unable to decode folders list: {exc}")\n'
           DASHBOARD_SCRIPT+=$'folders = [f.strip() for f in folders_text.splitlines() if f.strip()]\n'
