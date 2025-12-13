@@ -2307,7 +2307,7 @@ write_files:
         --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_ATTRIBUTE=groups \
         --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
-        --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
+        --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=true \
         --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=role \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
         --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
@@ -2348,7 +2348,7 @@ write_files:
         --set-string dex.parameters.O2_DEX_DEFAULT_ORG=default \
         --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
         --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
-        --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=false \
+        --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=true \
         --set-string dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
         --set-string dex.config.frontend.issuer="OpenObserve" \
         --set-string dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
