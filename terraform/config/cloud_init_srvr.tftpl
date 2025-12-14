@@ -2363,6 +2363,9 @@ write_files:
         --set-string dex.config.staticClients[0].id="o2-client" \
         --set-string dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
         --set-string dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
+        --set-string dex.config.staticClients[1].id="debug-client" \
+        --set-string dex.config.staticClients[1].secret="debug-secret" \
+        --set-string dex.config.staticClients[1].redirectURIs[0]="urn:ietf:wg:oauth:2.0:oob" \
         --set-string dex.config.connectors[0].type="github" \
         --set-string dex.config.connectors[0].id="github" \
         --set-string dex.config.connectors[0].name="GitHub" \
@@ -2380,6 +2383,10 @@ write_files:
         --set-string enterprise.dex.config.staticClients[0].name="o2-client" \
         --set-string enterprise.dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
         --set-string enterprise.dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
+        --set-string enterprise.dex.config.staticClients[1].id="debug-client" \
+        --set-string enterprise.dex.config.staticClients[1].name="debug-client" \
+        --set-string enterprise.dex.config.staticClients[1].secret="debug-secret" \
+        --set-string enterprise.dex.config.staticClients[1].redirectURIs[0]="urn:ietf:wg:oauth:2.0:oob" \
         --set-string enterprise.dex.config.connectors[0].type="github" \
         --set-string enterprise.dex.config.connectors[0].id="github" \
         --set-string enterprise.dex.config.connectors[0].name="GitHub" \
@@ -2864,11 +2871,6 @@ write_files:
         OO_DASHBOARD_FOLDER="$OPENOBSERVE_DASHBOARD_FOLDER"
       fi
 
-      # Try to hydrate OO_AUTH_HEADER from the stored secret if it is empty
-      if [[ -z "$OO_AUTH_HEADER" ]]; then
-        OO_AUTH_HEADER="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret oo-auth -o jsonpath='{.data.OO_AUTH_HEADER}' 2>/dev/null | base64 -d || true)"
-      fi
-
       if [[ -z "$OO_AUTH_HEADER" ]]; then
         echo "⚠️  OO_AUTH_HEADER is empty; skipping dashboard import."
       else
@@ -2880,39 +2882,15 @@ write_files:
 
           # 3) Python script as a single variable (no heredoc)
           DASHBOARD_SCRIPT=$'import base64, json, os, sys, urllib.parse, urllib.request\n'
-          DASHBOARD_SCRIPT+=$'user = os.environ.get("OO_IMPORT_USER") or os.environ.get("OO_USERNAME")\n'
-          DASHBOARD_SCRIPT+=$'pwd = os.environ.get("OO_IMPORT_PASS") or os.environ.get("OO_PASSWORD")\n'
-          DASHBOARD_SCRIPT+=$'token = os.environ.get("OO_IMPORT_TOKEN")\n'
-          DASHBOARD_SCRIPT+=$'target_url = os.environ.get("OO_TARGET_URL", "http://openobserve-router:5080/api/default/dashboards?folder=default")\n'
+          DASHBOARD_SCRIPT+=$'auth = os.environ.get("OO_AUTH_HEADER")\n'
           DASHBOARD_SCRIPT+=$'folders_raw = os.environ.get("OO_DASHBOARD_FOLDERS_B64", "")\n'
-          DASHBOARD_SCRIPT+=$'headers = None\n'
-          DASHBOARD_SCRIPT+=$'def try_login(url, body):\n'
-          DASHBOARD_SCRIPT+=$'    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")\n'
-          DASHBOARD_SCRIPT+=$'    with urllib.request.urlopen(req) as resp:\n'
-          DASHBOARD_SCRIPT+=$'        payload = json.load(resp)\n'
-          DASHBOARD_SCRIPT+=$'        return payload.get("token") or payload.get("access_token")\n'
-          DASHBOARD_SCRIPT+=$'if not token:\n'
-          DASHBOARD_SCRIPT+=$'    if not (user and pwd):\n'
-          DASHBOARD_SCRIPT+=$'        print("⚠️  missing OO_IMPORT_TOKEN and OO_IMPORT_USER/OO_IMPORT_PASS; skipping import", file=sys.stderr)\n'
-          DASHBOARD_SCRIPT+=$'        sys.exit(0)\n'
-          DASHBOARD_SCRIPT+=$'    login_body = json.dumps({"email": user, "password": pwd}).encode()\n'
-          DASHBOARD_SCRIPT+=$'    last_err = None\n'
-          DASHBOARD_SCRIPT+=$'    for url in ("http://openobserve-router:5080/api/default/login", "http://openobserve-router:5080/api/default/login/basic"):\n'
-          DASHBOARD_SCRIPT+=$'        try:\n'
-          DASHBOARD_SCRIPT+=$'            token = try_login(url, login_body)\n'
-          DASHBOARD_SCRIPT+=$'            if token:\n'
-          DASHBOARD_SCRIPT+=$'                print(f"ℹ️  login succeeded via {url}", file=sys.stderr)\n'
-          DASHBOARD_SCRIPT+=$'                break\n'
-          DASHBOARD_SCRIPT+=$'        except Exception as exc:\n'
-          DASHBOARD_SCRIPT+=$'            last_err = exc\n'
-          DASHBOARD_SCRIPT+=$'    if not token:\n'
-          DASHBOARD_SCRIPT+=$'        print(f"⚠️  token fetch failed: {last_err}", file=sys.stderr)\n'
-          DASHBOARD_SCRIPT+=$'        sys.exit(0)\n'
-          DASHBOARD_SCRIPT+=$'headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}\n'
+          DASHBOARD_SCRIPT+=$'if not auth: sys.exit("missing OO_AUTH_HEADER")\n'
           DASHBOARD_SCRIPT+=$'try: folders_text = base64.b64decode(folders_raw).decode()\n'
           DASHBOARD_SCRIPT+=$'except Exception as exc: sys.exit(f"unable to decode folders list: {exc}")\n'
           DASHBOARD_SCRIPT+=$'folders = [f.strip() for f in folders_text.splitlines() if f.strip()]\n'
           DASHBOARD_SCRIPT+=$'repo_base = "https://api.github.com/repos/openobserve/dashboards/contents/"\n'
+          DASHBOARD_SCRIPT+=$'target_url = "http://openobserve-router:5080/api/default/dashboards?folder=default"\n'
+          DASHBOARD_SCRIPT+=$'headers = {"Authorization": auth, "Content-Type": "application/json"}\n'
           DASHBOARD_SCRIPT+=$'def fetch_json(url):\n    with urllib.request.urlopen(url) as resp: return json.load(resp)\n'
           DASHBOARD_SCRIPT+=$'def fetch_bytes(url):\n    with urllib.request.urlopen(url) as resp: return resp.read()\n'
           DASHBOARD_SCRIPT+=$'success = 0\n'
@@ -2951,9 +2929,6 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
           --image=python:3-alpine \
           --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
-          --env OO_USERNAME="$OPENOBSERVE_USERNAME" \
-          --env OO_PASSWORD="$OPENOBSERVE_PASSWORD" \
-          --env OO_TARGET_URL="http://openobserve-router:5080/api/default/dashboards?folder=default" \
           --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
           --env DASHBOARD_SCRIPT64="$DASHBOARD_SCRIPT64" \
           -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"DASHBOARD_SCRIPT64\"]).decode())"'
