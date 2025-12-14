@@ -2473,6 +2473,21 @@ write_files:
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
       OO_AUTH_HEADER="Basic $OO_BASIC"
 
+      echo "🔒 Ensuring OpenObserve roles for GitHub teams..."
+      ADMIN_ROLE_JSON='{"name":"dotcomrow:openobserve_admin_users","description":"GitHub admin team","permissions":["*"]}'
+      USER_ROLE_JSON='{"name":"dotcomrow:openobserve_users","description":"GitHub user team","permissions":["read:*"]}'
+      for role_payload in "$ADMIN_ROLE_JSON" "$USER_ROLE_JSON"; do
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-create --rm -i --restart=Never \
+          --image=curlimages/curl -- \
+          curl -sS -X POST \
+            -H "Authorization: $OO_AUTH_HEADER" \
+            -H "Content-Type: application/json" \
+            -H "organization: default" \
+            -d "$role_payload" \
+            http://openobserve-router:5080/api/default/roles || \
+          echo "⚠️  role create failed for payload: $role_payload"
+      done
+
       # store it in the same namespace as the collector
       sudo kubectl -n observability \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
