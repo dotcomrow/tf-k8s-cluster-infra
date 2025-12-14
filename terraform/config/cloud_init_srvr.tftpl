@@ -2274,8 +2274,8 @@ write_files:
       export OO_GH_CLIENT_ID="${OPENOBSERVE_CLIENT_ID}"
       export OO_GH_CLIENT_SECRET="${OPENOBSERVE_CLIENT_SECRET}"
       export OO_GH_ORG="${GITHUB_ORG}"
-      export OO_GH_ADMIN_TEAM="openobserve_admin_users"   # e.g., platform-admins
-      export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
+      export OO_GH_ADMIN_TEAM="dotcomrow:openobserve_admin_users"   # include org prefix for Dex group claim
+      export OO_GH_USER_TEAM="dotcomrow:openobserve_users"    # include org prefix for Dex group claim
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
       # Dex discovery host (where OpenObserve fetches .well-known; can be internal)
