@@ -2379,8 +2379,10 @@ write_files:
         --set-string dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
+        --set-string dex.config.connectors[0].config.orgs[0].teams[2]="dotcomrow:openobserve_admin_users" \
+        --set-string dex.config.connectors[0].config.orgs[0].teams[3]="dotcomrow:openobserve_users" \
         --set dex.config.connectors[0].config.loadAllGroups=true \
-        --set-string dex.config.connectors[0].config.teamNameField=name \
+        --set-string dex.config.connectors[0].config.teamNameField=slug \
         --set-string enterprise.dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
         --set enterprise.dex.config.enablePasswordDB=false \
         --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
@@ -2404,8 +2406,10 @@ write_files:
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
         --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
+        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[2]="dotcomrow:openobserve_admin_users" \
+        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[3]="dotcomrow:openobserve_users" \
         --set enterprise.dex.config.connectors[0].config.loadAllGroups=true \
-        --set-string enterprise.dex.config.connectors[0].config.teamNameField=name \
+        --set-string enterprise.dex.config.connectors[0].config.teamNameField=slug \
         --set-string enterprise.dex.config.connectors[0].config.scopes[0]=read:org \
         --set-string enterprise.dex.config.connectors[0].config.scopes[1]=user:email \
         --set-string enterprise.dex.ingress.enabled=true \
