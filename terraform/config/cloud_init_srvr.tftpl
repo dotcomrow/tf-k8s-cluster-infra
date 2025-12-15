@@ -2298,6 +2298,10 @@ write_files:
         --set-string image.enterprise.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=true \
         --set enterprise.dex.enabled=true \
+        --set openfga.enabled=true \
+        --set openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
+        --set openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
+        --set-string auth.OPENFGA_DATASTORE_URI="postgres://openobserve:<pw>@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
         --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
         --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
@@ -2381,6 +2385,8 @@ write_files:
         --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[2]="dotcomrow:openobserve_admin_users" \
         --set-string dex.config.connectors[0].config.orgs[0].teams[3]="dotcomrow:openobserve_users" \
+        --set-string dex.config.connectors[0].config.scopes[0]=read:org \
+        --set-string dex.config.connectors[0].config.scopes[1]=user:email \
         --set dex.config.connectors[0].config.loadAllGroups=true \
         --set-string dex.config.connectors[0].config.teamNameField=slug \
         --set-string enterprise.dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
