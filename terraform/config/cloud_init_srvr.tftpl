@@ -2497,7 +2497,11 @@ write_files:
             -H \"organization: default\" \
             -d \"$ADMIN_PAYLOAD\" \
             http://openobserve-router:5080/api/default/roles/dotcomrow_openobserve_admin_users
-          status=$(grep HTTP /tmp/admin_put_hdr | tail -1 | awk '{print $2}')
+          if [ -f /tmp/admin_put_hdr ]; then
+            status=$(grep HTTP /tmp/admin_put_hdr | tail -1 | awk '{print $2}')
+          else
+            status=\"missing_headers\"
+          fi
           echo \"admin update status: $? http_status: $status\"; cat /tmp/admin_put_body
           sleep 5
         " || echo "⚠️  admin role create/update failed"
@@ -2523,7 +2527,11 @@ write_files:
             -H \"organization: default\" \
             -d \"$USER_PAYLOAD\" \
             http://openobserve-router:5080/api/default/roles/dotcomrow_openobserve_users
-          status=$(grep HTTP /tmp/user_put_hdr | tail -1 | awk '{print $2}')
+          if [ -f /tmp/user_put_hdr ]; then
+            status=$(grep HTTP /tmp/user_put_hdr | tail -1 | awk '{print $2}')
+          else
+            status=\"missing_headers\"
+          fi
           echo \"user update status: $? http_status: $status\"; cat /tmp/user_put_body
           sleep 5
         " || echo "⚠️  user role create/update failed"
