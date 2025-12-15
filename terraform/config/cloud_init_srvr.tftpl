@@ -2480,23 +2480,28 @@ write_files:
       OO_AUTH_HEADER="Basic $OO_BASIC"
 
       echo "🔒 Ensuring OpenObserve roles for GitHub teams..."
-      ADMIN_ROLE_JSON='{"role":"dotcomrow:openobserve_admin_users","description":"GitHub admin team","permissions":["*"]}'
-      USER_ROLE_JSON='{"role":"dotcomrow:openobserve_users","description":"GitHub user team","permissions":["read:*"]}'
-      ADMIN_ROLE_NOPREFIX_JSON='{"role":"openobserve_admin_users","description":"GitHub admin team (no prefix)","permissions":["*"]}'
-      USER_ROLE_NOPREFIX_JSON='{"role":"openobserve_users","description":"GitHub user team (no prefix)","permissions":["read:*"]}'
-      ADMIN_ROLE_UNDERSCORE_JSON='{"role":"dotcomrow_openobserve_admin_users","description":"GitHub admin team (underscored)","permissions":["*"]}'
-      USER_ROLE_UNDERSCORE_JSON='{"role":"dotcomrow_openobserve_users","description":"GitHub user team (underscored)","permissions":["read:*"]}'
-      for role_payload in "$ADMIN_ROLE_JSON" "$USER_ROLE_JSON" "$ADMIN_ROLE_NOPREFIX_JSON" "$USER_ROLE_NOPREFIX_JSON" "$ADMIN_ROLE_UNDERSCORE_JSON" "$USER_ROLE_UNDERSCORE_JSON"; do
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-create --rm -i --restart=Never \
-          --image=curlimages/curl -- \
+      # Create with desired permissions (fresh platform build starts empty).
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-admin --rm -i --restart=Never \
+        --image=curlimages/curl -- \
+        sh -c '
           curl -sS -X POST \
-            -H "Authorization: $OO_AUTH_HEADER" \
+            -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
             -H "Content-Type: application/json" \
             -H "organization: default" \
-            -d "$role_payload" \
-            http://openobserve-router:5080/api/default/roles || \
-          echo "⚠️  role create failed for payload: $role_payload"
-      done
+            -d '"'"'{"role":"dotcomrow_openobserve_admin_users","description":"GitHub admin team","permissions":["*"]}'"'"' \
+            http://openobserve-router:5080/api/default/roles
+        ' || echo "⚠️  admin role create failed"
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-user --rm -i --restart=Never \
+        --image=curlimages/curl -- \
+        sh -c '
+          curl -sS -X POST \
+            -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
+            -H "Content-Type: application/json" \
+            -H "organization: default" \
+            -d '"'"'{"role":"dotcomrow_openobserve_users","description":"GitHub user team","permissions":["read:*"]}'"'"' \
+            http://openobserve-router:5080/api/default/roles
+        ' || echo "⚠️  user role create failed"
 
       # store it in the same namespace as the collector
       sudo kubectl -n observability \
