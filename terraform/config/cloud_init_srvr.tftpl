@@ -2483,20 +2483,24 @@ write_files:
       # Create with desired permissions (fresh platform build starts empty).
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-admin --restart=Never \
         --image=curlimages/curl --command -- sh -c '
-          curl -sS -w " HTTP:%{http_code}\n" -X POST \
+          curl -sS -o /tmp/admin_create -X POST \
             -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
             -H "Content-Type: application/json" \
             -H "organization: default" \
             -d '"'"'{"role":"dotcomrow_openobserve_admin_users","description":"GitHub admin team"}'"'"' \
             http://openobserve-router:5080/api/default/roles
+          echo "admin create status: $?"
+          cat /tmp/admin_create
           sleep 2
           ADMIN_PAYLOAD='{"add":[{"object":"function:_all_default","permission":"AllowAll"},{"object":"dfolder:_all_default","permission":"AllowAll"},{"object":"template:_all_default","permission":"AllowAll"},{"object":"destination:_all_default","permission":"AllowAll"},{"object":"user:_all_default","permission":"AllowAll"},{"object":"role:_all_default","permission":"AllowAll"},{"object":"group:_all_default","permission":"AllowAll"},{"object":"enrichment_table:_all_default","permission":"AllowAll"},{"object":"settings:_all_default","permission":"AllowAll"},{"object":"kv:_all_default","permission":"AllowAll"},{"object":"syslog-route:_all_default","permission":"AllowAll"},{"object":"summary:_all_default","permission":"AllowAll"},{"object":"logs:_all_default","permission":"AllowAll"},{"object":"traces:_all_default","permission":"AllowAll"},{"object":"metrics:_all_default","permission":"AllowAll"},{"object":"index:_all_default","permission":"AllowAll"},{"object":"dfolder:default","permission":"AllowAll"},{"object":"role:dotcomrow_openobserve_admin_users","permission":"AllowAll"},{"object":"role:dotcomrow_openobserve_users","permission":"AllowAll"},{"object":"passcode:_all_default","permission":"AllowAll"},{"object":"rumtoken:_all_default","permission":"AllowAll"},{"object":"metadata:_all_default","permission":"AllowAll"},{"object":"metadata:distinct_values_logs_default","permission":"AllowAll"},{"object":"metadata:distinct_values_traces_default","permission":"AllowAll"},{"object":"metadata:trace_list_index","permission":"AllowAll"},{"object":"report:_all_default","permission":"AllowAll"},{"object":"pipeline:_all_default","permission":"AllowAll"},{"object":"service_accounts:_all_default","permission":"AllowAll"},{"object":"search_jobs:_all_default","permission":"AllowAll"},{"object":"cipher_keys:_all_default","permission":"AllowAll"},{"object":"action_scripts:_all_default","permission":"AllowAll"},{"object":"afolder:_all_default","permission":"AllowAll"},{"object":"afolder:default","permission":"AllowAll"},{"object":"ratelimit:_all_default","permission":"AllowAll"},{"object":"ai:_all_default","permission":"AllowAll"},{"object":"re_patterns:_all_default","permission":"AllowAll"},{"object":"license:_all_default","permission":"AllowAll"}],"remove":[],"add_users":[],"remove_users":[]}'
-          curl -sS -w " HTTP:%{http_code}\n" -X PUT \
+          curl -sS -o /tmp/admin_put -X PUT \
             -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
             -H "Content-Type: application/json" \
             -H "organization: default" \
             -d "$ADMIN_PAYLOAD" \
             http://openobserve-router:5080/api/default/roles/dotcomrow_openobserve_admin_users
+          echo "admin update status: $?"
+          cat /tmp/admin_put
           sleep 2
         ' || echo "⚠️  admin role create/update failed"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-admin --timeout=30s || true
@@ -2505,20 +2509,24 @@ write_files:
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-user --restart=Never \
         --image=curlimages/curl --command -- sh -c '
-          curl -sS -w " HTTP:%{http_code}\n" -X POST \
+          curl -sS -o /tmp/user_create -X POST \
             -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
             -H "Content-Type: application/json" \
             -H "organization: default" \
             -d '"'"'{"role":"dotcomrow_openobserve_users","description":"GitHub user team"}'"'"' \
             http://openobserve-router:5080/api/default/roles
+          echo "user create status: $?"
+          cat /tmp/user_create
           sleep 2
           USER_PAYLOAD='{"add":[{"object":"function:_all_default","permission":"AllowGet"},{"object":"dfolder:_all_default","permission":"AllowGet"},{"object":"template:_all_default","permission":"AllowGet"},{"object":"destination:_all_default","permission":"AllowGet"},{"object":"user:_all_default","permission":"AllowGet"},{"object":"role:_all_default","permission":"AllowGet"},{"object":"group:_all_default","permission":"AllowGet"},{"object":"enrichment_table:_all_default","permission":"AllowGet"},{"object":"settings:_all_default","permission":"AllowGet"},{"object":"kv:_all_default","permission":"AllowGet"},{"object":"syslog-route:_all_default","permission":"AllowGet"},{"object":"summary:_all_default","permission":"AllowGet"},{"object":"logs:_all_default","permission":"AllowGet"},{"object":"traces:_all_default","permission":"AllowGet"},{"object":"metrics:_all_default","permission":"AllowGet"},{"object":"index:_all_default","permission":"AllowGet"},{"object":"dfolder:default","permission":"AllowGet"},{"object":"role:dotcomrow_openobserve_admin_users","permission":"AllowGet"},{"object":"role:dotcomrow_openobserve_users","permission":"AllowGet"},{"object":"passcode:_all_default","permission":"AllowGet"},{"object":"rumtoken:_all_default","permission":"AllowGet"},{"object":"metadata:_all_default","permission":"AllowGet"},{"object":"metadata:distinct_values_logs_default","permission":"AllowGet"},{"object":"metadata:distinct_values_traces_default","permission":"AllowGet"},{"object":"metadata:trace_list_index","permission":"AllowGet"},{"object":"report:_all_default","permission":"AllowGet"},{"object":"pipeline:_all_default","permission":"AllowGet"},{"object":"service_accounts:_all_default","permission":"AllowGet"},{"object":"search_jobs:_all_default","permission":"AllowGet"},{"object":"cipher_keys:_all_default","permission":"AllowGet"},{"object":"action_scripts:_all_default","permission":"AllowGet"},{"object":"afolder:_all_default","permission":"AllowGet"},{"object":"afolder:default","permission":"AllowGet"},{"object":"ratelimit:_all_default","permission":"AllowGet"},{"object":"ai:_all_default","permission":"AllowGet"},{"object":"re_patterns:_all_default","permission":"AllowGet"},{"object":"license:_all_default","permission":"AllowGet"}],"remove":[],"add_users":[],"remove_users":[]}'
-          curl -sS -w " HTTP:%{http_code}\n" -X PUT \
+          curl -sS -o /tmp/user_put -X PUT \
             -H "Authorization: '"'"'$OO_AUTH_HEADER'"'"'" \
             -H "Content-Type: application/json" \
             -H "organization: default" \
             -d "$USER_PAYLOAD" \
             http://openobserve-router:5080/api/default/roles/dotcomrow_openobserve_users
+          echo "user update status: $?"
+          cat /tmp/user_put
           sleep 2
         ' || echo "⚠️  user role create/update failed"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-user --timeout=30s || true
