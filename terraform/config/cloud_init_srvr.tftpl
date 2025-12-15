@@ -2505,6 +2505,7 @@ write_files:
         ' || echo "⚠️  admin role create/update failed"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-admin --timeout=30s || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-admin || true
+      sleep 30
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-admin --ignore-not-found=true
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-user --restart=Never \
@@ -2531,6 +2532,7 @@ write_files:
         ' || echo "⚠️  user role create/update failed"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-user --timeout=30s || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-user || true
+      sleep 30
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-user --ignore-not-found=true
 
       # store it in the same namespace as the collector
