@@ -2503,9 +2503,13 @@ write_files:
           cat /tmp/admin_put
           sleep 2
         ' || echo "⚠️  admin role create/update failed"
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-admin --timeout=30s || true
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-admin || true
-      sleep 20
+
+      # Wait for the pod to complete (Succeeded or Failed) before delete
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
+        --for=condition=Ready pod/oo-role-admin --timeout=30s || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
+        --for=condition=Completed pod/oo-role-admin --timeout=60s || true
+
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-admin --ignore-not-found=true
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-user --restart=Never \
@@ -2530,9 +2534,13 @@ write_files:
           cat /tmp/user_put
           sleep 2
         ' || echo "⚠️  user role create/update failed"
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/oo-role-user --timeout=30s || true
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-user || true
-      sleep 20
+
+      # Wait for completion before delete
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
+        --for=condition=Ready pod/oo-role-user --timeout=30s || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
+        --for=condition=Completed pod/oo-role-user --timeout=60s || true
+
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-user --ignore-not-found=true
 
       # store it in the same namespace as the collector
