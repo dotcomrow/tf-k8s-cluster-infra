@@ -2480,12 +2480,12 @@ write_files:
       OO_AUTH_HEADER="Basic $OO_BASIC"
 
       echo "🔒 Ensuring OpenObserve roles for GitHub teams..."
-      ADMIN_ROLE_JSON='{"name":"dotcomrow:openobserve_admin_users","description":"GitHub admin team","permissions":["*"]}'
-      USER_ROLE_JSON='{"name":"dotcomrow:openobserve_users","description":"GitHub user team","permissions":["read:*"]}'
-      ADMIN_ROLE_NOPREFIX_JSON='{"name":"openobserve_admin_users","description":"GitHub admin team (no prefix)","permissions":["*"]}'
-      USER_ROLE_NOPREFIX_JSON='{"name":"openobserve_users","description":"GitHub user team (no prefix)","permissions":["read:*"]}'
-      ADMIN_ROLE_UNDERSCORE_JSON='{"name":"dotcomrow_openobserve_admin_users","description":"GitHub admin team (underscored)","permissions":["*"]}'
-      USER_ROLE_UNDERSCORE_JSON='{"name":"dotcomrow_openobserve_users","description":"GitHub user team (underscored)","permissions":["read:*"]}'
+      ADMIN_ROLE_JSON='{"role":"dotcomrow:openobserve_admin_users","description":"GitHub admin team","permissions":["*"]}'
+      USER_ROLE_JSON='{"role":"dotcomrow:openobserve_users","description":"GitHub user team","permissions":["read:*"]}'
+      ADMIN_ROLE_NOPREFIX_JSON='{"role":"openobserve_admin_users","description":"GitHub admin team (no prefix)","permissions":["*"]}'
+      USER_ROLE_NOPREFIX_JSON='{"role":"openobserve_users","description":"GitHub user team (no prefix)","permissions":["read:*"]}'
+      ADMIN_ROLE_UNDERSCORE_JSON='{"role":"dotcomrow_openobserve_admin_users","description":"GitHub admin team (underscored)","permissions":["*"]}'
+      USER_ROLE_UNDERSCORE_JSON='{"role":"dotcomrow_openobserve_users","description":"GitHub user team (underscored)","permissions":["read:*"]}'
       for role_payload in "$ADMIN_ROLE_JSON" "$USER_ROLE_JSON" "$ADMIN_ROLE_NOPREFIX_JSON" "$USER_ROLE_NOPREFIX_JSON" "$ADMIN_ROLE_UNDERSCORE_JSON" "$USER_ROLE_UNDERSCORE_JSON"; do
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-create --rm -i --restart=Never \
           --image=curlimages/curl -- \
