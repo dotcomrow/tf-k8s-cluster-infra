@@ -2511,7 +2511,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
         --for=jsonpath='{.status.phase}'=Succeeded pod/oo-role-admin --timeout=120s || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-admin || true
-      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-admin --ignore-not-found=true || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-admin --ignore-not-found=true || true
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-role-user --restart=Never \
         --image=curlimages/curl --command -- /bin/sh -c "
@@ -2543,7 +2543,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait \
         --for=jsonpath='{.status.phase}'=Succeeded pod/oo-role-user --timeout=120s || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs oo-role-user || true
-      # sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-user --ignore-not-found=true || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-role-user --ignore-not-found=true || true
 
       # store it in the same namespace as the collector
       sudo kubectl -n observability \
