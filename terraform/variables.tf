@@ -195,6 +195,25 @@ variable "OPENOBSERVE_CLIENT_SECRET" {
   default = "jaeger"
 }
 
+variable "OPENOBSERVE_GITHUB_TOKEN" {
+  description = "GitHub token with read:org for syncing OpenObserve roles"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "OPENOBSERVE_GITHUB_ADMIN_TEAM" {
+  description = "GitHub team slug whose members should be OpenObserve admins"
+  type        = string
+  default     = "openobserve_admin_users"
+}
+
+variable "OPENOBSERVE_GITHUB_USER_TEAM" {
+  description = "GitHub team slug for standard OpenObserve users"
+  type        = string
+  default     = "openobserve_users"
+}
+
 variable "JAEGER_OAUTH2_PROXY_COOKIE_SECRET" {
   default = "jaeger"
 }

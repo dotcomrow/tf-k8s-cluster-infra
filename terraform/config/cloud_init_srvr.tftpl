@@ -2273,9 +2273,10 @@ write_files:
 
       export OO_GH_CLIENT_ID="${OPENOBSERVE_CLIENT_ID}"
       export OO_GH_CLIENT_SECRET="${OPENOBSERVE_CLIENT_SECRET}"
+      export OPENOBSERVE_GITHUB_TOKEN="${OPENOBSERVE_GITHUB_TOKEN}"
       export OO_GH_ORG="${GITHUB_ORG}"
-      export OO_GH_ADMIN_TEAM="openobserve_admin_users"   # e.g., platform-admins
-      export OO_GH_USER_TEAM="openobserve_users"    # e.g., engineers
+      export OO_GH_ADMIN_TEAM="${OPENOBSERVE_GITHUB_ADMIN_TEAM}"   # e.g., platform-admins
+      export OO_GH_USER_TEAM="${OPENOBSERVE_GITHUB_USER_TEAM}"    # e.g., engineers
       # Public URL OpenObserve users hit (used in redirects)
       export OO_PUBLIC_URL="https://openobserve.teleport.app.${RANCHER_DOMAIN}"
       # Dex discovery host (where OpenObserve fetches .well-known; can be internal)
@@ -2295,26 +2296,8 @@ write_files:
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
         --set-string image.oss.tag="$OO_IMAGE_TAG" \
-        --set-string image.enterprise.tag="$OO_IMAGE_TAG" \
-        --set enterprise.enabled=true \
-        --set enterprise.dex.enabled=true \
-        --set openfga.enabled=true \
-        --set openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
-        --set openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
-        --set-string auth.OPENFGA_DATASTORE_URI="postgres://openobserve:<pw>@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
-        --set-string enterprise.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
-        --set-string enterprise.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
-        --set-string enterprise.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
-        --set-string enterprise.dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
-        --set-string enterprise.dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
-        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ORG=default \
-        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
-        --set-string enterprise.dex.parameters.O2_DEX_GROUP_ATTRIBUTE=groups \
-        --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
-        --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=true \
-        --set-string enterprise.dex.parameters.O2_DEX_ROLE_ATTRIBUTE=groups \
-        --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE=true \
-        --set-string enterprise.openfga.parameters.O2_MAP_GROUP_TO_ROLE_SKIP_CREATION=false \
+        --set enterprise.enabled=false \
+        --set openfga.enabled=false \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -2389,41 +2372,6 @@ write_files:
         --set-string dex.config.connectors[0].config.scopes[1]=user:email \
         --set dex.config.connectors[0].config.loadAllGroups=true \
         --set-string dex.config.connectors[0].config.teamNameField=slug \
-        --set-string enterprise.dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
-        --set enterprise.dex.config.enablePasswordDB=false \
-        --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
-        --set-string enterprise.dex.config.staticClients[0].name="o2-client" \
-        --set-string enterprise.dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
-        --set-string enterprise.dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
-        --set-string enterprise.dex.config.staticClients[0].redirectURIs[1]="$OO_DEX_ISSUER_URL/device/callback" \
-        --set-string enterprise.dex.config.staticClients[0].redirectURIs[2]="$OO_DEX_ISSUER_URL/dex/device/callback" \
-        --set-string enterprise.dex.config.staticClients[1].id="debug-client" \
-        --set-string enterprise.dex.config.staticClients[1].name="debug-client" \
-        --set-string enterprise.dex.config.staticClients[1].secret="debug-secret" \
-        --set-string enterprise.dex.config.staticClients[1].redirectURIs[0]="urn:ietf:wg:oauth:2.0:oob" \
-        --set-string enterprise.dex.config.staticClients[1].redirectURIs[1]="$OO_DEX_ISSUER_URL/device/callback" \
-        --set-string enterprise.dex.config.staticClients[1].redirectURIs[2]="$OO_DEX_ISSUER_URL/dex/device/callback" \
-        --set-string enterprise.dex.config.connectors[0].type="github" \
-        --set-string enterprise.dex.config.connectors[0].id="github" \
-        --set-string enterprise.dex.config.connectors[0].name="GitHub" \
-        --set-string enterprise.dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
-        --set-string enterprise.dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string enterprise.dex.config.connectors[0].config.redirectURI="$OO_DEX_CALLBACK_URL/dex/callback" \
-        --set-string enterprise.dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
-        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
-        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
-        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[2]="dotcomrow:openobserve_admin_users" \
-        --set-string enterprise.dex.config.connectors[0].config.orgs[0].teams[3]="dotcomrow:openobserve_users" \
-        --set enterprise.dex.config.connectors[0].config.loadAllGroups=true \
-        --set-string enterprise.dex.config.connectors[0].config.teamNameField=slug \
-        --set-string enterprise.dex.config.connectors[0].config.scopes[0]=read:org \
-        --set-string enterprise.dex.config.connectors[0].config.scopes[1]=user:email \
-        --set-string enterprise.dex.ingress.enabled=true \
-        --set-string enterprise.dex.ingress.hosts[0].host="$OO_DEX_DISCOVERY_HOST" \
-        --set-string enterprise.dex.ingress.hosts[0].paths[0].path="/" \
-        --set-string enterprise.dex.ingress.hosts[0].paths[0].pathType="Prefix" \
-        --set-string enterprise.dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
-        --set-string enterprise.dex.ingress.tls[0].secretName="dex-openobserve-tls" \
         --set-string extraEnv[0].name=O2_DEX_DISCOVERY_URL \
         --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL"
 
@@ -2557,6 +2505,226 @@ write_files:
         create secret generic oo-auth \
         --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+      if [[ -z "${OPENOBSERVE_GITHUB_TOKEN}" ]]; then
+        echo "⚠️  Skipping GitHub role sync CronJob: OPENOBSERVE_GITHUB_TOKEN is empty."
+      else
+        sudo python3 -c 'from textwrap import dedent
+        import base64, json, os, sys, urllib.error, urllib.parse, urllib.request
+
+        script = dedent("""\
+        import base64
+        import json
+        import os
+        import sys
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+
+        OO_URL = os.getenv("OO_URL", "http://openobserve-router:5080").rstrip("/")
+        OO_ORG = os.getenv("OO_ORG", "default")
+        OO_ADMIN_USER = os.environ["OO_ADMIN_USER"]
+        OO_ADMIN_PASS = os.environ["OO_ADMIN_PASS"]
+        GH_TOKEN = os.environ["GH_TOKEN"]
+        GH_ORG = os.environ["GH_ORG"]
+        GH_ADMIN_TEAM = os.getenv("GH_ADMIN_TEAM", "")
+        GH_USER_TEAM = os.getenv("GH_USER_TEAM", "")
+
+        basic = base64.b64encode(f"{OO_ADMIN_USER}:{OO_ADMIN_PASS}".encode()).decode()
+        AUTH_HEADER = f"Basic {basic}"
+        COMMON_HEADERS = {
+            "Authorization": AUTH_HEADER,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "organization": OO_ORG,
+        }
+
+        def http_json(url: str, method: str = "GET", body: dict | None = None, allow_404: bool = False):
+            data = None
+            if body is not None:
+                data = json.dumps(body).encode()
+            req = urllib.request.Request(url, data=data, method=method, headers=COMMON_HEADERS)
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    raw = resp.read()
+                    if not raw:
+                        return {}
+                    return json.loads(raw.decode())
+            except urllib.error.HTTPError as e:
+                if allow_404 and e.code == 404:
+                    return None
+                raise
+
+        def github_in_team(login: str, team: str) -> bool:
+            if not team:
+                return False
+            url = f"https://api.github.com/orgs/{GH_ORG}/teams/{team}/memberships/{login}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Authorization": f"Bearer {GH_TOKEN}",
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "oo-role-sync",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = json.loads(resp.read().decode())
+                    return data.get("state") == "active"
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return False
+                print(f"GitHub check failed for {login} in team {team}: {e}", file=sys.stderr)
+                return False
+
+        def choose_login(user: dict) -> str | None:
+            for key in ("preferred_username", "user_name", "username", "login", "name"):
+                if user.get(key):
+                    return str(user[key]).split("/")[-1]
+            email = user.get("email")
+            if email and "@" in email:
+                return email.split("@", 1)[0]
+            return None
+
+        def current_role(user: dict) -> str:
+            for key in ("role", "user_role", "role_type"):
+                if user.get(key):
+                    return str(user[key])
+            return "User"
+
+        def set_role(email: str, role: str):
+            safe_email = urllib.parse.quote(email, safe="")
+            url = f"{OO_URL}/api/{OO_ORG}/users/{safe_email}"
+            http_json(url, method="POST", body={"role": role})
+            print(f"Set role for {email} -> {role}")
+
+        def main():
+            try:
+                users_resp = http_json(f"{OO_URL}/api/{OO_ORG}/users")
+            except Exception as e:
+                print(f"Failed to list users: {e}", file=sys.stderr)
+                sys.exit(1)
+
+            users = users_resp.get("users") or []
+            for user in users:
+                email = user.get("email")
+                if not email:
+                    continue
+                if email.lower() == OO_ADMIN_USER.lower():
+                    continue
+
+                login = choose_login(user)
+                if not login:
+                    print(f"Skip user {email}: no GitHub login found", file=sys.stderr)
+                    continue
+
+                is_admin = github_in_team(login, GH_ADMIN_TEAM)
+                is_user = github_in_team(login, GH_USER_TEAM) if GH_USER_TEAM else False
+
+                desired = "Admin" if is_admin else "User"
+                if desired == "User" and not is_user:
+                    desired = "User"
+
+                current = current_role(user)
+                if current.lower() == desired.lower():
+                    continue
+
+                try:
+                    set_role(email, desired)
+                except Exception as e:
+                    print(f"Failed to set role for {email}: {e}", file=sys.stderr)
+
+        if __name__ == "__main__":
+            main()
+        """)
+        open("/root/oo-github-role-sync.py", "w").write(script)
+        '
+
+                sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
+                  create secret generic openobserve-root-creds \
+                  --from-literal=username="$OPENOBSERVE_USERNAME" \
+                  --from-literal=password="$OPENOBSERVE_PASSWORD" \
+                  --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+                sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
+                  create secret generic openobserve-github-token \
+                  --from-literal=token="$OPENOBSERVE_GITHUB_TOKEN" \
+                  --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+                sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
+                  create configmap oo-github-role-sync \
+                  --from-file=sync.py=/root/oo-github-role-sync.py \
+                  --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
+                sudo python3 -c 'from textwrap import dedent
+        import os
+
+        gh_org = os.environ.get("OO_GH_ORG", "")
+        gh_admin = os.environ.get("OO_GH_ADMIN_TEAM", "")
+        gh_user = os.environ.get("OO_GH_USER_TEAM", "")
+
+        yaml = dedent(f"""\
+        apiVersion: batch/v1
+        kind: CronJob
+        metadata:
+          name: oo-github-role-sync
+          labels:
+            app: oo-github-role-sync
+        spec:
+          schedule: "*/5 * * * *"
+          concurrencyPolicy: Forbid
+          jobTemplate:
+            spec:
+              template:
+                spec:
+                  restartPolicy: OnFailure
+                  containers:
+                  - name: sync
+                    image: python:3.12-slim
+                    imagePullPolicy: IfNotPresent
+                    env:
+                    - name: OO_URL
+                      value: http://openobserve-router:5080
+                    - name: OO_ORG
+                      value: default
+                    - name: OO_ADMIN_USER
+                      valueFrom:
+                        secretKeyRef:
+                          name: openobserve-root-creds
+                          key: username
+                    - name: OO_ADMIN_PASS
+                      valueFrom:
+                        secretKeyRef:
+                          name: openobserve-root-creds
+                          key: password
+                    - name: GH_TOKEN
+                      valueFrom:
+                        secretKeyRef:
+                          name: openobserve-github-token
+                          key: token
+                    - name: GH_ORG
+                      value: "{gh_org}"
+                    - name: GH_ADMIN_TEAM
+                      value: "{gh_admin}"
+                    - name: GH_USER_TEAM
+                      value: "{gh_user}"
+                    volumeMounts:
+                    - name: sync-script
+                      mountPath: /app
+                      readOnly: true
+                    command: ["python", "/app/sync.py"]
+                  volumes:
+                  - name: sync-script
+                    configMap:
+                      name: oo-github-role-sync
+                      defaultMode: 0555
+        """)
+
+        open("/root/oo-github-role-sync-cronjob.yaml", "w").write(yaml)
+        '
+
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve apply -f /root/oo-github-role-sync-cronjob.yaml
+      fi
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
       apiVersion: v1
