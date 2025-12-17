@@ -2931,7 +2931,8 @@ write_files:
         type: LoadBalancer
         loadBalancerIP: 10.0.0.113
         selector:
-          app: dex
+          app.kubernetes.io/instance: openobserve-dex
+          app.kubernetes.io/name: dex
         ports:
           - name: http
             port: 5556
@@ -5202,7 +5203,7 @@ write_files:
 
       echo "Adding annotations to services that are installed through helm..."
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc openobserve-dex --type merge \
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc openobserve-dex-external --type merge \
         -p '{"metadata":{"annotations":{"teleport.dev/name":"openobserve-dex","teleport.dev/protocol":"http","teleport.dev/public-addr":"openobserve-dex.teleport.app.suncoast.systems","teleport.dev/description":"OpenObserve Dex Service"},"labels":{"app":"openobserve-dex","app.kubernetes.io/name":"openobserve-dex","app.kubernetes.io/component":"openobserve-dex","teleport.dev/enroll":"true"}}}' \
         -n openobserve
 
