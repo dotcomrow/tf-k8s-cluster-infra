@@ -2390,6 +2390,7 @@ write_files:
         --set config.oauth2.responseTypes[0]=code \
         --set config.oauth2.skipApprovalScreen=true \
         --set config.staticClients[0].id=o2-client \
+        --set config.staticClients[0].name="OpenObserve" \
         --set-string config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
         --set config.staticClients[0].redirectURIs[0]="https://openobserve.teleport.app.${RANCHER_DOMAIN}/config/redirect" \
         --set config.staticClients[0].redirectURIs[1]="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/device/callback" \
