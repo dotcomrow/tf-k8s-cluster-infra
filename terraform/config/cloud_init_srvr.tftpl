@@ -2922,6 +2922,22 @@ write_files:
             protocol: TCP
             targetPort: http
       ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: openobserve-dex-external
+        namespace: openobserve
+      spec:
+        type: LoadBalancer
+        loadBalancerIP: 10.0.0.113
+        selector:
+          app: dex
+        ports:
+          - name: http
+            port: 5556
+            protocol: TCP
+            targetPort: 5556
+      ---
       # Linkerd policy fixes for prometheus-admin access from otel-collector
       apiVersion: policy.linkerd.io/v1alpha1
       kind: MeshTLSAuthentication
