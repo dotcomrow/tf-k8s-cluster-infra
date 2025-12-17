@@ -2338,13 +2338,6 @@ write_files:
 
       sudo helm repo add dex https://charts.dexidp.io || true
       sudo helm repo update
-      DEX_TEAM_ARGS=()
-      if [[ -n "${OPENOBSERVE_GITHUB_ADMIN_TEAM}" ]]; then
-        DEX_TEAM_ARGS+=(--set-string "config.connectors[0].config.orgs[0].teams[0]=${OPENOBSERVE_GITHUB_ADMIN_TEAM}")
-      fi
-      if [[ -n "${OPENOBSERVE_GITHUB_USER_TEAM}" ]]; then
-        DEX_TEAM_ARGS+=(--set-string "config.connectors[0].config.orgs[0].teams[1]=${OPENOBSERVE_GITHUB_USER_TEAM}")
-      fi
       sudo helm upgrade --install openobserve-dex dex/dex \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
@@ -2369,7 +2362,8 @@ write_files:
         --set-string config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
         --set config.connectors[0].config.redirectURI="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex/callback" \
         --set-string config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
-        "$DEX_TEAM_ARGS[@]" \
+        --set-string config.connectors[0].config.orgs[0].teams[0]="${OPENOBSERVE_GITHUB_ADMIN_TEAM}" \
+        --set-string config.connectors[0].config.orgs[0].teams[1]="${OPENOBSERVE_GITHUB_USER_TEAM}" \
         --set config.connectors[0].config.scopes[0]=read:org \
         --set config.connectors[0].config.scopes[1]=user:email \
         --set config.connectors[0].config.loadAllGroups=true \
