@@ -2375,6 +2375,47 @@ write_files:
         --set-string extraEnv[0].name=O2_DEX_DISCOVERY_URL \
         --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL"
 
+      sudo helm repo add dex https://charts.dexidp.io || true
+      sudo helm repo update
+      sudo helm upgrade --install openobserve-dex dex/dex \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        -n openobserve \
+        --create-namespace \
+        --set config.issuer="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex" \
+        --set config.storage.type=kubernetes \
+        --set config.storage.config.inCluster=true \
+        --set config.web.http="0.0.0.0:5556" \
+        --set config.grpc.address="0.0.0.0:5557" \
+        --set config.enablePasswordDB=false \
+        --set config.oauth2.responseTypes[0]=code \
+        --set config.oauth2.skipApprovalScreen=true \
+        --set config.staticClients[0].id=o2-client \
+        --set-string config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
+        --set config.staticClients[0].redirectURIs[0]="https://openobserve.teleport.app.${RANCHER_DOMAIN}/config/redirect" \
+        --set config.staticClients[0].redirectURIs[1]="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/device/callback" \
+        --set config.staticClients[0].redirectURIs[2]="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex/device/callback" \
+        --set config.connectors[0].type=github \
+        --set config.connectors[0].id=github \
+        --set config.connectors[0].name="GitHub" \
+        --set-string config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
+        --set-string config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
+        --set config.connectors[0].config.redirectURI="https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex/callback" \
+        --set-string config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
+        --set-string config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
+        --set-string config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
+        --set config.connectors[0].config.scopes[0]=read:org \
+        --set config.connectors[0].config.scopes[1]=user:email \
+        --set config.connectors[0].config.loadAllGroups=true \
+        --set config.connectors[0].config.teamNameField=slug \
+        --set service.ports.http.port=5556 \
+        --set ingress.enabled=true \
+        --set ingress.className=nginx \
+        --set ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set ingress.hosts[0].paths[0].path="/" \
+        --set ingress.hosts[0].paths[0].pathType=Prefix \
+        --set ingress.tls[0].hosts[0]="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
+        --set ingress.tls[0].secretName="dex-openobserve-tls"
+
       # Keep CNPG/Postgres uninjected so init jobs and DB pods don't get a Linkerd sidecar.
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
         "metadata": { "annotations": { "linkerd.io/inject": "disabled" }},
@@ -5143,6 +5184,10 @@ write_files:
       EOF
 
       echo "Adding annotations to services that are installed through helm..."
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc openobserve-dex --type merge \
+        -p '{"metadata":{"annotations":{"teleport.dev/name":"openobserve-dex","teleport.dev/protocol":"http","teleport.dev/public-addr":"openobserve-dex.teleport.app.suncoast.systems","teleport.dev/description":"OpenObserve Dex Service"},"labels":{"app":"openobserve-dex","app.kubernetes.io/name":"openobserve-dex","app.kubernetes.io/component":"openobserve-dex","teleport.dev/enroll":"true"}}}' \
+        -n openobserve
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch svc policy-reporter-ui --type merge \
         -p '{"metadata":{"annotations":{"teleport.dev/name":"policy-reporter-ui","teleport.dev/protocol":"http","teleport.dev/public-addr":"policy-reporter-ui.teleport.app.suncoast.systems","teleport.dev/description":"Policy Reporter UI Service"},"labels":{"app":"policy-reporter-ui","app.kubernetes.io/name":"policy-reporter-ui","app.kubernetes.io/component":"policy-reporter-ui","teleport.dev/enroll":"true"}}}' \
