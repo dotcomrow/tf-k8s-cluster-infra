@@ -2297,7 +2297,7 @@ write_files:
         -n openobserve \
         --set-string image.oss.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=false \
-        --set openfga.enabled=false \
+        --set enterprise.openfga.enabled=false \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -2330,53 +2330,20 @@ write_files:
         --set-string alertmanager.persistence.size=200Gi \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=nfs-client \
         --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
-        --set dex.enabled=true \
-        --set-string dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
-        --set-string dex.parameters.O2_DEX_DEFAULT_ORG=default \
-        --set-string dex.parameters.O2_DEX_DEFAULT_ROLE=user \
-        --set-string dex.parameters.O2_DEX_GROUP_CLAIM=groups \
-        --set-string dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=true \
-        --set-string dex.parameters.O2_DEX_ROLE_ATTRIBUTE=groups \
-        --set-string dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
-        --set-string dex.parameters.O2_DEX_CLIENT_ID="o2-client" \
-        --set-string dex.parameters.O2_DEX_CLIENT_SECRET="$OO_GH_CLIENT_SECRET" \
-        --set-string dex.parameters.O2_DEX_REDIRECT_URL="$OO_PUBLIC_URL/config/redirect" \
-        --set-string dex.parameters.O2_DEX_BASE_URL="$OO_DEX_ISSUER_URL/dex" \
-        --set-string dex.parameters.O2_DEX_DISCOVERY_URL="$OO_DEX_DISCOVERY_URL" \
-        --set-string dex.config.frontend.issuer="OpenObserve" \
-        --set-string dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
-        --set dex.config.enablePasswordDB=false \
-        --set-string dex.ingress.enabled=true \
-        --set-string dex.ingress.hosts[0].host="$OO_DEX_DISCOVERY_HOST" \
-        --set-string dex.ingress.hosts[0].paths[0].path="/" \
-        --set-string dex.ingress.hosts[0].paths[0].pathType="Prefix" \
-        --set-string dex.ingress.tls[0].hosts[0]="$OO_DEX_DISCOVERY_HOST" \
-        --set-string dex.ingress.tls[0].secretName="dex-openobserve-tls" \
-        --set-string dex.config.staticClients[0].id="o2-client" \
-        --set-string dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
-        --set-string dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
-        --set-string dex.config.staticClients[0].redirectURIs[1]="$OO_DEX_ISSUER_URL/device/callback" \
-        --set-string dex.config.staticClients[0].redirectURIs[2]="$OO_DEX_ISSUER_URL/dex/device/callback" \
-        --set-string dex.config.staticClients[1].id="debug-client" \
-        --set-string dex.config.staticClients[1].secret="debug-secret" \
-        --set-string dex.config.staticClients[1].redirectURIs[0]="urn:ietf:wg:oauth:2.0:oob" \
-        --set-string dex.config.staticClients[1].redirectURIs[1]="$OO_DEX_ISSUER_URL/device/callback" \
-        --set-string dex.config.staticClients[1].redirectURIs[2]="$OO_DEX_ISSUER_URL/dex/device/callback" \
-        --set-string dex.config.connectors[0].type="github" \
-        --set-string dex.config.connectors[0].id="github" \
-        --set-string dex.config.connectors[0].name="GitHub" \
-        --set-string dex.config.connectors[0].config.clientID="$OO_GH_CLIENT_ID" \
-        --set-string dex.config.connectors[0].config.clientSecret="$OO_GH_CLIENT_SECRET" \
-        --set-string dex.config.connectors[0].config.redirectURI="$OO_DEX_CALLBACK_URL/dex/callback" \
-        --set-string dex.config.connectors[0].config.orgs[0].name="$OO_GH_ORG" \
-        --set-string dex.config.connectors[0].config.orgs[0].teams[0]="$OO_GH_ADMIN_TEAM" \
-        --set-string dex.config.connectors[0].config.orgs[0].teams[1]="$OO_GH_USER_TEAM" \
-        --set-string dex.config.connectors[0].config.orgs[0].teams[2]="dotcomrow:openobserve_admin_users" \
-        --set-string dex.config.connectors[0].config.orgs[0].teams[3]="dotcomrow:openobserve_users" \
-        --set-string dex.config.connectors[0].config.scopes[0]=read:org \
-        --set-string dex.config.connectors[0].config.scopes[1]=user:email \
-        --set dex.config.connectors[0].config.loadAllGroups=true \
-        --set-string dex.config.connectors[0].config.teamNameField=slug
+        --set enterprise.dex.enabled=true \
+        --set-string enterprise.dex.config.issuer="$OO_DEX_ISSUER_URL/dex" \
+        --set-string enterprise.dex.config.staticClients[0].id="o2-client" \
+        --set-string enterprise.dex.config.staticClients[0].name="OpenObserve" \
+        --set-string enterprise.dex.config.staticClients[0].secret="$OO_GH_CLIENT_SECRET" \
+        --set-string enterprise.dex.config.staticClients[0].redirectURIs[0]="$OO_PUBLIC_URL/config/redirect" \
+        --set-string enterprise.dex.parameters.O2_CALLBACK_URL="$OO_PUBLIC_URL/web/cb" \
+        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ORG=default \
+        --set-string enterprise.dex.parameters.O2_DEX_DEFAULT_ROLE=user \
+        --set-string enterprise.dex.parameters.O2_DEX_GROUP_CLAIM=groups \
+        --set-string enterprise.dex.parameters.O2_DEX_NATIVE_LOGIN_ENABLED=true \
+        --set-string enterprise.dex.parameters.O2_DEX_SCOPES="openid profile email groups offline_access" \
+        --set-string extraEnv[0].name=O2_DEX_DISCOVERY_URL \
+        --set-string extraEnv[0].value="$OO_DEX_DISCOVERY_URL"
 
       sudo helm repo add dex https://charts.dexidp.io || true
       sudo helm repo update
@@ -2510,7 +2477,7 @@ write_files:
           --from-file=sync.py=/root/oo-github-role-sync.py \
           --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
-        sudo -E python3 -c "import os,pathlib; yaml=f'apiVersion: batch/v1\\nkind: CronJob\\nmetadata:\\n  name: oo-github-role-sync\\n  labels:\\n    app: oo-github-role-sync\\nspec:\\n  schedule: \"*/5 * * * *\"\\n  concurrencyPolicy: Forbid\\n  jobTemplate:\\n    spec:\\n      template:\\n        spec:\\n          restartPolicy: OnFailure\\n          containers:\\n          - name: sync\\n            image: python:3.12-slim\\n            imagePullPolicy: IfNotPresent\\n            env:\\n            - name: OO_URL\\n              value: http://openobserve-router:5080\\n            - name: OO_ORG\\n              value: default\\n            - name: OO_ADMIN_USER\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-root-creds\\n                  key: username\\n            - name: OO_ADMIN_PASS\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-root-creds\\n                  key: password\\n            - name: GH_TOKEN\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-github-token\\n                  key: token\\n            - name: GH_ORG\\n              value: \"{os.environ.get('OO_GH_ORG','')}\"\\n            - name: GH_ADMIN_TEAM\\n              value: \"{os.environ.get('OO_GH_ADMIN_TEAM','')}\"\\n            - name: GH_USER_TEAM\\n              value: \"{os.environ.get('OO_GH_USER_TEAM','')}\"\\n            volumeMounts:\\n            - name: sync-script\\n              mountPath: /app\\n              readOnly: true\\n            command: [\"python\", \"/app/sync.py\"]\\n          volumes:\\n          - name: sync-script\\n            configMap:\\n              name: oo-github-role-sync\\n              defaultMode: 0555\\n'; pathlib.Path('/root/oo-github-role-sync-cronjob.yaml').write_text(yaml)"
+        sudo python3 -c "import pathlib; yaml='apiVersion: batch/v1\\nkind: CronJob\\nmetadata:\\n  name: oo-github-role-sync\\n  labels:\\n    app: oo-github-role-sync\\nspec:\\n  schedule: \"*/5 * * * *\"\\n  concurrencyPolicy: Forbid\\n  jobTemplate:\\n    spec:\\n      template:\\n        spec:\\n          restartPolicy: OnFailure\\n          containers:\\n          - name: sync\\n            image: python:3.12-slim\\n            imagePullPolicy: IfNotPresent\\n            env:\\n            - name: OO_URL\\n              value: http://openobserve-router:5080\\n            - name: OO_ORG\\n              value: default\\n            - name: OO_ADMIN_USER\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-root-creds\\n                  key: username\\n            - name: OO_ADMIN_PASS\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-root-creds\\n                  key: password\\n            - name: GH_TOKEN\\n              valueFrom:\\n                secretKeyRef:\\n                  name: openobserve-github-token\\n                  key: token\\n            - name: GH_ORG\\n              value: \"${OO_GH_ORG}\"\\n            - name: GH_ADMIN_TEAM\\n              value: \"${OO_GH_ADMIN_TEAM}\"\\n            - name: GH_USER_TEAM\\n              value: \"${OO_GH_USER_TEAM}\"\\n            volumeMounts:\\n            - name: sync-script\\n              mountPath: /app\\n              readOnly: true\\n            command: [\"python\", \"/app/sync.py\"]\\n          volumes:\\n          - name: sync-script\\n            configMap:\\n              name: oo-github-role-sync\\n              defaultMode: 0555\\n'; pathlib.Path('/root/oo-github-role-sync-cronjob.yaml').write_text(yaml)"
 
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve apply -f /root/oo-github-role-sync-cronjob.yaml
       fi
