@@ -116,7 +116,7 @@ variable "UBUNTU_RELEASE_CODE_NAME" {
 }
 
 variable "NVIDIA_DRIVER" {
-  default = "570"
+  default = "580"
 }
 
 variable "ARGOCD_REPO_POST_INSTALL_KEY" {
