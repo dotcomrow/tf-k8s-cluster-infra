@@ -454,7 +454,7 @@ write_files:
               imagePullPolicy: IfNotPresent
               command: ["/bin/sh", "-c"]
               args:
-              - exec oauth2-proxy --http-address=0.0.0.0:4180 --provider=oidc --oidc-issuer-url=http://openobserve-dex.openobserve.svc.cluster.local:5556/dex --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback --email-domain=* --scope="openid profile email groups" --upstream=http://openobserve-router.openobserve.svc.cluster.local:5080/ --reverse-proxy=true --set-xauthrequest=true --cookie-secret="${OAUTH2_PROXY_COOKIE_SECRET}" --cookie-secure=true --cookie-samesite=lax --cookie-refresh=1h --cookie-expire=8h --skip-provider-button=true
+              - exec oauth2-proxy --http-address=0.0.0.0:4180 --provider=oidc --oidc-issuer-url=https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback --email-domain=* --scope="openid profile email groups" --upstream=http://openobserve-router.openobserve.svc.cluster.local:5080/ --reverse-proxy=true --set-xauthrequest=true --cookie-secret="${OAUTH2_PROXY_COOKIE_SECRET}" --cookie-secure=true --cookie-samesite=lax --cookie-refresh=1h --cookie-expire=8h --skip-provider-button=true
               env:
               - name: OAUTH2_PROXY_CLIENT_ID
                 valueFrom:
@@ -2887,11 +2887,6 @@ write_files:
 
       # Write the auth-proxy manifest via base64 to avoid long inlined strings.
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve apply -f /root/oo-auth-proxy.yaml
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-oauth2-proxy --timeout=180s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-auth-bridge --timeout=180s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-auth-proxy --timeout=180s
-
       echo "ℹ️  GitHub team→role sync is not deployed on OSS builds (OpenObserve OSS enforces admin-only org roles); team access is enforced at Dex."
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
@@ -3282,6 +3277,11 @@ write_files:
             kind: MeshTLSAuthentication
             name: otel-collector-mtls
       EOF
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve apply -f /root/oo-auth-proxy.yaml
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-oauth2-proxy --timeout=180s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-auth-bridge --timeout=180s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-auth-proxy --timeout=180s
 
       echo "📊 Installing OpenObserve community dashboards..."
       if [[ -z "$OPENOBSERVE_DASHBOARD_FOLDER" ]]; then
