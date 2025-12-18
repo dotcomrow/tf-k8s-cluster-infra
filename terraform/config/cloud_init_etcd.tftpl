@@ -68,8 +68,7 @@ write_files:
     content: |
       version: v3
       teleport:
-        nodename: ${hostname}
-        proxy_server: teleport.app.suncoast.systems:443
+        proxy_server: teleport.app.${RANCHER_DOMAIN}:443
         data_dir: /var/lib/teleport
 
       auth_service:
@@ -82,6 +81,78 @@ write_files:
         labels:
           role: k8s-vm
           env: prod
+
+  - path: /etc/systemd/system/teleport-late-join.service
+    permissions: '0644'
+    content: |
+        [Unit]
+        Description=Enroll this VM into Teleport when Teleport becomes available
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        Restart=on-failure
+        RestartSec=30
+        ExecStart=/usr/local/sbin/teleport-late-join.sh
+
+        [Install]
+        WantedBy=multi-user.target
+
+  - path: /usr/local/sbin/teleport-late-join.sh
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -u
+
+      PROXY="teleport.app.${RANCHER_DOMAIN}:443"
+      TOKEN_SOURCE="https://mgmt.suncoast.systems/teleport/join-token"  # replace with your internal k8s-exposed token service later
+      TOKEN_PATH="/run/teleport.join.token"
+
+      # If we already joined once, do nothing.
+      if [ -f /var/lib/teleport/host_uuid ] || [ -d /var/lib/teleport/keys ]; then
+        exit 0
+      fi
+
+      HOST="$(echo "$PROXY" | cut -d: -f1)"
+      PORT="$(echo "$PROXY" | cut -d: -f2)"
+
+      # Wait until Teleport proxy is reachable
+      i=0
+      while [ $i -lt 120 ]; do
+        if nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+          break
+        fi
+        i=$((i+1))
+        sleep 5
+      done
+
+      if ! nc -z "$HOST" "$PORT" >/dev/null 2>&1; then
+        exit 1
+      fi
+
+      # Fetch a fresh join token
+      if ! curl -fsSL "$TOKEN_SOURCE" -o "$TOKEN_PATH"; then
+        exit 1
+      fi
+
+      TOKEN="$(cat "$TOKEN_PATH" 2>/dev/null || true)"
+      rm -f "$TOKEN_PATH"
+
+      if [ -z "$TOKEN" ]; then
+        exit 1
+      fi
+
+      # Join once (start briefly), then hand off to systemd service
+      teleport start --config=/etc/teleport.yaml --token="$TOKEN" >/var/log/teleport-late-join.log 2>&1 &
+      TP_PID="$!"
+
+      sleep 10
+
+      # Stop the bootstrap instance (service will start cleanly next)
+      kill "$TP_PID" >/dev/null 2>&1 || true
+      sleep 2
+
+      systemctl enable --now teleport
 
   - path: /usr/local/bin/initial-setup.sh
     permissions: '0755'
@@ -102,6 +173,7 @@ write_files:
       apt-get update
       apt-get install -y teleport
       systemctl disable --now teleport || true
+      systemctl enable teleport-late-join.service
       systemctl daemon-reload
       /usr/local/bin/performance-tuning.sh
       sysctl --system
