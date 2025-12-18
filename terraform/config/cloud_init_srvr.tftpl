@@ -2883,9 +2883,10 @@ write_files:
         --from-file=bridge.py=/root/oo-auth-bridge.py \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
-      # Write NGINX config via base64 to avoid heredocs/escaping.
-
-      # Write the auth-proxy manifest via base64 to avoid long inlined strings.
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
+        create configmap oo-auth-proxy-nginx \
+        --from-file=nginx.conf=/root/oo-auth-nginx.conf \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       echo "ℹ️  GitHub team→role sync is not deployed on OSS builds (OpenObserve OSS enforces admin-only org roles); team access is enforced at Dex."
 
