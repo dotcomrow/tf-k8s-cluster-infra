@@ -64,6 +64,26 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /etc/teleport.yaml
+    permissions: '0644'
+    content: |
+      version: v3
+      teleport:
+        nodename: ${hostname}
+        proxy_server: teleport.app.suncoast.systems:443
+        data_dir: /var/lib/teleport
+
+      auth_service:
+        enabled: no
+      proxy_service:
+        enabled: no
+
+      ssh_service:
+        enabled: yes
+        labels:
+          role: k8s-vm
+          env: prod
+
   - path: /usr/local/bin/initial-setup.sh
     permissions: '0755'
     content: |
@@ -74,6 +94,16 @@ write_files:
 
       # update-ca-certificates
       systemctl daemon-reload
+      curl https://deb.releases.teleport.dev/teleport-pubkey.asc \
+        | gpg --dearmor -o /usr/share/keyrings/teleport-archive-keyring.gpg
+
+      echo "deb [signed-by=/usr/share/keyrings/teleport-archive-keyring.gpg] \
+      https://deb.releases.teleport.dev/ stable main" \
+        | tee /etc/apt/sources.list.d/teleport.list
+
+      apt-get update
+      apt-get install -y teleport
+      systemctl disable --now teleport || true
       /usr/local/bin/performance-tuning.sh
       sysctl --system
       update-grub
@@ -342,7 +372,7 @@ write_files:
           }
 
           location = / {
-            return 302 /__oo_login;
+            return 302 https://openobserve.teleport.app.${RANCHER_DOMAIN}/__oo_login;
           }
 
           location / {
