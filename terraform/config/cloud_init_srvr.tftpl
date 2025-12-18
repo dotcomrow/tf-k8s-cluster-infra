@@ -126,6 +126,428 @@ write_files:
       systemctl start post-install.service
       /usr/local/bin/cleanup-install-services.sh
 
+  - path: /root/oo-auth-bridge.py
+    permissions: '0755'
+    content: |
+      import base64
+      import hashlib
+      import hmac
+      import json
+      import os
+      import urllib.error
+      import urllib.parse
+      import urllib.request
+      from http.server import BaseHTTPRequestHandler, HTTPServer
+
+      OO_URL = os.getenv("OO_URL", "http://openobserve-router:5080").rstrip("/")
+      OO_ORG = os.getenv("OO_ORG", "default")
+      OO_ADMIN_USER = os.environ["OO_ADMIN_USER"]
+      OO_ADMIN_PASS = os.environ["OO_ADMIN_PASS"]
+      HMAC_SECRET = os.environ["OO_USER_PASSWORD_SECRET"].encode("utf-8")
+      OO_EMAIL_HEADER = os.getenv("OO_EMAIL_HEADER", "X-Auth-Request-Email")
+      OO_LOGIN_HEADER = os.getenv("OO_LOGIN_HEADER", "X-Auth-Request-User")
+      OO_LISTEN_PORT = int(os.getenv("OO_LISTEN_PORT", "4181"))
+
+      _basic = base64.b64encode(f"{OO_ADMIN_USER}:{OO_ADMIN_PASS}".encode("utf-8")).decode("ascii")
+      ADMIN_HEADERS = {
+          "Authorization": f"Basic {_basic}",
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "organization": OO_ORG,
+      }
+
+      def log(msg: str) -> None:
+          print(f"[oo-auth-bridge] {msg}", flush=True)
+
+      def derive_password(email: str) -> str:
+          email_norm = email.strip().lower()
+          digest = hmac.new(HMAC_SECRET, email_norm.encode("utf-8"), hashlib.sha256).digest()
+          pwd = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+          return (pwd[:32] + "A!").replace("-", "A").replace("_", "B")
+
+      def http_json(url: str, method: str, *, body=None, headers=None, timeout: int = 20):
+          data = None
+          hdrs = dict(ADMIN_HEADERS)
+          if headers:
+              hdrs.update(headers)
+          if body is not None:
+              data = json.dumps(body).encode("utf-8")
+          req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+          try:
+              with urllib.request.urlopen(req, timeout=timeout) as res:
+                  raw = res.read() or b""
+                  txt = raw.decode("utf-8", "replace")
+                  try:
+                      obj = json.loads(txt) if txt else {}
+                  except Exception:
+                      obj = None
+                  return res.status, obj, txt, res.headers
+          except urllib.error.HTTPError as e:
+              txt = (e.read() or b"").decode("utf-8", "replace")
+              return e.code, None, txt, e.headers
+          except Exception as e:
+              log(f"http error url={url} method={method}: {e}")
+              return 599, None, "", None
+
+      def ensure_user(email: str, first_name: str, password: str) -> None:
+          status, _, txt, _ = http_json(
+              f"{OO_URL}/api/{OO_ORG}/users",
+              "POST",
+              body={
+                  "email": email,
+                  "password": password,
+                  "role": "admin",
+                  "first_name": first_name,
+                  "last_name": "",
+              },
+          )
+          if status == 200:
+              log(f"created user email={email}")
+          elif status == 400 and "already exists" in txt.lower():
+              log(f"user already exists email={email}")
+          elif status in (200,):
+              pass
+          else:
+              log(f"user create failed email={email} status={status} body={txt[:200]}")
+
+          encoded = urllib.parse.quote(email, safe="")
+          status, _, txt, _ = http_json(
+              f"{OO_URL}/api/{OO_ORG}/users/{encoded}",
+              "PUT",
+              body={
+                  "change_password": True,
+                  "new_password": password,
+                  "first_name": first_name,
+                  "last_name": "",
+              },
+          )
+          if status == 200:
+              log(f"password synced email={email}")
+          else:
+              log(f"user update failed email={email} status={status} body={txt[:200]}")
+
+      def fetch_auth_cookie(email: str, password: str) -> str | None:
+          data = json.dumps({"name": email, "password": password}).encode("utf-8")
+          req = urllib.request.Request(
+              f"{OO_URL}/auth/login",
+              data=data,
+              method="POST",
+              headers={"Content-Type": "application/json"},
+          )
+          try:
+              with urllib.request.urlopen(req, timeout=20) as res:
+                  set_cookies = res.headers.get_all("Set-Cookie") or []
+                  for cookie in set_cookies:
+                      if cookie.startswith("auth_tokens="):
+                          return cookie
+          except urllib.error.HTTPError as e:
+              body = (e.read() or b"").decode("utf-8", "replace")
+              log(f"login failed email={email} status={e.code} body={body[:200]}")
+          except Exception as e:
+              log(f"login error email={email}: {e}")
+          return None
+
+      class Handler(BaseHTTPRequestHandler):
+          def do_GET(self):
+              if self.path == "/health":
+                  self.send_response(200)
+                  self.end_headers()
+                  self.wfile.write(b"ok")
+                  return
+
+              email = self.headers.get(OO_EMAIL_HEADER)
+              login_name = self.headers.get(OO_LOGIN_HEADER)
+              if not email:
+                  self.send_response(400)
+                  self.send_header("Content-Type", "text/plain")
+                  self.end_headers()
+                  self.wfile.write(b"missing email header")
+                  return
+
+              if login_name and "/" in login_name:
+                  login_name = login_name.split("/")[-1]
+              if not login_name:
+                  login_name = email.split("@", 1)[0]
+
+              password = derive_password(email)
+              log(f"request path={self.path} email={email} login={login_name}")
+
+              ensure_user(email, login_name, password)
+              cookie = fetch_auth_cookie(email, password)
+              if not cookie:
+                  self.send_response(502)
+                  self.end_headers()
+                  self.wfile.write(b"failed to log in")
+                  return
+
+              self.send_response(302)
+              self.send_header("Set-Cookie", cookie)
+              self.send_header("Location", "/web/")
+              self.send_header("Cache-Control", "no-store")
+              self.end_headers()
+
+          def log_message(self, format, *args):
+              return
+
+      if __name__ == "__main__":
+          log(
+              f"start listen_port={OO_LISTEN_PORT} org={OO_ORG} email_header={OO_EMAIL_HEADER} login_header={OO_LOGIN_HEADER}"
+          )
+          HTTPServer(("0.0.0.0", OO_LISTEN_PORT), Handler).serve_forever()
+
+  - path: /root/oo-auth-nginx.conf
+    permissions: '0644'
+    content: |
+      worker_processes  1;
+      events { worker_connections  1024; }
+      http {
+        upstream oo_router { server openobserve-router.openobserve.svc.cluster.local:5080; }
+        upstream oauth2_proxy { server oo-oauth2-proxy.openobserve.svc.cluster.local:4180; }
+        upstream oo_bridge { server oo-auth-bridge.openobserve.svc.cluster.local:4181; }
+        server {
+          listen 5080;
+
+          location /oauth2/ {
+            auth_request off;
+            proxy_pass http://oauth2_proxy;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          }
+
+          location = /oauth2/auth {
+            auth_request off;
+            proxy_pass http://oauth2_proxy;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header Content-Length "";
+            proxy_pass_request_body off;
+          }
+
+          auth_request /oauth2/auth;
+          error_page 401 = /oauth2/sign_in?rd=$request_uri;
+
+          auth_request_set $auth_user  $upstream_http_x_auth_request_user;
+          auth_request_set $auth_email $upstream_http_x_auth_request_email;
+
+          location = /__oo_login {
+            proxy_set_header X-Auth-Request-User $auth_user;
+            proxy_set_header X-Auth-Request-Email $auth_email;
+            proxy_pass http://oo_bridge;
+          }
+
+          location = / {
+            return 302 /__oo_login;
+          }
+
+          location / {
+            proxy_pass http://oo_router;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-Host $host;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          }
+        }
+      }
+
+  - path: /root/oo-auth-proxy.yaml
+    permissions: '0644'
+    content: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oo-auth-bridge
+        namespace: openobserve
+        labels:
+          app: oo-auth-bridge
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oo-auth-bridge
+        template:
+          metadata:
+            labels:
+              app: oo-auth-bridge
+          spec:
+            containers:
+            - name: bridge
+              image: python:3.12-slim
+              imagePullPolicy: IfNotPresent
+              env:
+              - name: OO_URL
+                value: http://openobserve-router:5080
+              - name: OO_ORG
+                value: default
+              - name: OO_ADMIN_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: openobserve-root-creds
+                    key: username
+              - name: OO_ADMIN_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: openobserve-root-creds
+                    key: password
+              - name: OO_USER_PASSWORD_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: oo-auth-bridge
+                    key: hmac_secret
+              - name: OO_EMAIL_HEADER
+                value: X-Auth-Request-Email
+              - name: OO_LOGIN_HEADER
+                value: X-Auth-Request-User
+              ports:
+              - name: http
+                containerPort: 4181
+              volumeMounts:
+              - name: bridge-script
+                mountPath: /app
+              command: ["python"]
+              args: ["/app/bridge.py"]
+            volumes:
+            - name: bridge-script
+              configMap:
+                name: oo-auth-bridge
+                defaultMode: 0555
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oo-auth-bridge
+        namespace: openobserve
+      spec:
+        selector:
+          app: oo-auth-bridge
+        ports:
+        - name: http
+          port: 4181
+          targetPort: http
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: oo-oauth2-proxy
+        namespace: openobserve
+        labels:
+          app: oo-oauth2-proxy
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: oo-oauth2-proxy
+        template:
+          metadata:
+            labels:
+              app: oo-oauth2-proxy
+          spec:
+            containers:
+            - name: oauth2-proxy
+              image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+              imagePullPolicy: IfNotPresent
+              args:
+              - --http-address=0.0.0.0:4180
+              - --provider=oidc
+              - --oidc-issuer-url=https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}/dex
+              - --redirect-url=https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback
+              - --email-domain=*
+              - --scope=openid profile email groups
+              - --upstream=http://openobserve-router.openobserve.svc.cluster.local:5080/
+              - --reverse-proxy=true
+              - --set-xauthrequest=true
+              - --cookie-secure=true
+              - --cookie-samesite=lax
+              - --cookie-refresh=1h
+              - --cookie-expire=8h
+              - --skip-provider-button=true
+              env:
+              - name: OAUTH2_PROXY_CLIENT_ID
+                valueFrom:
+                  secretKeyRef:
+                    name: oo-oauth2-proxy
+                    key: client_id
+              - name: OAUTH2_PROXY_CLIENT_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: oo-oauth2-proxy
+                    key: client_secret
+              - name: OAUTH2_PROXY_COOKIE_SECRET
+                valueFrom:
+                  secretKeyRef:
+                    name: oo-oauth2-proxy
+                    key: cookie_secret
+              ports:
+              - name: http
+                containerPort: 4180
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: oo-oauth2-proxy
+        namespace: openobserve
+      spec:
+        selector:
+          app: oo-oauth2-proxy
+        ports:
+        - name: http
+          port: 4180
+          targetPort: http
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: openobserve-auth-proxy
+        namespace: openobserve
+        labels:
+          app: openobserve-auth-proxy
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: openobserve-auth-proxy
+        template:
+          metadata:
+            labels:
+              app: openobserve-auth-proxy
+          spec:
+            containers:
+            - name: nginx
+              image: nginx:1.27-alpine
+              imagePullPolicy: IfNotPresent
+              ports:
+              - name: http
+                containerPort: 5080
+              volumeMounts:
+              - name: nginx-conf
+                mountPath: /etc/nginx/nginx.conf
+                subPath: nginx.conf
+                readOnly: true
+            volumes:
+            - name: nginx-conf
+              configMap:
+                name: oo-auth-proxy-nginx
+                defaultMode: 0444
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: openobserve-auth-proxy
+        namespace: openobserve
+      spec:
+        selector:
+          app: openobserve-auth-proxy
+        ports:
+        - name: http
+          port: 5080
+          targetPort: http
+
   - path: /usr/local/bin/cleanup-install-services.sh
     permissions: '0755'
     content: |
@@ -2465,10 +2887,8 @@ write_files:
         --from-literal=hmac_secret="$OO_AUTH_BRIDGE_HMAC_SECRET" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
-      sudo python3 -c "import base64, pathlib; code='aW1wb3J0IGJhc2U2NAppbXBvcnQgaGFzaGxpYgppbXBvcnQgaG1hYwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHVybGxpYi5lcnJvcgppbXBvcnQgdXJsbGliLnBhcnNlCmltcG9ydCB1cmxsaWIucmVxdWVzdApmcm9tIGh0dHAuc2VydmVyIGltcG9ydCBCYXNlSFRUUFJlcXVlc3RIYW5kbGVyLCBIVFRQU2VydmVyCgpPT19VUkwgPSBvcy5nZXRlbnYoIk9PX1VSTCIsICJodHRwOi8vb3Blbm9ic2VydmUtcm91dGVyOjUwODAiKS5yc3RyaXAoIi8iKQpPT19PUkcgPSBvcy5nZXRlbnYoIk9PX09SRyIsICJkZWZhdWx0IikKT09fQURNSU5fVVNFUiA9IG9zLmVudmlyb25bIk9PX0FETUlOX1VTRVIiXQpPT19BRE1JTl9QQVNTID0gb3MuZW52aXJvblsiT09fQURNSU5fUEFTUyJdCkhNQUNfU0VDUkVUID0gb3MuZW52aXJvblsiT09fVVNFUl9QQVNTV09SRF9TRUNSRVQiXS5lbmNvZGUoInV0Zi04IikKT09fRU1BSUxfSEVBREVSID0gb3MuZ2V0ZW52KCJPT19FTUFJTF9IRUFERVIiLCAiWC1BdXRoLVJlcXVlc3QtRW1haWwiKQpPT19MT0dJTl9IRUFERVIgPSBvcy5nZXRlbnYoIk9PX0xPR0lOX0hFQURFUiIsICJYLUF1dGgtUmVxdWVzdC1Vc2VyIikKT09fTElTVEVOX1BPUlQgPSBpbnQob3MuZ2V0ZW52KCJPT19MSVNURU5fUE9SVCIsICI0MTgxIikpCgpfYmFzaWMgPSBiYXNlNjQuYjY0ZW5jb2RlKGYie09PX0FETUlOX1VTRVJ9OntPT19BRE1JTl9QQVNTfSIuZW5jb2RlKCJ1dGYtOCIpKS5kZWNvZGUoImFzY2lpIikKQURNSU5fSEVBREVSUyA9IHsKICAgICJBdXRob3JpemF0aW9uIjogZiJCYXNpYyB7X2Jhc2ljfSIsCiAgICAiQ29udGVudC1UeXBlIjogImFwcGxpY2F0aW9uL2pzb24iLAogICAgIkFjY2VwdCI6ICJhcHBsaWNhdGlvbi9qc29uIiwKICAgICJvcmdhbml6YXRpb24iOiBPT19PUkcsCn0KCmRlZiBsb2cobXNnOiBzdHIpIC0+IE5vbmU6CiAgICBwcmludChmIltvby1hdXRoLWJyaWRnZV0ge21zZ30iLCBmbHVzaD1UcnVlKQoKZGVmIGRlcml2ZV9wYXNzd29yZChlbWFpbDogc3RyKSAtPiBzdHI6CiAgICBlbWFpbF9ub3JtID0gZW1haWwuc3RyaXAoKS5sb3dlcigpCiAgICBkaWdlc3QgPSBobWFjLm5ldyhITUFDX1NFQ1JFVCwgZW1haWxfbm9ybS5lbmNvZGUoInV0Zi04IiksIGhhc2hsaWIuc2hhMjU2KS5kaWdlc3QoKQogICAgcHdkID0gYmFzZTY0LnVybHNhZmVfYjY0ZW5jb2RlKGRpZ2VzdCkuZGVjb2RlKCJhc2NpaSIpLnJzdHJpcCgiPSIpCiAgICByZXR1cm4gKHB3ZFs6MzJdICsgIkEhIikucmVwbGFjZSgiLSIsICJBIikucmVwbGFjZSgiXyIsICJCIikKCmRlZiBodHRwX2pzb24odXJsOiBzdHIsIG1ldGhvZDogc3RyLCAqLCBib2R5PU5vbmUsIGhlYWRlcnM9Tm9uZSwgdGltZW91dDogaW50ID0gMjApOgogICAgZGF0YSA9IE5vbmUKICAgIGhkcnMgPSBkaWN0KEFETUlOX0hFQURFUlMpCiAgICBpZiBoZWFkZXJzOgogICAgICAgIGhkcnMudXBkYXRlKGhlYWRlcnMpCiAgICBpZiBib2R5IGlzIG5vdCBOb25lOgogICAgICAgIGRhdGEgPSBqc29uLmR1bXBzKGJvZHkpLmVuY29kZSgidXRmLTgiKQogICAgcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCh1cmwsIGRhdGE9ZGF0YSwgbWV0aG9kPW1ldGhvZCwgaGVhZGVycz1oZHJzKQogICAgdHJ5OgogICAgICAgIHdpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEsIHRpbWVvdXQ9dGltZW91dCkgYXMgcmVzOgogICAgICAgICAgICByYXcgPSByZXMucmVhZCgpIG9yIGIiIgogICAgICAgICAgICB0eHQgPSByYXcuZGVjb2RlKCJ1dGYtOCIsICJyZXBsYWNlIikKICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgb2JqID0ganNvbi5sb2Fkcyh0eHQpIGlmIHR4dCBlbHNlIHt9CiAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgICAgICBvYmogPSBOb25lCiAgICAgICAgICAgIHJldHVybiByZXMuc3RhdHVzLCBvYmosIHR4dCwgcmVzLmhlYWRlcnMKICAgIGV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICAgICAgdHh0ID0gKGUucmVhZCgpIG9yIGIiIikuZGVjb2RlKCJ1dGYtOCIsICJyZXBsYWNlIikKICAgICAgICByZXR1cm4gZS5jb2RlLCBOb25lLCB0eHQsIGUuaGVhZGVycwogICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIGxvZyhmImh0dHAgZXJyb3IgdXJsPXt1cmx9IG1ldGhvZD17bWV0aG9kfToge2V9IikKICAgICAgICByZXR1cm4gNTk5LCBOb25lLCAiIiwgTm9uZQoKZGVmIGVuc3VyZV91c2VyKGVtYWlsOiBzdHIsIGZpcnN0X25hbWU6IHN0ciwgcGFzc3dvcmQ6IHN0cikgLT4gTm9uZToKICAgIHN0YXR1cywgXywgdHh0LCBfID0gaHR0cF9qc29uKAogICAgICAgIGYie09PX1VSTH0vYXBpL3tPT19PUkd9L3VzZXJzIiwKICAgICAgICAiUE9TVCIsCiAgICAgICAgYm9keT17CiAgICAgICAgICAgICJlbWFpbCI6IGVtYWlsLAogICAgICAgICAgICAicGFzc3dvcmQiOiBwYXNzd29yZCwKICAgICAgICAgICAgInJvbGUiOiAiYWRtaW4iLAogICAgICAgICAgICAiZmlyc3RfbmFtZSI6IGZpcnN0X25hbWUsCiAgICAgICAgICAgICJsYXN0X25hbWUiOiAiIiwKICAgICAgICB9LAogICAgKQogICAgaWYgc3RhdHVzID09IDIwMDoKICAgICAgICBsb2coZiJjcmVhdGVkIHVzZXIgZW1haWw9e2VtYWlsfSIpCiAgICBlbGlmIHN0YXR1cyA9PSA0MDAgYW5kICJhbHJlYWR5IGV4aXN0cyIgaW4gdHh0Lmxvd2VyKCk6CiAgICAgICAgbG9nKGYidXNlciBhbHJlYWR5IGV4aXN0cyBlbWFpbD17ZW1haWx9IikKICAgIGVsaWYgc3RhdHVzIGluICgyMDAsKToKICAgICAgICBwYXNzCiAgICBlbHNlOgogICAgICAgIGxvZyhmInVzZXIgY3JlYXRlIGZhaWxlZCBlbWFpbD17ZW1haWx9IHN0YXR1cz17c3RhdHVzfSBib2R5PXt0eHRbOjIwMF19IikKCiAgICBlbmNvZGVkID0gdXJsbGliLnBhcnNlLnF1b3RlKGVtYWlsLCBzYWZlPSIiKQogICAgc3RhdHVzLCBfLCB0eHQsIF8gPSBodHRwX2pzb24oCiAgICAgICAgZiJ7T09fVVJMfS9hcGkve09PX09SR30vdXNlcnMve2VuY29kZWR9IiwKICAgICAgICAiUFVUIiwKICAgICAgICBib2R5PXsKICAgICAgICAgICAgImNoYW5nZV9wYXNzd29yZCI6IFRydWUsCiAgICAgICAgICAgICJuZXdfcGFzc3dvcmQiOiBwYXNzd29yZCwKICAgICAgICAgICAgImZpcnN0X25hbWUiOiBmaXJzdF9uYW1lLAogICAgICAgICAgICAibGFzdF9uYW1lIjogIiIsCiAgICAgICAgfSwKICAgICkKICAgIGlmIHN0YXR1cyA9PSAyMDA6CiAgICAgICAgbG9nKGYicGFzc3dvcmQgc3luY2VkIGVtYWlsPXtlbWFpbH0iKQogICAgZWxzZToKICAgICAgICBsb2coZiJ1c2VyIHVwZGF0ZSBmYWlsZWQgZW1haWw9e2VtYWlsfSBzdGF0dXM9e3N0YXR1c30gYm9keT17dHh0WzoyMDBdfSIpCgpkZWYgZmV0Y2hfYXV0aF9jb29raWUoZW1haWw6IHN0ciwgcGFzc3dvcmQ6IHN0cikgLT4gc3RyIHwgTm9uZToKICAgIGRhdGEgPSBqc29uLmR1bXBzKHsibmFtZSI6IGVtYWlsLCAicGFzc3dvcmQiOiBwYXNzd29yZH0pLmVuY29kZSgidXRmLTgiKQogICAgcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgKICAgICAgICBmIntPT19VUkx9L2F1dGgvbG9naW4iLAogICAgICAgIGRhdGE9ZGF0YSwKICAgICAgICBtZXRob2Q9IlBPU1QiLAogICAgICAgIGhlYWRlcnM9eyJDb250ZW50LVR5cGUiOiAiYXBwbGljYXRpb24vanNvbiJ9LAogICAgKQogICAgdHJ5OgogICAgICAgIHdpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEsIHRpbWVvdXQ9MjApIGFzIHJlczoKICAgICAgICAgICAgc2V0X2Nvb2tpZXMgPSByZXMuaGVhZGVycy5nZXRfYWxsKCJTZXQtQ29va2llIikgb3IgW10KICAgICAgICAgICAgZm9yIGNvb2tpZSBpbiBzZXRfY29va2llczoKICAgICAgICAgICAgICAgIGlmIGNvb2tpZS5zdGFydHN3aXRoKCJhdXRoX3Rva2Vucz0iKToKICAgICAgICAgICAgICAgICAgICByZXR1cm4gY29va2llCiAgICBleGNlcHQgdXJsbGliLmVycm9yLkhUVFBFcnJvciBhcyBlOgogICAgICAgIGJvZHkgPSAoZS5yZWFkKCkgb3IgYiIiKS5kZWNvZGUoInV0Zi04IiwgInJlcGxhY2UiKQogICAgICAgIGxvZyhmImxvZ2luIGZhaWxlZCBlbWFpbD17ZW1haWx9IHN0YXR1cz17ZS5jb2RlfSBib2R5PXtib2R5WzoyMDBdfSIpCiAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgbG9nKGYibG9naW4gZXJyb3IgZW1haWw9e2VtYWlsfToge2V9IikKICAgIHJldHVybiBOb25lCgpjbGFzcyBIYW5kbGVyKEJhc2VIVFRQUmVxdWVzdEhhbmRsZXIpOgogICAgZGVmIGRvX0dFVChzZWxmKToKICAgICAgICBpZiBzZWxmLnBhdGggPT0gIi9oZWFsdGgiOgogICAgICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoMjAwKQogICAgICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICAgICAgc2VsZi53ZmlsZS53cml0ZShiIm9rIikKICAgICAgICAgICAgcmV0dXJuCgogICAgICAgIGVtYWlsID0gc2VsZi5oZWFkZXJzLmdldChPT19FTUFJTF9IRUFERVIpCiAgICAgICAgbG9naW5fbmFtZSA9IHNlbGYuaGVhZGVycy5nZXQoT09fTE9HSU5fSEVBREVSKQogICAgICAgIGlmIG5vdCBlbWFpbDoKICAgICAgICAgICAgc2VsZi5zZW5kX3Jlc3BvbnNlKDQwMCkKICAgICAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQ29udGVudC1UeXBlIiwgInRleHQvcGxhaW4iKQogICAgICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICAgICAgc2VsZi53ZmlsZS53cml0ZShiIm1pc3NpbmcgZW1haWwgaGVhZGVyIikKICAgICAgICAgICAgcmV0dXJuCgogICAgICAgIGlmIGxvZ2luX25hbWUgYW5kICIvIiBpbiBsb2dpbl9uYW1lOgogICAgICAgICAgICBsb2dpbl9uYW1lID0gbG9naW5fbmFtZS5zcGxpdCgiLyIpWy0xXQogICAgICAgIGlmIG5vdCBsb2dpbl9uYW1lOgogICAgICAgICAgICBsb2dpbl9uYW1lID0gZW1haWwuc3BsaXQoIkAiLCAxKVswXQoKICAgICAgICBwYXNzd29yZCA9IGRlcml2ZV9wYXNzd29yZChlbWFpbCkKICAgICAgICBsb2coZiJyZXF1ZXN0IHBhdGg9e3NlbGYucGF0aH0gZW1haWw9e2VtYWlsfSBsb2dpbj17bG9naW5fbmFtZX0iKQoKICAgICAgICBlbnN1cmVfdXNlcihlbWFpbCwgbG9naW5fbmFtZSwgcGFzc3dvcmQpCiAgICAgICAgY29va2llID0gZmV0Y2hfYXV0aF9jb29raWUoZW1haWwsIHBhc3N3b3JkKQogICAgICAgIGlmIG5vdCBjb29raWU6CiAgICAgICAgICAgIHNlbGYuc2VuZF9yZXNwb25zZSg1MDIpCiAgICAgICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQogICAgICAgICAgICBzZWxmLndmaWxlLndyaXRlKGIiZmFpbGVkIHRvIGxvZyBpbiIpCiAgICAgICAgICAgIHJldHVybgoKICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoMzAyKQogICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIlNldC1Db29raWUiLCBjb29raWUpCiAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiTG9jYXRpb24iLCAiL3dlYi8iKQogICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIkNhY2hlLUNvbnRyb2wiLCAibm8tc3RvcmUiKQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBsb2dfbWVzc2FnZShzZWxmLCBmb3JtYXQsICphcmdzKToKICAgICAgICByZXR1cm4KCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBsb2coCiAgICAgICAgZiJzdGFydCBsaXN0ZW5fcG9ydD17T09fTElTVEVOX1BPUlR9IG9yZz17T09fT1JHfSBlbWFpbF9oZWFkZXI9e09PX0VNQUlMX0hFQURFUn0gbG9naW5faGVhZGVyPXtPT19MT0dJTl9IRUFERVJ9IgogICAgKQogICAgSFRUUFNlcnZlcigoIjAuMC4wLjAiLCBPT19MSVNURU5fUE9SVCksIEhhbmRsZXIpLnNlcnZlX2ZvcmV2ZXIoKQo='; pathlib.Path('/root/oo-auth-bridge.py').write_bytes(base64.b64decode(code))"
 
       # Overwrite auth-bridge with a known-good version (the file is loaded into a ConfigMap below).
-      sudo python3 -c "import base64, pathlib; code='aW1wb3J0IGJhc2U2NAppbXBvcnQgaGFzaGxpYgppbXBvcnQgaG1hYwppbXBvcnQganNvbgppbXBvcnQgb3MKaW1wb3J0IHVybGxpYi5lcnJvcgppbXBvcnQgdXJsbGliLnBhcnNlCmltcG9ydCB1cmxsaWIucmVxdWVzdApmcm9tIGh0dHAuc2VydmVyIGltcG9ydCBCYXNlSFRUUFJlcXVlc3RIYW5kbGVyLCBIVFRQU2VydmVyCgpPT19VUkwgPSBvcy5nZXRlbnYoIk9PX1VSTCIsICJodHRwOi8vb3Blbm9ic2VydmUtcm91dGVyOjUwODAiKS5yc3RyaXAoIi8iKQpPT19PUkcgPSBvcy5nZXRlbnYoIk9PX09SRyIsICJkZWZhdWx0IikKT09fQURNSU5fVVNFUiA9IG9zLmVudmlyb25bIk9PX0FETUlOX1VTRVIiXQpPT19BRE1JTl9QQVNTID0gb3MuZW52aXJvblsiT09fQURNSU5fUEFTUyJdCkhNQUNfU0VDUkVUID0gb3MuZW52aXJvblsiT09fVVNFUl9QQVNTV09SRF9TRUNSRVQiXS5lbmNvZGUoInV0Zi04IikKT09fRU1BSUxfSEVBREVSID0gb3MuZ2V0ZW52KCJPT19FTUFJTF9IRUFERVIiLCAiWC1BdXRoLVJlcXVlc3QtRW1haWwiKQpPT19MT0dJTl9IRUFERVIgPSBvcy5nZXRlbnYoIk9PX0xPR0lOX0hFQURFUiIsICJYLUF1dGgtUmVxdWVzdC1Vc2VyIikKT09fTElTVEVOX1BPUlQgPSBpbnQob3MuZ2V0ZW52KCJPT19MSVNURU5fUE9SVCIsICI0MTgxIikpCgpfYmFzaWMgPSBiYXNlNjQuYjY0ZW5jb2RlKGYie09PX0FETUlOX1VTRVJ9OntPT19BRE1JTl9QQVNTfSIuZW5jb2RlKCJ1dGYtOCIpKS5kZWNvZGUoImFzY2lpIikKQURNSU5fSEVBREVSUyA9IHsKICAgICJBdXRob3JpemF0aW9uIjogZiJCYXNpYyB7X2Jhc2ljfSIsCiAgICAiQ29udGVudC1UeXBlIjogImFwcGxpY2F0aW9uL2pzb24iLAogICAgIkFjY2VwdCI6ICJhcHBsaWNhdGlvbi9qc29uIiwKICAgICJvcmdhbml6YXRpb24iOiBPT19PUkcsCn0KCmRlZiBsb2cobXNnOiBzdHIpIC0+IE5vbmU6CiAgICBwcmludChmIltvby1hdXRoLWJyaWRnZV0ge21zZ30iLCBmbHVzaD1UcnVlKQoKZGVmIGRlcml2ZV9wYXNzd29yZChlbWFpbDogc3RyKSAtPiBzdHI6CiAgICBlbWFpbF9ub3JtID0gZW1haWwuc3RyaXAoKS5sb3dlcigpCiAgICBkaWdlc3QgPSBobWFjLm5ldyhITUFDX1NFQ1JFVCwgZW1haWxfbm9ybS5lbmNvZGUoInV0Zi04IiksIGhhc2hsaWIuc2hhMjU2KS5kaWdlc3QoKQogICAgcHdkID0gYmFzZTY0LnVybHNhZmVfYjY0ZW5jb2RlKGRpZ2VzdCkuZGVjb2RlKCJhc2NpaSIpLnJzdHJpcCgiPSIpCiAgICByZXR1cm4gKHB3ZFs6MzJdICsgIkEhIikucmVwbGFjZSgiLSIsICJBIikucmVwbGFjZSgiXyIsICJCIikKCmRlZiBodHRwX2pzb24odXJsOiBzdHIsIG1ldGhvZDogc3RyLCAqLCBib2R5PU5vbmUsIGhlYWRlcnM9Tm9uZSwgdGltZW91dDogaW50ID0gMjApOgogICAgZGF0YSA9IE5vbmUKICAgIGhkcnMgPSBkaWN0KEFETUlOX0hFQURFUlMpCiAgICBpZiBoZWFkZXJzOgogICAgICAgIGhkcnMudXBkYXRlKGhlYWRlcnMpCiAgICBpZiBib2R5IGlzIG5vdCBOb25lOgogICAgICAgIGRhdGEgPSBqc29uLmR1bXBzKGJvZHkpLmVuY29kZSgidXRmLTgiKQogICAgcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCh1cmwsIGRhdGE9ZGF0YSwgbWV0aG9kPW1ldGhvZCwgaGVhZGVycz1oZHJzKQogICAgdHJ5OgogICAgICAgIHdpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEsIHRpbWVvdXQ9dGltZW91dCkgYXMgcmVzOgogICAgICAgICAgICByYXcgPSByZXMucmVhZCgpIG9yIGIiIgogICAgICAgICAgICB0eHQgPSByYXcuZGVjb2RlKCJ1dGYtOCIsICJyZXBsYWNlIikKICAgICAgICAgICAgdHJ5OgogICAgICAgICAgICAgICAgb2JqID0ganNvbi5sb2Fkcyh0eHQpIGlmIHR4dCBlbHNlIHt9CiAgICAgICAgICAgIGV4Y2VwdCBFeGNlcHRpb246CiAgICAgICAgICAgICAgICBvYmogPSBOb25lCiAgICAgICAgICAgIHJldHVybiByZXMuc3RhdHVzLCBvYmosIHR4dCwgcmVzLmhlYWRlcnMKICAgIGV4Y2VwdCB1cmxsaWIuZXJyb3IuSFRUUEVycm9yIGFzIGU6CiAgICAgICAgdHh0ID0gKGUucmVhZCgpIG9yIGIiIikuZGVjb2RlKCJ1dGYtOCIsICJyZXBsYWNlIikKICAgICAgICByZXR1cm4gZS5jb2RlLCBOb25lLCB0eHQsIGUuaGVhZGVycwogICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIGxvZyhmImh0dHAgZXJyb3IgdXJsPXt1cmx9IG1ldGhvZD17bWV0aG9kfToge2V9IikKICAgICAgICByZXR1cm4gNTk5LCBOb25lLCAiIiwgTm9uZQoKZGVmIGVuc3VyZV91c2VyKGVtYWlsOiBzdHIsIGZpcnN0X25hbWU6IHN0ciwgcGFzc3dvcmQ6IHN0cikgLT4gTm9uZToKICAgIHN0YXR1cywgXywgdHh0LCBfID0gaHR0cF9qc29uKAogICAgICAgIGYie09PX1VSTH0vYXBpL3tPT19PUkd9L3VzZXJzIiwKICAgICAgICAiUE9TVCIsCiAgICAgICAgYm9keT17CiAgICAgICAgICAgICJlbWFpbCI6IGVtYWlsLAogICAgICAgICAgICAicGFzc3dvcmQiOiBwYXNzd29yZCwKICAgICAgICAgICAgInJvbGUiOiAiYWRtaW4iLAogICAgICAgICAgICAiZmlyc3RfbmFtZSI6IGZpcnN0X25hbWUsCiAgICAgICAgICAgICJsYXN0X25hbWUiOiAiIiwKICAgICAgICB9LAogICAgKQogICAgaWYgc3RhdHVzID09IDIwMDoKICAgICAgICBsb2coZiJjcmVhdGVkIHVzZXIgZW1haWw9e2VtYWlsfSIpCiAgICBlbGlmIHN0YXR1cyA9PSA0MDAgYW5kICJhbHJlYWR5IGV4aXN0cyIgaW4gdHh0Lmxvd2VyKCk6CiAgICAgICAgbG9nKGYidXNlciBhbHJlYWR5IGV4aXN0cyBlbWFpbD17ZW1haWx9IikKICAgIGVsaWYgc3RhdHVzIGluICgyMDAsKToKICAgICAgICBwYXNzCiAgICBlbHNlOgogICAgICAgIGxvZyhmInVzZXIgY3JlYXRlIGZhaWxlZCBlbWFpbD17ZW1haWx9IHN0YXR1cz17c3RhdHVzfSBib2R5PXt0eHRbOjIwMF19IikKCiAgICBlbmNvZGVkID0gdXJsbGliLnBhcnNlLnF1b3RlKGVtYWlsLCBzYWZlPSIiKQogICAgc3RhdHVzLCBfLCB0eHQsIF8gPSBodHRwX2pzb24oCiAgICAgICAgZiJ7T09fVVJMfS9hcGkve09PX09SR30vdXNlcnMve2VuY29kZWR9IiwKICAgICAgICAiUFVUIiwKICAgICAgICBib2R5PXsKICAgICAgICAgICAgImNoYW5nZV9wYXNzd29yZCI6IFRydWUsCiAgICAgICAgICAgICJuZXdfcGFzc3dvcmQiOiBwYXNzd29yZCwKICAgICAgICAgICAgImZpcnN0X25hbWUiOiBmaXJzdF9uYW1lLAogICAgICAgICAgICAibGFzdF9uYW1lIjogIiIsCiAgICAgICAgfSwKICAgICkKICAgIGlmIHN0YXR1cyA9PSAyMDA6CiAgICAgICAgbG9nKGYicGFzc3dvcmQgc3luY2VkIGVtYWlsPXtlbWFpbH0iKQogICAgZWxzZToKICAgICAgICBsb2coZiJ1c2VyIHVwZGF0ZSBmYWlsZWQgZW1haWw9e2VtYWlsfSBzdGF0dXM9e3N0YXR1c30gYm9keT17dHh0WzoyMDBdfSIpCgpkZWYgZmV0Y2hfYXV0aF9jb29raWUoZW1haWw6IHN0ciwgcGFzc3dvcmQ6IHN0cikgLT4gc3RyIHwgTm9uZToKICAgIGRhdGEgPSBqc29uLmR1bXBzKHsibmFtZSI6IGVtYWlsLCAicGFzc3dvcmQiOiBwYXNzd29yZH0pLmVuY29kZSgidXRmLTgiKQogICAgcmVxID0gdXJsbGliLnJlcXVlc3QuUmVxdWVzdCgKICAgICAgICBmIntPT19VUkx9L2F1dGgvbG9naW4iLAogICAgICAgIGRhdGE9ZGF0YSwKICAgICAgICBtZXRob2Q9IlBPU1QiLAogICAgICAgIGhlYWRlcnM9eyJDb250ZW50LVR5cGUiOiAiYXBwbGljYXRpb24vanNvbiJ9LAogICAgKQogICAgdHJ5OgogICAgICAgIHdpdGggdXJsbGliLnJlcXVlc3QudXJsb3BlbihyZXEsIHRpbWVvdXQ9MjApIGFzIHJlczoKICAgICAgICAgICAgc2V0X2Nvb2tpZXMgPSByZXMuaGVhZGVycy5nZXRfYWxsKCJTZXQtQ29va2llIikgb3IgW10KICAgICAgICAgICAgZm9yIGNvb2tpZSBpbiBzZXRfY29va2llczoKICAgICAgICAgICAgICAgIGlmIGNvb2tpZS5zdGFydHN3aXRoKCJhdXRoX3Rva2Vucz0iKToKICAgICAgICAgICAgICAgICAgICByZXR1cm4gY29va2llCiAgICBleGNlcHQgdXJsbGliLmVycm9yLkhUVFBFcnJvciBhcyBlOgogICAgICAgIGJvZHkgPSAoZS5yZWFkKCkgb3IgYiIiKS5kZWNvZGUoInV0Zi04IiwgInJlcGxhY2UiKQogICAgICAgIGxvZyhmImxvZ2luIGZhaWxlZCBlbWFpbD17ZW1haWx9IHN0YXR1cz17ZS5jb2RlfSBib2R5PXtib2R5WzoyMDBdfSIpCiAgICBleGNlcHQgRXhjZXB0aW9uIGFzIGU6CiAgICAgICAgbG9nKGYibG9naW4gZXJyb3IgZW1haWw9e2VtYWlsfToge2V9IikKICAgIHJldHVybiBOb25lCgpjbGFzcyBIYW5kbGVyKEJhc2VIVFRQUmVxdWVzdEhhbmRsZXIpOgogICAgZGVmIGRvX0dFVChzZWxmKToKICAgICAgICBpZiBzZWxmLnBhdGggPT0gIi9oZWFsdGgiOgogICAgICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoMjAwKQogICAgICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICAgICAgc2VsZi53ZmlsZS53cml0ZShiIm9rIikKICAgICAgICAgICAgcmV0dXJuCgogICAgICAgIGVtYWlsID0gc2VsZi5oZWFkZXJzLmdldChPT19FTUFJTF9IRUFERVIpCiAgICAgICAgbG9naW5fbmFtZSA9IHNlbGYuaGVhZGVycy5nZXQoT09fTE9HSU5fSEVBREVSKQogICAgICAgIGlmIG5vdCBlbWFpbDoKICAgICAgICAgICAgc2VsZi5zZW5kX3Jlc3BvbnNlKDQwMCkKICAgICAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiQ29udGVudC1UeXBlIiwgInRleHQvcGxhaW4iKQogICAgICAgICAgICBzZWxmLmVuZF9oZWFkZXJzKCkKICAgICAgICAgICAgc2VsZi53ZmlsZS53cml0ZShiIm1pc3NpbmcgZW1haWwgaGVhZGVyIikKICAgICAgICAgICAgcmV0dXJuCgogICAgICAgIGlmIGxvZ2luX25hbWUgYW5kICIvIiBpbiBsb2dpbl9uYW1lOgogICAgICAgICAgICBsb2dpbl9uYW1lID0gbG9naW5fbmFtZS5zcGxpdCgiLyIpWy0xXQogICAgICAgIGlmIG5vdCBsb2dpbl9uYW1lOgogICAgICAgICAgICBsb2dpbl9uYW1lID0gZW1haWwuc3BsaXQoIkAiLCAxKVswXQoKICAgICAgICBwYXNzd29yZCA9IGRlcml2ZV9wYXNzd29yZChlbWFpbCkKICAgICAgICBsb2coZiJyZXF1ZXN0IHBhdGg9e3NlbGYucGF0aH0gZW1haWw9e2VtYWlsfSBsb2dpbj17bG9naW5fbmFtZX0iKQoKICAgICAgICBlbnN1cmVfdXNlcihlbWFpbCwgbG9naW5fbmFtZSwgcGFzc3dvcmQpCiAgICAgICAgY29va2llID0gZmV0Y2hfYXV0aF9jb29raWUoZW1haWwsIHBhc3N3b3JkKQogICAgICAgIGlmIG5vdCBjb29raWU6CiAgICAgICAgICAgIHNlbGYuc2VuZF9yZXNwb25zZSg1MDIpCiAgICAgICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQogICAgICAgICAgICBzZWxmLndmaWxlLndyaXRlKGIiZmFpbGVkIHRvIGxvZyBpbiIpCiAgICAgICAgICAgIHJldHVybgoKICAgICAgICBzZWxmLnNlbmRfcmVzcG9uc2UoMzAyKQogICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIlNldC1Db29raWUiLCBjb29raWUpCiAgICAgICAgc2VsZi5zZW5kX2hlYWRlcigiTG9jYXRpb24iLCAiL3dlYi8iKQogICAgICAgIHNlbGYuc2VuZF9oZWFkZXIoIkNhY2hlLUNvbnRyb2wiLCAibm8tc3RvcmUiKQogICAgICAgIHNlbGYuZW5kX2hlYWRlcnMoKQoKICAgIGRlZiBsb2dfbWVzc2FnZShzZWxmLCBmb3JtYXQsICphcmdzKToKICAgICAgICByZXR1cm4KCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBsb2coCiAgICAgICAgZiJzdGFydCBsaXN0ZW5fcG9ydD17T09fTElTVEVOX1BPUlR9IG9yZz17T09fT1JHfSBlbWFpbF9oZWFkZXI9e09PX0VNQUlMX0hFQURFUn0gbG9naW5faGVhZGVyPXtPT19MT0dJTl9IRUFERVJ9IgogICAgKQogICAgSFRUUFNlcnZlcigoIjAuMC4wLjAiLCBPT19MSVNURU5fUE9SVCksIEhhbmRsZXIpLnNlcnZlX2ZvcmV2ZXIoKQo='; pathlib.Path('/root/oo-auth-bridge.py').write_bytes(base64.b64decode(code))"
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
         create configmap oo-auth-bridge \
@@ -2476,14 +2896,8 @@ write_files:
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       # Write NGINX config via base64 to avoid heredocs/escaping.
-      sudo python3 -c 'import base64, pathlib; data="d29ya2VyX3Byb2Nlc3NlcyAgMTsKZXZlbnRzIHsgd29ya2VyX2Nvbm5lY3Rpb25zICAxMDI0OyB9Cmh0dHAgewogIHVwc3RyZWFtIG9vX3JvdXRlciB7IHNlcnZlciBvcGVub2JzZXJ2ZS1yb3V0ZXIub3Blbm9ic2VydmUuc3ZjLmNsdXN0ZXIubG9jYWw6NTA4MDsgfQogIHVwc3RyZWFtIG9hdXRoMl9wcm94eSB7IHNlcnZlciBvby1vYXV0aDItcHJveHkub3Blbm9ic2VydmUuc3ZjLmNsdXN0ZXIubG9jYWw6NDE4MDsgfQogIHVwc3RyZWFtIG9vX2JyaWRnZSB7IHNlcnZlciBvby1hdXRoLWJyaWRnZS5vcGVub2JzZXJ2ZS5zdmMuY2x1c3Rlci5sb2NhbDo0MTgxOyB9CiAgc2VydmVyIHsKICAgIGxpc3RlbiA1MDgwOwoKICAgIGxvY2F0aW9uIC9vYXV0aDIvIHsKICAgICAgYXV0aF9yZXF1ZXN0IG9mZjsKICAgICAgcHJveHlfcGFzcyBodHRwOi8vb2F1dGgyX3Byb3h5OwogICAgICBwcm94eV9zZXRfaGVhZGVyIEhvc3QgJGhvc3Q7CiAgICAgIHByb3h5X3NldF9oZWFkZXIgWC1SZWFsLUlQICRyZW1vdGVfYWRkcjsKICAgICAgcHJveHlfc2V0X2hlYWRlciBYLUZvcndhcmRlZC1Ib3N0ICRob3N0OwogICAgICBwcm94eV9zZXRfaGVhZGVyIFgtRm9yd2FyZGVkLVByb3RvICRzY2hlbWU7CiAgICAgIHByb3h5X3NldF9oZWFkZXIgWC1Gb3J3YXJkZWQtRm9yICRwcm94eV9hZGRfeF9mb3J3YXJkZWRfZm9yOwogICAgfQoKICAgIGxvY2F0aW9uID0gL29hdXRoMi9hdXRoIHsKICAgICAgYXV0aF9yZXF1ZXN0IG9mZjsKICAgICAgcHJveHlfcGFzcyBodHRwOi8vb2F1dGgyX3Byb3h5OwogICAgICBwcm94eV9zZXRfaGVhZGVyIEhvc3QgJGhvc3Q7CiAgICAgIHByb3h5X3NldF9oZWFkZXIgWC1SZWFsLUlQICRyZW1vdGVfYWRkcjsKICAgICAgcHJveHlfc2V0X2hlYWRlciBYLUZvcndhcmRlZC1Ib3N0ICRob3N0OwogICAgICBwcm94eV9zZXRfaGVhZGVyIFgtRm9yd2FyZGVkLVByb3RvICRzY2hlbWU7CiAgICAgIHByb3h5X3NldF9oZWFkZXIgWC1Gb3J3YXJkZWQtRm9yICRwcm94eV9hZGRfeF9mb3J3YXJkZWRfZm9yOwogICAgICBwcm94eV9zZXRfaGVhZGVyIENvbnRlbnQtTGVuZ3RoICIiOwogICAgICBwcm94eV9wYXNzX3JlcXVlc3RfYm9keSBvZmY7CiAgICB9CgogICAgYXV0aF9yZXF1ZXN0IC9vYXV0aDIvYXV0aDsKICAgIGVycm9yX3BhZ2UgNDAxID0gL29hdXRoMi9zaWduX2luP3JkPSRyZXF1ZXN0X3VyaTsKCiAgICBhdXRoX3JlcXVlc3Rfc2V0ICRhdXRoX3VzZXIgICR1cHN0cmVhbV9odHRwX3hfYXV0aF9yZXF1ZXN0X3VzZXI7CiAgICBhdXRoX3JlcXVlc3Rfc2V0ICRhdXRoX2VtYWlsICR1cHN0cmVhbV9odHRwX3hfYXV0aF9yZXF1ZXN0X2VtYWlsOwoKICAgIGxvY2F0aW9uID0gL19fb29fbG9naW4gewogICAgICBwcm94eV9zZXRfaGVhZGVyIFgtQXV0aC1SZXF1ZXN0LVVzZXIgJGF1dGhfdXNlcjsKICAgICAgcHJveHlfc2V0X2hlYWRlciBYLUF1dGgtUmVxdWVzdC1FbWFpbCAkYXV0aF9lbWFpbDsKICAgICAgcHJveHlfcGFzcyBodHRwOi8vb29fYnJpZGdlOwogICAgfQoKICAgIGxvY2F0aW9uID0gLyB7CiAgICAgIHJldHVybiAzMDIgL19fb29fbG9naW47CiAgICB9CgogICAgbG9jYXRpb24gLyB7CiAgICAgIHByb3h5X3Bhc3MgaHR0cDovL29vX3JvdXRlcjsKICAgICAgcHJveHlfc2V0X2hlYWRlciBIb3N0ICRob3N0OwogICAgICBwcm94eV9zZXRfaGVhZGVyIFgtUmVhbC1JUCAkcmVtb3RlX2FkZHI7CiAgICAgIHByb3h5X3NldF9oZWFkZXIgWC1Gb3J3YXJkZWQtSG9zdCAkaG9zdDsKICAgICAgcHJveHlfc2V0X2hlYWRlciBYLUZvcndhcmRlZC1Qcm90byAkc2NoZW1lOwogICAgICBwcm94eV9zZXRfaGVhZGVyIFgtRm9yd2FyZGVkLUZvciAkcHJveHlfYWRkX3hfZm9yd2FyZGVkX2ZvcjsKICAgIH0KICB9Cn0K"; pathlib.Path("/root/oo-auth-nginx.conf").write_text(base64.b64decode(data).decode())'
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
-        create configmap oo-auth-proxy-nginx \
-        --from-file=nginx.conf=/root/oo-auth-nginx.conf \
-        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       # Write the auth-proxy manifest via base64 to avoid long inlined strings.
-      sudo python3 -c "import base64, os, pathlib; data='YXBpVmVyc2lvbjogYXBwcy92MQpraW5kOiBEZXBsb3ltZW50Cm1ldGFkYXRhOgogIG5hbWU6IG9vLWF1dGgtYnJpZGdlCiAgbmFtZXNwYWNlOiBvcGVub2JzZXJ2ZQogIGxhYmVsczoKICAgIGFwcDogb28tYXV0aC1icmlkZ2UKc3BlYzoKICByZXBsaWNhczogMQogIHNlbGVjdG9yOgogICAgbWF0Y2hMYWJlbHM6CiAgICAgIGFwcDogb28tYXV0aC1icmlkZ2UKICB0ZW1wbGF0ZToKICAgIG1ldGFkYXRhOgogICAgICBsYWJlbHM6CiAgICAgICAgYXBwOiBvby1hdXRoLWJyaWRnZQogICAgc3BlYzoKICAgICAgY29udGFpbmVyczoKICAgICAgLSBuYW1lOiBicmlkZ2UKICAgICAgICBpbWFnZTogcHl0aG9uOjMuMTItc2xpbQogICAgICAgIGltYWdlUHVsbFBvbGljeTogSWZOb3RQcmVzZW50CiAgICAgICAgZW52OgogICAgICAgIC0gbmFtZTogT09fVVJMCiAgICAgICAgICB2YWx1ZTogaHR0cDovL29wZW5vYnNlcnZlLXJvdXRlcjo1MDgwCiAgICAgICAgLSBuYW1lOiBPT19PUkcKICAgICAgICAgIHZhbHVlOiBkZWZhdWx0CiAgICAgICAgLSBuYW1lOiBPT19BRE1JTl9VU0VSCiAgICAgICAgICB2YWx1ZUZyb206CiAgICAgICAgICAgIHNlY3JldEtleVJlZjoKICAgICAgICAgICAgICBuYW1lOiBvcGVub2JzZXJ2ZS1yb290LWNyZWRzCiAgICAgICAgICAgICAga2V5OiB1c2VybmFtZQogICAgICAgIC0gbmFtZTogT09fQURNSU5fUEFTUwogICAgICAgICAgdmFsdWVGcm9tOgogICAgICAgICAgICBzZWNyZXRLZXlSZWY6CiAgICAgICAgICAgICAgbmFtZTogb3Blbm9ic2VydmUtcm9vdC1jcmVkcwogICAgICAgICAgICAgIGtleTogcGFzc3dvcmQKICAgICAgICAtIG5hbWU6IE9PX1VTRVJfUEFTU1dPUkRfU0VDUkVUCiAgICAgICAgICB2YWx1ZUZyb206CiAgICAgICAgICAgIHNlY3JldEtleVJlZjoKICAgICAgICAgICAgICBuYW1lOiBvby1hdXRoLWJyaWRnZQogICAgICAgICAgICAgIGtleTogaG1hY19zZWNyZXQKICAgICAgICAtIG5hbWU6IE9PX0VNQUlMX0hFQURFUgogICAgICAgICAgdmFsdWU6IFgtQXV0aC1SZXF1ZXN0LUVtYWlsCiAgICAgICAgLSBuYW1lOiBPT19MT0dJTl9IRUFERVIKICAgICAgICAgIHZhbHVlOiBYLUF1dGgtUmVxdWVzdC1Vc2VyCiAgICAgICAgcG9ydHM6CiAgICAgICAgLSBuYW1lOiBodHRwCiAgICAgICAgICBjb250YWluZXJQb3J0OiA0MTgxCiAgICAgICAgdm9sdW1lTW91bnRzOgogICAgICAgIC0gbmFtZTogYnJpZGdlLXNjcmlwdAogICAgICAgICAgbW91bnRQYXRoOiAvYXBwCiAgICAgICAgICByZWFkT25seTogdHJ1ZQogICAgICAgIGNvbW1hbmQ6IFsicHl0aG9uIiwgIi9hcHAvYnJpZGdlLnB5Il0KICAgICAgdm9sdW1lczoKICAgICAgLSBuYW1lOiBicmlkZ2Utc2NyaXB0CiAgICAgICAgY29uZmlnTWFwOgogICAgICAgICAgbmFtZTogb28tYXV0aC1icmlkZ2UKICAgICAgICAgIGRlZmF1bHRNb2RlOiAwNTU1Ci0tLQphcGlWZXJzaW9uOiB2MQpraW5kOiBTZXJ2aWNlCm1ldGFkYXRhOgogIG5hbWU6IG9vLWF1dGgtYnJpZGdlCiAgbmFtZXNwYWNlOiBvcGVub2JzZXJ2ZQpzcGVjOgogIHNlbGVjdG9yOgogICAgYXBwOiBvby1hdXRoLWJyaWRnZQogIHBvcnRzOgogIC0gbmFtZTogaHR0cAogICAgcG9ydDogNDE4MQogICAgdGFyZ2V0UG9ydDogaHR0cAotLS0KYXBpVmVyc2lvbjogYXBwcy92MQpraW5kOiBEZXBsb3ltZW50Cm1ldGFkYXRhOgogIG5hbWU6IG9vLW9hdXRoMi1wcm94eQogIG5hbWVzcGFjZTogb3Blbm9ic2VydmUKICBsYWJlbHM6CiAgICBhcHA6IG9vLW9hdXRoMi1wcm94eQpzcGVjOgogIHJlcGxpY2FzOiAxCiAgc2VsZWN0b3I6CiAgICBtYXRjaExhYmVsczoKICAgICAgYXBwOiBvby1vYXV0aDItcHJveHkKICB0ZW1wbGF0ZToKICAgIG1ldGFkYXRhOgogICAgICBsYWJlbHM6CiAgICAgICAgYXBwOiBvby1vYXV0aDItcHJveHkKICAgIHNwZWM6CiAgICAgIGNvbnRhaW5lcnM6CiAgICAgIC0gbmFtZTogb2F1dGgyLXByb3h5CiAgICAgICAgaW1hZ2U6IHF1YXkuaW8vb2F1dGgyLXByb3h5L29hdXRoMi1wcm94eTp2Ny42LjAKICAgICAgICBpbWFnZVB1bGxQb2xpY3k6IElmTm90UHJlc2VudAogICAgICAgIGFyZ3M6CiAgICAgICAgLSAtLWh0dHAtYWRkcmVzcz0wLjAuMC4wOjQxODAKICAgICAgICAtIC0tcHJvdmlkZXI9b2lkYwogICAgICAgIC0gLS1vaWRjLWlzc3Vlci11cmw9aHR0cHM6Ly9vcGVub2JzZXJ2ZS1kZXgudGVsZXBvcnQuYXBwLiR7UkFOQ0hFUl9ET01BSU59L2RleAogICAgICAgIC0gLS1yZWRpcmVjdC11cmw9aHR0cHM6Ly9vcGVub2JzZXJ2ZS50ZWxlcG9ydC5hcHAuJHtSQU5DSEVSX0RPTUFJTn0vb2F1dGgyL2NhbGxiYWNrCiAgICAgICAgLSAtLWVtYWlsLWRvbWFpbj0qCiAgICAgICAgLSAtLXNjb3BlPW9wZW5pZCBwcm9maWxlIGVtYWlsIGdyb3VwcwogICAgICAgIC0gLS11cHN0cmVhbT1odHRwOi8vb3Blbm9ic2VydmUtcm91dGVyLm9wZW5vYnNlcnZlLnN2Yy5jbHVzdGVyLmxvY2FsOjUwODAvCiAgICAgICAgLSAtLXJldmVyc2UtcHJveHk9dHJ1ZQogICAgICAgIC0gLS1zZXQteGF1dGhyZXF1ZXN0PXRydWUKICAgICAgICAtIC0tY29va2llLXNlY3VyZT10cnVlCiAgICAgICAgLSAtLWNvb2tpZS1zYW1lc2l0ZT1sYXgKICAgICAgICAtIC0tY29va2llLXJlZnJlc2g9MWgKICAgICAgICAtIC0tY29va2llLWV4cGlyZT04aAogICAgICAgIC0gLS1za2lwLXByb3ZpZGVyLWJ1dHRvbj10cnVlCiAgICAgICAgZW52OgogICAgICAgIC0gbmFtZTogT0FVVEgyX1BST1hZX0NMSUVOVF9JRAogICAgICAgICAgdmFsdWVGcm9tOgogICAgICAgICAgICBzZWNyZXRLZXlSZWY6CiAgICAgICAgICAgICAgbmFtZTogb28tb2F1dGgyLXByb3h5CiAgICAgICAgICAgICAga2V5OiBjbGllbnRfaWQKICAgICAgICAtIG5hbWU6IE9BVVRIMl9QUk9YWV9DTElFTlRfU0VDUkVUCiAgICAgICAgICB2YWx1ZUZyb206CiAgICAgICAgICAgIHNlY3JldEtleVJlZjoKICAgICAgICAgICAgICBuYW1lOiBvby1vYXV0aDItcHJveHkKICAgICAgICAgICAgICBrZXk6IGNsaWVudF9zZWNyZXQKICAgICAgICAtIG5hbWU6IE9BVVRIMl9QUk9YWV9DT09LSUVfU0VDUkVUCiAgICAgICAgICB2YWx1ZUZyb206CiAgICAgICAgICAgIHNlY3JldEtleVJlZjoKICAgICAgICAgICAgICBuYW1lOiBvby1vYXV0aDItcHJveHkKICAgICAgICAgICAgICBrZXk6IGNvb2tpZV9zZWNyZXQKICAgICAgICBwb3J0czoKICAgICAgICAtIG5hbWU6IGh0dHAKICAgICAgICAgIGNvbnRhaW5lclBvcnQ6IDQxODAKLS0tCmFwaVZlcnNpb246IHYxCmtpbmQ6IFNlcnZpY2UKbWV0YWRhdGE6CiAgbmFtZTogb28tb2F1dGgyLXByb3h5CiAgbmFtZXNwYWNlOiBvcGVub2JzZXJ2ZQpzcGVjOgogIHNlbGVjdG9yOgogICAgYXBwOiBvby1vYXV0aDItcHJveHkKICBwb3J0czoKICAtIG5hbWU6IGh0dHAKICAgIHBvcnQ6IDQxODAKICAgIHRhcmdldFBvcnQ6IGh0dHAKLS0tCmFwaVZlcnNpb246IGFwcHMvdjEKa2luZDogRGVwbG95bWVudAptZXRhZGF0YToKICBuYW1lOiBvcGVub2JzZXJ2ZS1hdXRoLXByb3h5CiAgbmFtZXNwYWNlOiBvcGVub2JzZXJ2ZQogIGxhYmVsczoKICAgIGFwcDogb3Blbm9ic2VydmUtYXV0aC1wcm94eQpzcGVjOgogIHJlcGxpY2FzOiAxCiAgc2VsZWN0b3I6CiAgICBtYXRjaExhYmVsczoKICAgICAgYXBwOiBvcGVub2JzZXJ2ZS1hdXRoLXByb3h5CiAgdGVtcGxhdGU6CiAgICBtZXRhZGF0YToKICAgICAgbGFiZWxzOgogICAgICAgIGFwcDogb3Blbm9ic2VydmUtYXV0aC1wcm94eQogICAgc3BlYzoKICAgICAgY29udGFpbmVyczoKICAgICAgLSBuYW1lOiBuZ2lueAogICAgICAgIGltYWdlOiBuZ2lueDoxLjI3LWFscGluZQogICAgICAgIGltYWdlUHVsbFBvbGljeTogSWZOb3RQcmVzZW50CiAgICAgICAgcG9ydHM6CiAgICAgICAgLSBuYW1lOiBodHRwCiAgICAgICAgICBjb250YWluZXJQb3J0OiA1MDgwCiAgICAgICAgdm9sdW1lTW91bnRzOgogICAgICAgIC0gbmFtZTogbmdpbngtY29uZgogICAgICAgICAgbW91bnRQYXRoOiAvZXRjL25naW54L25naW54LmNvbmYKICAgICAgICAgIHN1YlBhdGg6IG5naW54LmNvbmYKICAgICAgICAgIHJlYWRPbmx5OiB0cnVlCiAgICAgIHZvbHVtZXM6CiAgICAgIC0gbmFtZTogbmdpbngtY29uZgogICAgICAgIGNvbmZpZ01hcDoKICAgICAgICAgIG5hbWU6IG9vLWF1dGgtcHJveHktbmdpbngKICAgICAgICAgIGRlZmF1bHRNb2RlOiAwNDQ0Ci0tLQphcGlWZXJzaW9uOiB2MQpraW5kOiBTZXJ2aWNlCm1ldGFkYXRhOgogIG5hbWU6IG9wZW5vYnNlcnZlLWF1dGgtcHJveHkKICBuYW1lc3BhY2U6IG9wZW5vYnNlcnZlCnNwZWM6CiAgc2VsZWN0b3I6CiAgICBhcHA6IG9wZW5vYnNlcnZlLWF1dGgtcHJveHkKICBwb3J0czoKICAtIG5hbWU6IGh0dHAKICAgIHBvcnQ6IDUwODAKICAgIHRhcmdldFBvcnQ6IGh0dHAK'; text = base64.b64decode(data).decode(); dom=os.environ.get('RANCHER_DOMAIN',''); issuer=os.environ.get('OO_DEX_ISSUER_HOST', f'openobserve-dex.teleport.app.{dom}' if dom else 'openobserve-dex.teleport.app'); redirect=os.environ.get('OO_PUBLIC_URL', f'https://openobserve.teleport.app.{dom}' if dom else 'https://openobserve.teleport.app'); text=text.replace('${RANCHER_DOMAIN}', dom); text=text.replace('https://openobserve-dex.teleport.app.${RANCHER_DOMAIN}', f'https://{issuer}'); text=text.replace('https://openobserve.teleport.app.${RANCHER_DOMAIN}/oauth2/callback', f'{redirect}/oauth2/callback'); pathlib.Path('/root/oo-auth-proxy.yaml').write_text(text)"
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve apply -f /root/oo-auth-proxy.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-oauth2-proxy --timeout=180s
