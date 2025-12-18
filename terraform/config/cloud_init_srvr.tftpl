@@ -462,6 +462,7 @@ write_files:
               - --upstream=http://openobserve-router.openobserve.svc.cluster.local:5080/
               - --reverse-proxy=true
               - --set-xauthrequest=true
+              - --cookie-secret=$(OAUTH2_PROXY_COOKIE_SECRET)
               - --cookie-secure=true
               - --cookie-samesite=lax
               - --cookie-refresh=1h
