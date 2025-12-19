@@ -137,7 +137,6 @@ write_files:
       import urllib.error
       import urllib.parse
       import urllib.request
-      from http.cookies import SimpleCookie
       from http.server import BaseHTTPRequestHandler, HTTPServer
 
       OO_URL = os.getenv("OO_URL", "http://openobserve-router:5080").rstrip("/")
@@ -286,12 +285,16 @@ write_files:
               cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
               if cookie_domain:
                   try:
-                      sc = SimpleCookie()
-                      sc.load(cookie)
-                      for morsel in sc.values():
-                          morsel["domain"] = cookie_domain
-                          morsel["path"] = "/"
-                      cookie = sc.output(header="", sep="; ").strip()
+                      parts = [p.strip() for p in cookie.split(";") if p.strip()]
+                      if parts:
+                          attrs = [
+                              p
+                              for p in parts[1:]
+                              if not p.lower().startswith("domain=") and not p.lower().startswith("path=")
+                          ]
+                          attrs.append(f"Domain={cookie_domain}")
+                          attrs.append("Path=/")
+                          cookie = "; ".join([parts[0]] + attrs)
                   except Exception as e:
                       log(f"failed to rewrite cookie domain for host={host}: {e}")
 
@@ -345,7 +348,7 @@ write_files:
           }
 
           auth_request /oauth2/auth;
-          error_page 401 = /oauth2/sign_in?rd=$request_uri;
+          error_page 401 = /oauth2/sign_in?rd=/__oo_login;
 
           auth_request_set $auth_user  $upstream_http_x_auth_request_user;
           auth_request_set $auth_email $upstream_http_x_auth_request_email;
