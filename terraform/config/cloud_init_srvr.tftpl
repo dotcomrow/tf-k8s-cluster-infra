@@ -227,7 +227,7 @@ write_files:
           else:
               log(f"user update failed email={email} status={status} body={txt[:200]}")
 
-      def fetch_auth_cookie(email: str, password: str) -> str | None:
+      def fetch_auth_cookies(email: str, password: str) -> list[str]:
           data = json.dumps({"name": email, "password": password}).encode("utf-8")
           req = urllib.request.Request(
               f"{OO_URL}/auth/login",
@@ -237,16 +237,13 @@ write_files:
           )
           try:
               with urllib.request.urlopen(req, timeout=20) as res:
-                  set_cookies = res.headers.get_all("Set-Cookie") or []
-                  for cookie in set_cookies:
-                      if cookie.startswith("auth_tokens="):
-                          return cookie
+                  return res.headers.get_all("Set-Cookie") or []
           except urllib.error.HTTPError as e:
               body = (e.read() or b"").decode("utf-8", "replace")
               log(f"login failed email={email} status={e.code} body={body[:200]}")
           except Exception as e:
               log(f"login error email={email}: {e}")
-          return None
+          return []
 
       class Handler(BaseHTTPRequestHandler):
           def do_GET(self):
@@ -274,35 +271,39 @@ write_files:
               log(f"request path={self.path} email={email} login={login_name}")
 
               ensure_user(email, login_name, password)
-              cookie = fetch_auth_cookie(email, password)
-              if not cookie:
-                  self.send_response(502)
-                  self.end_headers()
-                  self.wfile.write(b"failed to log in")
-                  return
+            cookies = fetch_auth_cookies(email, password)
+            if not cookies:
+                self.send_response(502)
+                self.end_headers()
+                self.wfile.write(b"failed to log in")
+                return
 
-              host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
-              cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
-              if cookie_domain:
-                  try:
-                      parts = [p.strip() for p in cookie.split(";") if p.strip()]
-                      if parts:
-                          attrs = [
-                              p
-                              for p in parts[1:]
-                              if not p.lower().startswith("domain=") and not p.lower().startswith("path=")
-                          ]
-                          attrs.append(f"Domain={cookie_domain}")
-                          attrs.append("Path=/")
-                          cookie = "; ".join([parts[0]] + attrs)
-                  except Exception as e:
-                      log(f"failed to rewrite cookie domain for host={host}: {e}")
+            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
+            cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
+            rewritten = []
+            for cookie in cookies:
+                if not cookie_domain:
+                    rewritten.append(cookie)
+                    continue
+                try:
+                    parts = [p.strip() for p in cookie.split(";") if p.strip()]
+                    if not parts:
+                        continue
+                    attrs = [p for p in parts[1:] if not p.lower().startswith("domain=")]
+                    if not any(p.lower().startswith("path=") for p in parts[1:]):
+                        attrs.append("Path=/")
+                    attrs.append(f"Domain={cookie_domain}")
+                    rewritten.append("; ".join([parts[0]] + attrs))
+                except Exception as e:
+                    log(f"failed to rewrite cookie domain for host={host}: {e}")
+                    rewritten.append(cookie)
 
-              self.send_response(302)
-              self.send_header("Set-Cookie", cookie)
-              self.send_header("Location", "/web/")
-              self.send_header("Cache-Control", "no-store")
-              self.end_headers()
+            self.send_response(302)
+            for cookie in rewritten:
+                self.send_header("Set-Cookie", cookie)
+            self.send_header("Location", "/web/")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
 
           def log_message(self, format, *args):
               return
