@@ -371,6 +371,7 @@ write_files:
           }
 
           location / {
+            proxy_set_header Authorization "__OO_AUTH_HEADER__";
             proxy_pass http://oo_router;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -2910,9 +2911,11 @@ write_files:
         --from-file=bridge.py=/root/oo-auth-bridge.py \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
+      sed "s|__OO_AUTH_HEADER__|$OO_AUTH_HEADER|g" /root/oo-auth-nginx.conf > /root/oo-auth-nginx.rendered.conf
+
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
         create configmap oo-auth-proxy-nginx \
-        --from-file=nginx.conf=/root/oo-auth-nginx.conf \
+        --from-file=nginx.conf=/root/oo-auth-nginx.rendered.conf \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
       echo "ℹ️  GitHub team→role sync is not deployed on OSS builds (OpenObserve OSS enforces admin-only org roles); team access is enforced at Dex."
