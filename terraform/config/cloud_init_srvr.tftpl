@@ -134,9 +134,12 @@ write_files:
       import hmac
       import json
       import os
+      import time
       import urllib.error
       import urllib.parse
       import urllib.request
+      from datetime import timezone
+      from email.utils import parsedate_to_datetime
       from http.server import BaseHTTPRequestHandler, HTTPServer
 
       OO_URL = os.getenv("OO_URL", "http://openobserve-router:5080").rstrip("/")
@@ -147,7 +150,8 @@ write_files:
       OO_EMAIL_HEADER = os.getenv("OO_EMAIL_HEADER", "X-Auth-Request-Email")
       OO_LOGIN_HEADER = os.getenv("OO_LOGIN_HEADER", "X-Auth-Request-User")
       OO_LISTEN_PORT = int(os.getenv("OO_LISTEN_PORT", "4181"))
-      OO_COOKIE_DOMAIN = os.getenv("OO_COOKIE_DOMAIN", "")
+      TOKEN_CACHE = {}
+      TOKEN_CACHE_SKEW = 30
 
       _basic = base64.b64encode(f"{OO_ADMIN_USER}:{OO_ADMIN_PASS}".encode("utf-8")).decode("ascii")
       ADMIN_HEADERS = {
@@ -165,6 +169,55 @@ write_files:
           digest = hmac.new(HMAC_SECRET, email_norm.encode("utf-8"), hashlib.sha256).digest()
           pwd = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
           return (pwd[:32] + "A!").replace("-", "A").replace("_", "B")
+
+      def parse_cookie_expiry(attrs: list[str]) -> float:
+          max_age = None
+          expires_at = None
+          for attr in attrs:
+              lower = attr.lower()
+              if lower.startswith("max-age="):
+                  try:
+                      max_age = int(attr.split("=", 1)[1])
+                  except ValueError:
+                      pass
+              elif lower.startswith("expires="):
+                  try:
+                      dt = parsedate_to_datetime(attr.split("=", 1)[1].strip())
+                      if dt.tzinfo is None:
+                          expires_at = dt.replace(tzinfo=timezone.utc).timestamp()
+                      else:
+                          expires_at = dt.timestamp()
+                  except Exception:
+                      pass
+          if max_age is not None:
+              return time.time() + max_age
+          if expires_at is not None:
+              return expires_at
+          return time.time() + 3600
+
+      def extract_auth_token(cookies: list[str]) -> tuple[str | None, float | None]:
+          for cookie in cookies:
+              parts = [p.strip() for p in cookie.split(";") if p.strip()]
+              if not parts:
+                  continue
+              if not parts[0].startswith("auth_tokens="):
+                  continue
+              token = parts[0].split("=", 1)[1]
+              return token, parse_cookie_expiry(parts[1:])
+          return None, None
+
+      def cached_token(email: str) -> str | None:
+          entry = TOKEN_CACHE.get(email)
+          if not entry:
+              return None
+          token, expires_at = entry
+          if expires_at - time.time() > TOKEN_CACHE_SKEW:
+              return token
+          TOKEN_CACHE.pop(email, None)
+          return None
+
+      def cache_token(email: str, token: str, expires_at: float | None) -> None:
+          TOKEN_CACHE[email] = (token, expires_at or (time.time() + 3600))
 
       def http_json(url: str, method: str, *, body=None, headers=None, timeout: int = 20):
           data = None
@@ -227,6 +280,14 @@ write_files:
           else:
               log(f"user update failed email={email} status={status} body={txt[:200]}")
 
+      def user_info_payload(email: str, login_name: str) -> dict:
+          return {
+              "email": email,
+              "name": login_name,
+              "family_name": login_name,
+              "given_name": "",
+          }
+
       def fetch_auth_cookies(email: str, password: str) -> list[str]:
           data = json.dumps({"name": email, "password": password}).encode("utf-8")
           req = urllib.request.Request(
@@ -256,7 +317,32 @@ write_files:
               email = self.headers.get(OO_EMAIL_HEADER)
               login_name = self.headers.get(OO_LOGIN_HEADER)
               if not email:
-                  self.send_response(400)
+                  for header in (
+                      "X-Forwarded-Email",
+                      "X-Auth-Request-Email",
+                      "X-Auth-Request-User",
+                      "X-Forwarded-User",
+                  ):
+                      value = self.headers.get(header)
+                      if value and "@" in value:
+                          email = value
+                          break
+              if not email:
+                  debug_headers = {
+                      k: self.headers.get(k)
+                      for k in (
+                          "X-Auth-Request-Email",
+                          "X-Auth-Request-User",
+                          "X-Auth-Request-Preferred-Username",
+                          "X-Forwarded-Email",
+                          "X-Forwarded-User",
+                          "X-Forwarded-Proto",
+                          "X-Forwarded-Host",
+                      )
+                      if self.headers.get(k)
+                  }
+                  log(f"missing email header headers={debug_headers}")
+                  self.send_response(401)
                   self.send_header("Content-Type", "text/plain")
                   self.end_headers()
                   self.wfile.write(b"missing email header")
@@ -270,21 +356,47 @@ write_files:
               password = derive_password(email)
               log(f"request path={self.path} email={email} login={login_name}")
 
+              if self.path == "/__oo_userinfo":
+                  ensure_user(email, login_name, password)
+                  payload = user_info_payload(email, login_name)
+                  body = json.dumps(payload).encode("utf-8")
+                  self.send_response(200)
+                  self.send_header("Content-Type", "application/json")
+                  self.send_header("Cache-Control", "no-store")
+                  self.end_headers()
+                  self.wfile.write(body)
+                  return
+
               ensure_user(email, login_name, password)
+              if self.path == "/__oo_token":
+                  token = cached_token(email)
+                  if not token:
+                      cookies = fetch_auth_cookies(email, password)
+                      token, expires_at = extract_auth_token(cookies)
+                      if not token:
+                          self.send_response(502)
+                          self.end_headers()
+                          self.wfile.write(b"failed to log in")
+                          return
+                      cache_token(email, token, expires_at)
+                  self.send_response(204)
+                  self.send_header("X-OO-Auth-Token", token)
+                  self.send_header("Cache-Control", "no-store")
+                  self.end_headers()
+                  return
+
               cookies = fetch_auth_cookies(email, password)
               if not cookies:
                   self.send_response(502)
                   self.end_headers()
                   self.wfile.write(b"failed to log in")
                   return
+              token, expires_at = extract_auth_token(cookies)
+              if token:
+                  cache_token(email, token, expires_at)
 
-              host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
-              cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
               rewritten = []
               for cookie in cookies:
-                  if not cookie_domain:
-                      rewritten.append(cookie)
-                      continue
                   try:
                       parts = [p.strip() for p in cookie.split(";") if p.strip()]
                       if not parts:
@@ -295,10 +407,9 @@ write_files:
                           if not p.lower().startswith("domain=") and not p.lower().startswith("path=")
                       ]
                       attrs.append("Path=/")
-                      attrs.append(f"Domain={cookie_domain}")
                       rewritten.append("; ".join([parts[0]] + attrs))
                   except Exception as e:
-                      log(f"failed to rewrite cookie domain for host={host}: {e}")
+                      log(f"failed to rewrite cookie: {e}")
                       rewritten.append(cookie)
 
               self.send_response(302)
@@ -326,52 +437,95 @@ write_files:
         upstream oo_router { server openobserve-router.openobserve.svc.cluster.local:5080; }
         upstream oauth2_proxy { server oo-oauth2-proxy.openobserve.svc.cluster.local:4180; }
         upstream oo_bridge { server oo-auth-bridge.openobserve.svc.cluster.local:4181; }
+        map $http_cookie $has_auth_tokens {
+          default 0;
+          "~*auth_tokens=" 1;
+        }
         server {
           listen 5080;
+          set $public_host "openobserve.teleport.app.${RANCHER_DOMAIN}";
 
-          location /oauth2/ {
-            auth_request off;
-            proxy_pass http://oauth2_proxy;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          }
+        location /oauth2/ {
+          auth_request off;
+          proxy_pass http://oauth2_proxy;
+          proxy_set_header Host $public_host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-Host $public_host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Cookie $http_cookie;
+        }
 
-          location = /oauth2/auth {
-            auth_request off;
-            proxy_pass http://oauth2_proxy;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header Content-Length "";
-            proxy_pass_request_body off;
-          }
+        location = /oauth2/auth {
+          auth_request off;
+          proxy_pass http://oauth2_proxy;
+          proxy_set_header Host $public_host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-Host $public_host;
+          proxy_set_header X-Forwarded-Proto https;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Content-Length "";
+          proxy_pass_request_body off;
+          proxy_set_header Cookie $http_cookie;
+        }
 
-          auth_request /oauth2/auth;
           error_page 401 = /oauth2/sign_in?rd=/__oo_login;
 
+        location = /__oo_login {
+          auth_request /oauth2/auth;
           auth_request_set $auth_user  $upstream_http_x_auth_request_user;
           auth_request_set $auth_email $upstream_http_x_auth_request_email;
+          proxy_set_header X-Auth-Request-User $auth_user;
+          proxy_set_header X-Auth-Request-Email $auth_email;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_pass http://oo_bridge/__oo_login;
+        }
 
-          location = /__oo_login {
-            proxy_set_header X-Auth-Request-User $auth_user;
-            proxy_set_header X-Auth-Request-Email $auth_email;
-            proxy_set_header Host $host;
-            proxy_set_header X-Forwarded-Host $host;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_pass http://oo_bridge;
-          }
+        location = /__oo_userinfo {
+          auth_request /oauth2/auth;
+          auth_request_set $auth_user  $upstream_http_x_auth_request_user;
+          auth_request_set $auth_email $upstream_http_x_auth_request_email;
+          proxy_set_header X-Auth-Request-User $auth_user;
+          proxy_set_header X-Auth-Request-Email $auth_email;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_pass http://oo_bridge/__oo_userinfo;
+        }
 
-          location = / {
+        location = / {
+          return 302 https://openobserve.teleport.app.${RANCHER_DOMAIN}/__oo_login;
+        }
+
+        location = /web/ {
+          if ($has_auth_tokens = 0) {
             return 302 https://openobserve.teleport.app.${RANCHER_DOMAIN}/__oo_login;
+          }
+          proxy_pass http://oo_router;
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forwarded-Host $host;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_set_header Accept-Encoding "";
+          sub_filter_once on;
+          sub_filter_types text/html;
+          sub_filter '</head>' '<script>try{if(!localStorage.getItem("userInfo")){fetch("/__oo_userinfo",{credentials:"include"}).then(function(r){return r.ok?r.json():null;}).then(function(data){if(!data||!data.email){return;}var json=JSON.stringify(data);var enc=btoa(encodeURIComponent(json).replace(/%([0-9A-F]{2})/g,function(m,p1){return String.fromCharCode(parseInt("0x"+p1));}));localStorage.setItem("userInfo",enc);if(window.location.pathname==="/web/login"){window.location.replace("/web/");}}).catch(function(){});}}catch(e){};</script></head>';
+        }
+
+        location = /web/login {
+          if ($has_auth_tokens = 1) {
+            return 302 /web/;
+          }
+          return 302 https://openobserve.teleport.app.${RANCHER_DOMAIN}/__oo_login;
           }
 
           location / {
-            proxy_set_header Authorization "__OO_AUTH_HEADER__";
+            if ($has_auth_tokens = 0) {
+              return 302 https://openobserve.teleport.app.${RANCHER_DOMAIN}/__oo_login;
+            }
             proxy_pass http://oo_router;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -430,8 +584,6 @@ write_files:
                 value: X-Auth-Request-Email
               - name: OO_LOGIN_HEADER
                 value: X-Auth-Request-User
-              - name: OO_COOKIE_DOMAIN
-                value: openobserve.teleport.app.${RANCHER_DOMAIN}
               ports:
               - name: http
                 containerPort: 4181
