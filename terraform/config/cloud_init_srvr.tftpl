@@ -289,9 +289,12 @@ write_files:
                       parts = [p.strip() for p in cookie.split(";") if p.strip()]
                       if not parts:
                           continue
-                      attrs = [p for p in parts[1:] if not p.lower().startswith("domain=")]
-                      if not any(p.lower().startswith("path=") for p in parts[1:]):
-                          attrs.append("Path=/")
+                      attrs = [
+                          p
+                          for p in parts[1:]
+                          if not p.lower().startswith("domain=") and not p.lower().startswith("path=")
+                      ]
+                      attrs.append("Path=/")
                       attrs.append(f"Domain={cookie_domain}")
                       rewritten.append("; ".join([parts[0]] + attrs))
                   except Exception as e:
