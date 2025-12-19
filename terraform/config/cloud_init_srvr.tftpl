@@ -2724,7 +2724,7 @@ write_files:
       export OO_DEX_CALLBACK_URL="https://$OO_DEX_CALLBACK_HOST"
       export OO_OAUTH2_PROXY_CLIENT_ID="oo-auth-proxy"
       export OO_OAUTH2_PROXY_CLIENT_SECRET="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
-      export OO_OAUTH2_PROXY_COOKIE_SECRET="$(python3 -c 'import secrets,string; alphabet=string.ascii_letters+string.digits; print(\"\".join(secrets.choice(alphabet) for _ in range(32)))')"
+      export OO_OAUTH2_PROXY_COOKIE_SECRET="$(python3 -c 'import secrets,string; alphabet=string.ascii_letters+string.digits; print("".join(secrets.choice(alphabet) for _ in range(32)))')"
       export OO_AUTH_BRIDGE_HMAC_SECRET="$(python3 -c 'import base64,os; print(base64.b64encode(os.urandom(32)).decode())')"
 
       sudo helm repo update
