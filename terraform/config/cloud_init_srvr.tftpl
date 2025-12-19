@@ -271,39 +271,39 @@ write_files:
               log(f"request path={self.path} email={email} login={login_name}")
 
               ensure_user(email, login_name, password)
-            cookies = fetch_auth_cookies(email, password)
-            if not cookies:
-                self.send_response(502)
-                self.end_headers()
-                self.wfile.write(b"failed to log in")
-                return
+              cookies = fetch_auth_cookies(email, password)
+              if not cookies:
+                  self.send_response(502)
+                  self.end_headers()
+                  self.wfile.write(b"failed to log in")
+                  return
 
-            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
-            cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
-            rewritten = []
-            for cookie in cookies:
-                if not cookie_domain:
-                    rewritten.append(cookie)
-                    continue
-                try:
-                    parts = [p.strip() for p in cookie.split(";") if p.strip()]
-                    if not parts:
-                        continue
-                    attrs = [p for p in parts[1:] if not p.lower().startswith("domain=")]
-                    if not any(p.lower().startswith("path=") for p in parts[1:]):
-                        attrs.append("Path=/")
-                    attrs.append(f"Domain={cookie_domain}")
-                    rewritten.append("; ".join([parts[0]] + attrs))
-                except Exception as e:
-                    log(f"failed to rewrite cookie domain for host={host}: {e}")
-                    rewritten.append(cookie)
+              host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host", "")
+              cookie_domain = OO_COOKIE_DOMAIN or host.split(":", 1)[0]
+              rewritten = []
+              for cookie in cookies:
+                  if not cookie_domain:
+                      rewritten.append(cookie)
+                      continue
+                  try:
+                      parts = [p.strip() for p in cookie.split(";") if p.strip()]
+                      if not parts:
+                          continue
+                      attrs = [p for p in parts[1:] if not p.lower().startswith("domain=")]
+                      if not any(p.lower().startswith("path=") for p in parts[1:]):
+                          attrs.append("Path=/")
+                      attrs.append(f"Domain={cookie_domain}")
+                      rewritten.append("; ".join([parts[0]] + attrs))
+                  except Exception as e:
+                      log(f"failed to rewrite cookie domain for host={host}: {e}")
+                      rewritten.append(cookie)
 
-            self.send_response(302)
-            for cookie in rewritten:
-                self.send_header("Set-Cookie", cookie)
-            self.send_header("Location", "/web/")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
+              self.send_response(302)
+              for cookie in rewritten:
+                  self.send_header("Set-Cookie", cookie)
+              self.send_header("Location", "/web/")
+              self.send_header("Cache-Control", "no-store")
+              self.end_headers()
 
           def log_message(self, format, *args):
               return
