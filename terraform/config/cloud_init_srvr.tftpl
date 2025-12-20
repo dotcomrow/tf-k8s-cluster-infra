@@ -1693,7 +1693,7 @@ write_files:
       kubelet-arg:
         - "max-pods=${SRVR_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=restricted"
+        - "--topology-manager-policy=single-numa-node"
         - "--reserved-cpus=0,1"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
@@ -4212,9 +4212,15 @@ write_files:
         -n node-feature-discovery \
         --create-namespace \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --set topologyUpdater.enabled=true
+        --set topologyUpdater.enable=true \
+        --set topologyUpdater.createCRDs=false \
+        --set-string topologyUpdater.kubeletStateDir=
 
       sudo kubectl annotate namespace node-feature-discovery field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      # NodeResourceTopology API + exporter for NUMA-aware scheduling
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f \
+        https://raw.githubusercontent.com/k8stopologyawareschedwg/resource-topology-exporter/main/manifests/noderesourcetopologies_crd.yaml
 
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
@@ -4240,23 +4246,21 @@ write_files:
         scheduler-config.yaml: |
           apiVersion: kubescheduler.config.k8s.io/v1beta3
           kind: KubeSchedulerConfiguration
+          leaderElection:
+            leaderElect: true
+            resourceName: topology-aware-scheduler
+            resourceNamespace: kube-system
           profiles:
             - schedulerName: topology-aware-scheduler
               plugins:
-                score:
+                multiPoint:
                   enabled:
-                    - name: NodeResourcesFit
-                    - name: NodeAffinity
-                  disabled:
-                    - name: '*'
-                filter:
-                  enabled:
-                    - name: NodeUnschedulable
-                    - name: NodeName
-                    - name: NodeAffinity
-                    - name: TaintToleration
-                  disabled:
-                    - name: '*'
+                    - name: NodeResourceTopologyMatch
+              pluginConfig:
+                - name: NodeResourceTopologyMatch
+                  args:
+                    scoringStrategy:
+                      type: "LeastAllocated"
       ---
       apiVersion: apps/v1
       kind: Deployment
@@ -4303,6 +4307,10 @@ write_files:
       metadata:
         name: scheduler-plugins
       rules:
+        - apiGroups: ["topology.node.k8s.io"]
+          resources:
+            - noderesourcetopologies
+          verbs: ["get", "list", "watch"]
         - apiGroups: [""]
           resources:
             - pods
@@ -4316,6 +4324,18 @@ write_files:
             - resourcequotas
           verbs: ["get", "list", "watch"]
         - apiGroups: [""]
+          resources:
+            - events
+          verbs: ["create", "patch", "update"]
+        - apiGroups: [""]
+          resources:
+            - pods/status
+          verbs: ["update", "patch"]
+        - apiGroups: [""]
+          resources:
+            - pods/binding
+          verbs: ["create"]
+        - apiGroups: ["events.k8s.io"]
           resources:
             - events
           verbs: ["create", "patch", "update"]

@@ -816,7 +816,7 @@ write_files:
       kubelet-arg:
         - "max-pods=${WORK_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=restricted"
+        - "--topology-manager-policy=single-numa-node"
         - "--reserved-cpus=0,1"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
