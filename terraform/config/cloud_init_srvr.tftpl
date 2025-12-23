@@ -2923,7 +2923,7 @@ write_files:
         --set-string querier.persistence.size=200Gi \
         --set-string alertmanager.persistence.storageClass=nfs-client \
         --set-string alertmanager.persistence.size=200Gi \
-        --set-string nats.config.jetstream.fileStore.pvc.storageClassName=nfs-client \
+        --set-string nats.config.jetstream.fileStore.pvc.storageClassName=longhorn \
         --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
         --set replicaCount.dex=0
 
