@@ -903,13 +903,13 @@ write_files:
         - "enable-admission-plugins=PodNodeSelector"
 
       kubelet-arg:
-        - "max-pods=${ETCD_NODE_MAX_PODS}"
+        - "--max-pods=${ETCD_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=single-numa-node"
         - "--memory-manager-policy=Static"
         - "--reserved-memory=0:memory=4Gi"
         - "--system-reserved=memory=4Gi"
-        - "--feature-gates=KubeletPodResourcesGetAllocatable=true"
+        - "--feature-gates=MemoryManager=true,KubeletPodResourcesGetAllocatable=true"
         - "--reserved-cpus=0,1"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
