@@ -2907,6 +2907,7 @@ write_files:
         --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
+        --set-string postgres.spec.storage.size=50Gi \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
