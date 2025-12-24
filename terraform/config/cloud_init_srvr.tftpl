@@ -1714,9 +1714,14 @@ write_files:
         sleep 10
       done
 
-      echo "⏳ Waiting for all 4 nodes to become Ready..."
-      while [[ $(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get nodes --no-headers | awk '$2 != "Ready" {exit 1} END {print NR}') -ne 4 ]]; do
-        echo "Waiting for all 4 nodes to be Ready..."
+      echo "⏳ Waiting for all nodes to become Ready..."
+      while true; do
+        read -r total ready < <(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get nodes --no-headers \
+          | awk '{total++; if ($2 == "Ready") ready++} END {print total, ready}')
+        if [[ $total -gt 0 && $ready -eq $total ]]; then
+          break
+        fi
+        echo "Waiting for all nodes to be Ready... (${ready}/${total})"
         sleep 60
       done
       echo "✅ All nodes are Ready!"
