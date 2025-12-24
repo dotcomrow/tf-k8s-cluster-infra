@@ -145,7 +145,7 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
     interface    = "scsi2"
     iothread     = true
     discard      = "on"
-    size         = 700
+    size         = 650
     file_format  = "raw"
     cache        = "unsafe"
   }
