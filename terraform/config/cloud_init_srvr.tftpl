@@ -2591,7 +2591,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node-no-gpu"
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2815,7 +2815,7 @@ write_files:
           app: "vault"
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node-no-gpu"
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
       EOF
       # End NFS install
 
