@@ -905,14 +905,11 @@ write_files:
       kubelet-arg:
         - "--max-pods=${ETCD_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=single-numa-node"
-        - "--memory-manager-policy=Static"
-        - "--reserved-memory=0:memory=4Gi"
-        - "--system-reserved=memory=4Gi"
-        - "--feature-gates=MemoryManager=true,KubeletPodResourcesGetAllocatable=true"
+        - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
+        - "--system-reserved=memory=2Gi"
       EOF
 
       systemctl enable rke2-server

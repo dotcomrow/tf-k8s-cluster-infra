@@ -74,7 +74,7 @@ write_files:
       # export HTTPS_PROXY=http://10.0.0.10:3128
       # export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
 
-      CPU_FLAGS="nohz_full=0-59 isolcpus=0-59 rcu_nocbs=0-59"
+      CPU_FLAGS="nohz_full=0-19 isolcpus=0-19 rcu_nocbs=0-19"
       sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$CPU_FLAGS\"|" /etc/default/grub
       update-grub
       grub-mkconfig -o /boot/grub/grub.cfg || true
@@ -816,14 +816,11 @@ write_files:
       kubelet-arg:
         - "--max-pods=${WORK_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=single-numa-node"
-        - "--memory-manager-policy=Static"
-        - "--reserved-memory=0:memory=2Gi,1:memory=2Gi"
-        - "--system-reserved=memory=4Gi"
-        - "--feature-gates=MemoryManager=true,KubeletPodResourcesGetAllocatable=true"
+        - "--topology-manager-policy=restricted"
         - "--reserved-cpus=0,1"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
+        - "--system-reserved=memory=2Gi"
       EOF
 
       sudo systemctl enable rke2-server

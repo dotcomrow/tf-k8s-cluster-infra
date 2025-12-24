@@ -41,8 +41,12 @@ variable "node_name" {
   default = "pve"
 }
 
-variable "work_hostname" {
-  default = "work-node"
+variable "work_t4_gpu_hostname" {
+  default = "work-node-t4-gpu"
+}
+
+variable "work_no_gpu_hostname" {
+  default = "work-node-no-gpu"
 }
 
 variable "srvr_hostname" {
@@ -238,8 +242,14 @@ variable "LINODE_DRIVER_URL" {
   default     = "https://github.com/dotcomrow/linode-machine-driver-builds/releases/download/v0.1.9/docker-machine-driver-linode"
 }
 
-variable "WORK_NODE_MAX_PODS" {
-  description = "Maximum number of pods for the work node"
+variable "WORK_T4_GPU_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the work node T4 gpu"
+  type        = number
+  default     = 250
+}
+
+variable "WORK_NO_GPU_NODE_MAX_PODS" {
+  description = "Maximum number of pods for the work node no GPU"
   type        = number
   default     = 250
 }
@@ -343,10 +353,16 @@ variable etcd_vmid {
   default     = 103
 }
 
-variable work_vmid {
-  description = "The VMID of the work-node VM"
+variable work_t4_gpu_vmid {
+  description = "The VMID of the work-node-t4-gpu VM"
   type        = number
   default     = 104
+}
+
+variable work_no_gpu_vmid {
+  description = "The VMID of the work-node-no-gpu VM"
+  type        = number
+  default     = 106
 }
 
 variable "OPENOBSERVE_IMAGE_TAG" {

@@ -15,6 +15,7 @@ bootcmd:
   - [ systemctl, mask, apt-daily.service, apt-daily-upgrade.service ]
 
 ssh_pwauth: false
+
 package_update: true
 package_upgrade: true
 apt:
@@ -37,8 +38,11 @@ packages:
   - gnupg
   - lsb-release
   - nftables
+  - alsa-utils
+  - ubuntu-drivers-common
   - dnsmasq
   - ethtool
+  - xfsprogs
 
 growpart:
   mode: auto
@@ -70,25 +74,39 @@ write_files:
       # export HTTPS_PROXY=http://10.0.0.10:3128
       # export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
 
+      CPU_FLAGS="nohz_full=0-19 isolcpus=0-19 rcu_nocbs=0-19"
+      sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$CPU_FLAGS\"|" /etc/default/grub
+      update-grub
+      grub-mkconfig -o /boot/grub/grub.cfg || true
+
       # update-ca-certificates
       systemctl daemon-reload
       /usr/local/bin/performance-tuning.sh
       sysctl --system
       update-grub
       /usr/local/bin/disable-swap.sh
-      /usr/local/bin/setup-nfs-modules.sh
+      
       systemctl enable setup-hosts-dns.service
       systemctl start setup-hosts-dns.service
-      systemctl enable --now mount-shared-storage.service
-      systemctl restart systemd-journald || true
-      /usr/local/bin/setup-docker.sh
-      /usr/local/bin/setup-fluentbit.sh
-      /usr/local/bin/setup-rke2.sh
-      systemctl enable rke2-preload-images.service
-      systemctl start rke2-preload-images.service
+
       systemctl enable qemu-guest-agent
       systemctl start qemu-guest-agent
+
+      /usr/local/bin/setup-nfs-modules.sh
+      systemctl enable --now mount-shared-storage.service
+      /usr/local/bin/setup-longhorn-disk.sh
+      systemctl restart systemd-journald || true
+      /usr/local/bin/setup-docker.sh
+      /usr/local/bin/setup-nvidia.sh
+      /usr/local/bin/setup-fluentbit.sh
+      /usr/local/bin/setup-rke2.sh
+
+      systemctl enable rke2-preload-images.service
+      systemctl start rke2-preload-images.service
+
       systemctl daemon-reload
+      systemctl enable rke2-agent
+      systemctl start rke2-agent
       /usr/local/bin/cleanup-install-services.sh
 
   - path: /usr/local/bin/cleanup-install-services.sh
@@ -153,7 +171,6 @@ write_files:
       sysctl --system
 
       # 2) Pick all “large-MTU” interfaces automatically
-      #    (adjust the grep if your jumbo-MTU devices have a different naming scheme)
       for IF in $(ip -o link show | awk -F': ' '{print $2}' | grep -E '^(eth|vtnet)'); do
         # bring MTU up before offloads
         ip link set dev $IF mtu 9000
@@ -166,7 +183,6 @@ write_files:
       done
 
       # 3) Sysctls — bump backlog and buffers for all interfaces
-      #    and enable TCP MTU probing (helps path-MTU discovery)
       sysctl -w net.core.netdev_max_backlog=250000
       sysctl -w net.core.rmem_max=134217728
       sysctl -w net.core.wmem_max=134217728
@@ -183,6 +199,17 @@ write_files:
       net.ipv4.tcp_wmem=4096 87380 134217728
       net.ipv4.tcp_mtu_probing=1
       EOF
+
+      # ⭐ NEW: System-wide FD ceilings + inotify room
+      cat <<EOF >/etc/sysctl.d/99-fd-and-inotify.conf
+      fs.file-max = 2000000
+      fs.nr_open  = 2097152
+      fs.inotify.max_user_instances = 4096
+      fs.inotify.max_user_watches   = 1048576
+      fs.inotify.max_queued_events  = 32768
+      EOF
+
+      sysctl --system
 
       # 5) Persist ethtool + txqueuelen via a systemd service
       cat <<'EOF' >/etc/systemd/system/network-tweaks.service
@@ -252,14 +279,6 @@ write_files:
       TasksMax=infinity
       EOF
 
-      # cat <<EOF | sudo tee /etc/profile.d/http_proxy.sh
-      # export HTTP_PROXY="http://10.0.0.10:3128"
-      # export HTTPS_PROXY="http://10.0.0.10:3128"
-      # export NO_PROXY="127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12,192.168.0.0/16"
-      # EOF
-
-      # sudo chmod +x /etc/profile.d/http_proxy.sh
-
       # Unbind kernel workqueues from specific CPUs (recommended on NUMA/multicore systems)
       if [ -e /sys/module/workqueue/parameters/disable_bound ]; then
         echo y > /sys/module/workqueue/parameters/disable_bound
@@ -292,6 +311,21 @@ write_files:
     permissions: '0644'
     content: |
       GRUB_CMDLINE_LINUX="$GRUB_CMDLINE_LINUX ipv6.disable=1"
+
+  - path: /etc/modprobe.d/blacklist-nouveau.conf
+    permissions: '0644'
+    content: |
+      blacklist nouveau
+      options nouveau modeset=0
+
+  - path: /usr/local/bin/disable-swap.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      swapoff -a
+      cp /etc/fstab /etc/fstab.bak
+      sed -i '/^[^#].*\bswap\b/s/^/#/' /etc/fstab
+      echo fs.inotify.max_user_watches=524288 | sudo tee /etc/sysctl.d/99-inotify.conf
 
   - path: /etc/systemd/system/mount-shared-storage.service
     permissions: '0644'
@@ -352,32 +386,6 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
-
-  - path: /usr/local/bin/setup-nfs-modules.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      modprobe nfs
-      modprobe nfsd
-      echo nfs | tee -a /etc/modules
-      echo nfsd | tee -a /etc/modules
-      cat <<EOF | sudo tee /etc/systemd/system/load-nfs-modules.service
-      [Unit]
-      Description=Load NFS kernel modules
-      DefaultDependencies=no
-      After=local-fs.target
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/bin/env modprobe nfs
-      ExecStart=/usr/bin/env modprobe nfsd
-      RemainAfterExit=true
-
-      [Install]
-      WantedBy=multi-user.target
-      EOF
-      systemctl daemon-reload
-      systemctl enable load-nfs-modules.service
 
   - path: /usr/local/bin/setup-hosts-dns.sh
     permissions: '0755'
@@ -491,16 +499,110 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  - path: /usr/local/bin/disable-swap.sh
+  - path: /usr/local/bin/setup-nfs-modules.sh
     permissions: '0755'
     content: |
       #!/bin/bash
-      echo "🔻 Disabling swap..."
-      sudo swapoff -a
-      echo "📦 Backing up /etc/fstab..."
-      sudo cp /etc/fstab /etc/fstab.bak
-      echo "❌ Commenting out swap entries in /etc/fstab..."
-      sudo sed -i '/^[^#].*\bswap\b/s/^/#/' /etc/fstab
+      set -e
+
+      # Load immediately
+      modprobe nfs || true
+      modprobe nfsd || true
+
+      # Persist via /etc/modules if not already present
+      grep -qxF nfs /etc/modules || echo nfs >> /etc/modules
+      grep -qxF nfsd /etc/modules || echo nfsd >> /etc/modules
+
+      # Create systemd service to load modules early
+      cat <<EOF > /etc/systemd/system/load-nfs-modules.service
+      [Unit]
+      Description=Load NFS kernel modules
+      DefaultDependencies=no
+      After=local-fs.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/env modprobe nfs
+      ExecStart=/usr/bin/env modprobe nfsd
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+      EOF
+
+      systemctl daemon-reload
+      systemctl enable load-nfs-modules.service
+
+  - path: /usr/local/bin/setup-longhorn-disk.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Prepare and mount the dedicated Longhorn data disk at /var/lib/longhorn
+      set -euo pipefail
+
+      TARGET="/var/lib/longhorn"
+      mkdir -p "$TARGET"
+
+      ROOT_SRC=$(readlink -f "$(findmnt -n -o SOURCE /)")
+      ROOT_DISK=$(lsblk -no PKNAME "$ROOT_SRC" 2>/dev/null || true)
+
+      DATA_DISK=$(lsblk -ndo NAME,TYPE | awk -v root="$ROOT_DISK" '$2=="disk" && $1!=root {print $1; exit}')
+      if [ -z "$DATA_DISK" ]; then
+        echo "⚠️  No secondary data disk found; skipping Longhorn disk setup."
+        exit 0
+      fi
+
+      DEV="/dev/$DATA_DISK"
+      MOUNTED=$(findmnt -rn -S "$DEV" -o TARGET 2>/dev/null || true)
+      if [ "$MOUNTED" != "" ] && [ "$MOUNTED" != "$TARGET" ]; then
+        echo "⚠️  $DEV already mounted on $MOUNTED; not remounting to $TARGET."
+        exit 0
+      fi
+
+      FSTYPE=$(blkid -s TYPE -o value "$DEV" 2>/dev/null || true)
+      if [ -z "$FSTYPE" ]; then
+        echo "🧹 Creating xfs filesystem on $DEV for Longhorn data..."
+        mkfs.xfs -f "$DEV"
+        FSTYPE="xfs"
+      fi
+
+      UUID=$(blkid -s UUID -o value "$DEV")
+      if ! grep -q "$TARGET" /etc/fstab; then
+        echo "UUID=$UUID $TARGET $FSTYPE defaults,noatime 0 2" >> /etc/fstab
+      fi
+
+      echo "⏫ Mounting $DEV to $TARGET..."
+      mount -a
+      chown -R root:root "$TARGET"
+      echo "✅ Longhorn data disk mounted at $TARGET"
+
+  - path: /usr/local/bin/setup-docker.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      until curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -; do sleep 5; done
+      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+      sudo apt-get update -y
+      DEBIAN_FRONTEND=noninteractive sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+
+      # Generate containerd config and configure registry mirrors
+      containerd config default > /etc/containerd/config.toml
+
+      sudo apt install python3-pip -y
+      sudo apt install python3-tomlkit
+      sudo python3 /usr/local/bin/patch.py
+
+      systemctl restart containerd
+      systemctl enable containerd
+
+  - path: /etc/systemd/journald.conf.d/99-retention.conf
+    permissions: '0644'
+    content: |
+      [Journal]
+      SystemMaxUse=2G
+      RuntimeMaxUse=500M
+      MaxRetentionSec=259200
+      SystemMaxFileSize=200M
 
   - path: /etc/rancher/rke2/registries.yaml
     permissions: '0755'
@@ -541,36 +643,6 @@ write_files:
         utility-node.internal.lan:
           tls:
             insecure_skip_verify: true
-
-  - path: /usr/local/bin/setup-docker.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      until curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -; do sleep 5; done
-      sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-      sudo apt update
-      DEBIAN_FRONTEND=noninteractive sudo apt install -y docker-ce docker-ce-cli containerd.io
-
-      # Generate containerd config and configure registry mirrors
-      containerd config default > /etc/containerd/config.toml
-
-      sudo apt install python3-pip -y
-      sudo apt install python3-tomlkit
-      sudo python3 /usr/local/bin/patch.py
-
-      systemctl restart containerd
-      systemctl enable containerd
-      # sudo mkdir -p /etc/systemd/system/docker.service.d
-      # cat <<EOF | sudo tee /etc/systemd/system/docker.service.d/10-http-proxy.conf
-      # [Service]
-      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      # EOF
-
-      # sudo mkdir -p /etc/systemd/system/containerd.service.d
-      # cat <<EOF | sudo tee /etc/systemd/system/containerd.service.d/10-http-proxy.conf
-      # [Service]
-      # Environment="HTTP_PROXY=http://10.0.0.10:3128" "HTTPS_PROXY=http://10.0.0.10:3128" "NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12"
-      # EOF
 
   - path: /usr/local/bin/patch.py
     permissions: '0755'
@@ -650,6 +722,139 @@ write_files:
       # Write patched file
       Path(TOML_PATH).write_text(indent_cri_registry_values(raw_toml))
       print("✅ containerd config patched with consistent indentation.")
+
+  - path: /usr/local/bin/setup-nvidia.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -e
+
+      sudo apt-get update
+      sudo apt-get install -y \
+          linux-headers-$(uname -r) \
+          linux-modules-extra-$(uname -r) \
+          build-essential \
+          dkms
+      ubuntu-drivers autoinstall
+      ubuntu-drivers install --gpgpu nvidia:${NVIDIA_DRIVER}-server
+      sudo apt-get install -y \
+        nvidia-utils-${NVIDIA_DRIVER}-server \
+        nvidia-dkms-${NVIDIA_DRIVER}-server \
+        nvidia-modprobe
+
+      sudo dkms autoinstall
+
+      # 5) Refresh deps and hot-reload the modules in the right order
+      sudo depmod -a
+      for m in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
+        sudo modprobe -r $m 2>/dev/null || true
+        sudo modprobe $m
+      done
+      sudo nvidia-modprobe -u -c=0
+
+      # 6) Enable and start persistence daemon so the card stays powered
+      sudo systemctl enable --now nvidia-persistenced
+
+      sudo update-initramfs -u
+
+      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+        | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+        | sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#" \
+        | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+      wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+      sudo dpkg -i cuda-keyring_1.1-1_all.deb
+      sudo apt-get update -y
+      sudo apt-get install -y nvidia-container-toolkit nvidia-docker2
+
+      sudo systemctl enable nvidia-persistenced
+      sudo systemctl start  nvidia-persistenced
+
+      nvidia-ctk runtime configure --runtime=containerd --set-as-default
+      nvidia-ctk runtime configure --runtime=docker     --set-as-default
+
+      # 7. Finally, check:
+      nvidia-smi
+
+      # Keep your cleanup; just remove disabled_plugins if present
+      sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
+
+      # NOTE: removed the containerd runc_options/rlimits injection block on purpose.
+      # Limits are inherited via systemd overrides for containerd/rke2.
+
+      echo "🔁 Reloading containerd..."
+      sudo systemctl daemon-reexec
+      sudo systemctl daemon-reload
+      sudo systemctl restart containerd
+
+      echo "✅ NVIDIA setup complete"
+
+      sudo systemctl restart docker
+      sudo systemctl restart containerd
+
+  - path: /usr/local/bin/setup-rke2.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      until which rke2 >/dev/null 2>&1; do curl -sfL https://get.rke2.io | INSTALL_RKE2_VERSION=${k8s_version} sh -; sleep 5; done
+      until which helm >/dev/null 2>&1; do curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; sleep 5; done
+      mkdir -p /etc/rancher/rke2
+      cp /mnt/shared-storage/config.yaml /etc/rancher/rke2/config.yaml
+      until [ -f "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token" ]; do sleep 2; done
+      TOKEN=$(cat "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token")
+      echo "token: $TOKEN" >> /etc/rancher/rke2/config.yaml
+      sed -i '/^server:/d' /etc/rancher/rke2/config.yaml
+      echo "server: https://srvr-node.internal.lan:9345" >> /etc/rancher/rke2/config.yaml
+      
+      sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
+      # ────────────────────────────────────────────────────────────────────────
+      # Enable the PodNodeSelector admission plugin on the kube-api-server
+      # ────────────────────────────────────────────────────────────────────────
+      kube-apiserver-arg:
+        - "enable-admission-plugins=PodNodeSelector"
+
+      kubelet-arg:
+        - "--max-pods=${WORK_NODE_MAX_PODS}"
+        - "--cpu-manager-policy=static"
+        - "--topology-manager-policy=restricted"
+        - "--reserved-cpus=0,1"
+        - "--container-log-max-size=10Mi"
+        - "--container-log-max-files=3"
+        - "--system-reserved=memory=2Gi"
+      EOF
+
+      sudo systemctl enable rke2-server
+      sudo systemctl start rke2-server
+
+  - path: /etc/security/limits.d/99-nofile.conf
+    permissions: '0644'
+    content: |
+      * soft nofile 1048576
+      * hard nofile 1048576
+
+  - path: /etc/systemd/system/containerd.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
+
+  - path: /etc/systemd/system/rke2-server.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
+
+  - path: /etc/systemd/system/rke2-agent.service.d/override.conf
+    permissions: '0644'
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+      LimitNPROC=65536
+      TasksMax=infinity
 
   - path: /usr/local/bin/setup-fluentbit.sh
     permissions: '0755'
@@ -872,82 +1077,6 @@ write_files:
       systemctl daemon-reload
       systemctl enable td-agent-bit
       systemctl restart td-agent-bit
-
-  - path: /usr/local/bin/setup-rke2.sh
-    permissions: '0755'
-    content: |
-      #!/bin/bash
-      until which rke2 >/dev/null 2>&1; do curl -sfL https://get.rke2.io | sudo INSTALL_RKE2_VERSION=${k8s_version} sh -; sleep 5; done
-      until which helm >/dev/null 2>&1; do curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash; sleep 5; done
-      sudo mkdir -p /etc/rancher/rke2
-      sudo cp /mnt/shared-storage/config.yaml /etc/rancher/rke2/config.yaml
-      until [ -f "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token" ]; do sleep 2; done
-      TOKEN=$(cat "/mnt/shared-storage/$(getent hosts srvr-node.internal.lan | cut -d' ' -f1).token")
-      echo "token: $TOKEN" | sudo tee -a /etc/rancher/rke2/config.yaml
-      sudo sed -i '/^server:/d' /etc/rancher/rke2/config.yaml
-      echo "server: https://srvr-node.internal.lan:9345" | sudo tee -a /etc/rancher/rke2/config.yaml
-
-      sudo mkdir -p /etc/systemd/system/rke2-server.service.d/
-
-      sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
-      # ────────────────────────────────────────────────────────────────────────
-      # RKE2 Configuration: Admission Plugins + Kubelet NUMA-aware Settings
-      # ────────────────────────────────────────────────────────────────────────
-
-      kube-apiserver-arg:
-        - "enable-admission-plugins=PodNodeSelector"
-
-      kubelet-arg:
-        - "--max-pods=${CTRL_NODE_MAX_PODS}"
-        - "--cpu-manager-policy=static"
-        - "--topology-manager-policy=restricted"
-        - "--reserved-cpus=0,1"
-        - "--container-log-max-size=10Mi"
-        - "--container-log-max-files=3"
-        - "--system-reserved=memory=2Gi"
-      EOF
-
-      sudo systemctl enable rke2-server
-      sudo systemctl start rke2-server
-
-  - path: /etc/security/limits.d/99-nofile.conf
-    permissions: '0644'
-    content: |
-      * soft nofile 1048576
-      * hard nofile 1048576
-
-  - path: /etc/systemd/system/containerd.service.d/override.conf
-    permissions: '0644'
-    content: |
-      [Service]
-      LimitNOFILE=1048576
-      LimitNPROC=65536
-      TasksMax=infinity
-
-  - path: /etc/systemd/journald.conf.d/99-retention.conf
-    permissions: '0644'
-    content: |
-      [Journal]
-      SystemMaxUse=2G
-      RuntimeMaxUse=500M
-      MaxRetentionSec=259200
-      SystemMaxFileSize=200M
-
-  - path: /etc/systemd/system/rke2-server.service.d/override.conf
-    permissions: '0644'
-    content: |
-      [Service]
-      LimitNOFILE=1048576
-      LimitNPROC=65536
-      TasksMax=infinity
-
-  - path: /etc/systemd/system/rke2-agent.service.d/override.conf
-    permissions: '0644'
-    content: |
-      [Service]
-      LimitNOFILE=1048576
-      LimitNPROC=65536
-      TasksMax=infinity
 
 runcmd:
   - systemctl daemon-reexec

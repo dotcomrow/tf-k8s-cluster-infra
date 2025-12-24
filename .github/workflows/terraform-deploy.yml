@@ -183,7 +183,8 @@ jobs:
 
             echo "🧼 Cleaning up cloud-init snippets..."
             rm -f /var/lib/vz/snippets/cloud_init_srvr_node.yaml || true
-            rm -f /var/lib/vz/snippets/cloud_init_work_node.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_work_node_t4_gpu.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_work_node_no_gpu.yaml || true
             rm -f /var/lib/vz/snippets/cloud_init_etcd_node.yaml || true
             rm -f /var/lib/vz/snippets/cloud_init_ctrl_node.yaml || true
           '
@@ -204,11 +205,13 @@ jobs:
             TARGET_JSON='[
               "proxmox_virtual_environment_vm.ctrl_rancher_vm",
               "proxmox_virtual_environment_vm.etcd_rancher_vm",
-              "proxmox_virtual_environment_vm.work_rancher_vm",
+              "proxmox_virtual_environment_vm.work_t4_gpu_rancher_vm",
+              "proxmox_virtual_environment_vm.work_no_gpu_rancher_vm",
               "proxmox_virtual_environment_vm.srvr_rancher_vm",
               "proxmox_virtual_environment_file.ctrl_cloud_init_config",
               "proxmox_virtual_environment_file.etcd_cloud_init_config",
-              "proxmox_virtual_environment_file.work_cloud_init_config",
+              "proxmox_virtual_environment_file.work_no_gpu_cloud_init_config",
+              "proxmox_virtual_environment_file.work_t4_gpu_cloud_init_config",
               "proxmox_virtual_environment_file.srvr_cloud_init_config"
             ]'
           else
