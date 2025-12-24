@@ -170,7 +170,7 @@ jobs:
           sudo --preserve-env=PATH bash -c '
             export PATH=$PATH:/usr/sbin:/sbin:/usr/bin:/bin
 
-            for vm in ctrl-node etcd-node work-node srvr-node; do
+            for vm in ctrl-node etcd-node work-node-no-gpu work-node-t4-gpu srvr-node; do
               echo "🔌 Stopping $vm"
               vmid=$(qm list | awk -v name="$vm" '\''$0 ~ name {print $1}'\'')
               if [[ -n "$vmid" ]]; then

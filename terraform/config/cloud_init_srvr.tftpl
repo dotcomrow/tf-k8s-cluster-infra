@@ -1727,7 +1727,8 @@ write_files:
       echo "✅ All nodes are Ready!"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node dedicated=srvr-node --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node dedicated=work-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu dedicated=work-node-no-gpu --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu dedicated=work-node-t4-gpu --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node --overwrite
 
   - path: /etc/systemd/system/bootstrap-rke2.service
@@ -2595,7 +2596,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node-no-gpu"
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2819,7 +2820,7 @@ write_files:
           app: "vault"
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
+          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node-no-gpu"
       EOF
       # End NFS install
 
@@ -4116,7 +4117,7 @@ write_files:
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
       echo "⚙️ Labeling node for GPU support..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node         nvidia.com/gpu.present=true         nvidia.com/gpu=1 --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu         nvidia.com/gpu.present=true         nvidia.com/gpu=1 --overwrite
 
       echo "📥 Installing NVIDIA Helm repos..."
       RETRIES=5
