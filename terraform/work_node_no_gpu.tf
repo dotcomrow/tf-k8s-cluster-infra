@@ -111,7 +111,7 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
   # }
 
   numa {
-    device = "numa1"
+    device = "numa0"
     cpus   = "0-19"
     memory = var.work_no_gpu_memory_gb_node1 * 1024  # 124 GiB in MiB
     hostnodes = "1"
