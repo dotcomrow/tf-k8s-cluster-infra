@@ -1724,6 +1724,8 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu dedicated=work-node --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu dedicated=work-node-gpu --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu work-node=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node --overwrite
 
   - path: /etc/systemd/system/bootstrap-rke2.service
@@ -2591,7 +2593,7 @@ write_files:
         name: nfs-system
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
+          scheduler.alpha.kubernetes.io/node-selector: "work-node=true"
       ---
       # PVC for backing NFS server
       apiVersion: v1
@@ -2815,7 +2817,7 @@ write_files:
           app: "vault"
         annotations:
           field.cattle.io/projectId: local:infrastructure
-          scheduler.alpha.kubernetes.io/node-selector: "dedicated=work-node"
+          scheduler.alpha.kubernetes.io/node-selector: "work-node=true"
       EOF
       # End NFS install
 
@@ -2899,7 +2901,7 @@ write_files:
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
-        --set-string minio.persistence.storageClass=nfs-client \
+        --set-string minio.persistence.storageClass=longhorn \
         --set-string minio.persistence.size=200Gi \
         --set-string minio.buckets[0].name=openobserve \
         --set-string minio.buckets[0].policy=none \
@@ -2919,11 +2921,11 @@ write_files:
         --set replicaCount.compactor=0 \
         --set replicaCount.alertmanager=0 \
         --set replicaCount.dex=0 \
-        --set-string ingester.persistence.storageClass=nfs-client \
+        --set-string ingester.persistence.storageClass=longhorn \
         --set-string ingester.persistence.size=200Gi \
-        --set-string querier.persistence.storageClass=nfs-client \
+        --set-string querier.persistence.storageClass=longhorn \
         --set-string querier.persistence.size=200Gi \
-        --set-string alertmanager.persistence.storageClass=nfs-client \
+        --set-string alertmanager.persistence.storageClass=longhorn \
         --set-string alertmanager.persistence.size=200Gi \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=longhorn \
         --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
@@ -4493,7 +4495,7 @@ write_files:
         resources:
           requests:
             storage: 1Gi
-        storageClassName: nfs-client
+        storageClassName: longhorn
       ---
       # Dex configuration (GitHub connector and Vault client)
       apiVersion: v1
