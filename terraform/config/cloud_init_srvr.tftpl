@@ -4212,17 +4212,6 @@ write_files:
       set -e
       echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /root/.bashrc && echo "export KUBECONFIG=/etc/rancher/rke2/rke2.yaml" >> /home/ubuntu/.bashrc
 
-      sudo helm repo add nfd https://kubernetes-sigs.github.io/node-feature-discovery/charts --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo helm install nfd nfd/node-feature-discovery \
-        -n node-feature-discovery \
-        --create-namespace \
-        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
-        --set topologyUpdater.enable=true \
-        --set topologyUpdater.createCRDs=false \
-        --set-string topologyUpdater.kubeletStateDir=
-
-      sudo kubectl annotate namespace node-feature-discovery field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-
       # adding apisix routes for linkerd and jaeger + oauth2-proxy alpha config + mounts
       cat << 'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: rbac.authorization.k8s.io/v1
