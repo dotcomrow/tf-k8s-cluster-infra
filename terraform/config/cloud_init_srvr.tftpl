@@ -1721,7 +1721,7 @@ write_files:
         if [[ $total -gt 0 && $ready -eq $total ]]; then
           break
         fi
-        echo "Waiting for all nodes to be Ready... (${ready}/${total})"
+        echo "Waiting for all nodes to be Ready... ($ready/$total)"
         sleep 60
       done
       echo "✅ All nodes are Ready!"
