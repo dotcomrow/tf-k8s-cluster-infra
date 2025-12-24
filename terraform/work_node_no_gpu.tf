@@ -119,7 +119,8 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
   }
 
   memory {
-    dedicated = var.work_no_gpu_memory_gb_node0 * 1024 + var.work_no_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
+    # dedicated = var.work_no_gpu_memory_gb_node0 * 1024 + var.work_no_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
+    dedicated = var.work_no_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
