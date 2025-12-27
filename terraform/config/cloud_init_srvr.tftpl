@@ -41,6 +41,7 @@ packages:
   - dnsmasq
   - ethtool
   - jq
+  - cockpit
 
 growpart:
   mode: auto
@@ -100,6 +101,9 @@ write_files:
 
       systemctl enable configure-logging.service
       systemctl start configure-logging.service
+
+      systemctl enable setup-cockpit.service
+      systemctl start setup-cockpit.service
 
       systemctl enable setup-runtime.service
       systemctl start setup-runtime.service
@@ -729,6 +733,7 @@ write_files:
         disable-swap.service
         setup-hosts-dns.service
         configure-logging.service
+        setup-cockpit.service
         setup-runtime.service
         rke2-preload-images.service
         bootstrap-rke2.service
@@ -970,6 +975,24 @@ write_files:
 
       [Install]
       WantedBy=multi-user.target
+
+  - path: /usr/local/bin/15-setup-cockpit.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      echo "Enabling Cockpit..."
+      mkdir -p /etc/cockpit
+      cat <<'EOF' >/etc/cockpit/cockpit.conf
+      [WebService]
+      AllowUnencrypted = false
+      EOF
+
+      if systemctl list-unit-files cockpit.socket >/dev/null 2>&1; then
+        systemctl enable --now cockpit.socket
+        echo "Cockpit enabled on port 9090."
+      else
+        echo "cockpit.socket not found; is the cockpit package installed?"
+      fi
 
   - path: /usr/local/bin/20-configure-logging.sh
     permissions: '0755'
@@ -1389,6 +1412,22 @@ write_files:
       [Service]
       Type=oneshot
       ExecStart=/usr/local/bin/20-configure-logging.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/setup-cockpit.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Enable Cockpit web console
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/15-setup-cockpit.sh
       RemainAfterExit=true
 
       [Install]
