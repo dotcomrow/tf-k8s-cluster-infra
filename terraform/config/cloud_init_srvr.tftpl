@@ -2236,7 +2236,7 @@ write_files:
         echo "🔍 Running a Longhorn provisioning smoke test on work nodes..."
         cleanup_longhorn_smoke
         trap cleanup_longhorn_smoke EXIT
-        cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
         apiVersion: v1
         kind: Namespace
         metadata:
@@ -2274,7 +2274,7 @@ write_files:
               persistentVolumeClaim:
                 claimName: longhorn-smoke-pvc
           restartPolicy: Never
-        EOF
+      EOF
 
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-smoke wait --for=condition=Bound pvc/longhorn-smoke-pvc --timeout=300s
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-smoke wait --for=condition=Ready pod/longhorn-smoke-pod --timeout=300s
