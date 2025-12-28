@@ -1963,6 +1963,15 @@ write_files:
       echo "📥 Installing Longhorn..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
 
+      echo "⏳ Waiting for Longhorn CRDs..."
+      for i in {1..60}; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get crd volumes.longhorn.io >/dev/null 2>&1; then
+          break
+        fi
+        echo "⏳ Waiting for Longhorn CRDs to become available ($i/60)..."
+        sleep 10
+      done
+
       echo "⏳ Waiting for Longhorn configmaps..."
       for i in {1..30}; do
         if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get configmap longhorn-storageclass >/dev/null 2>&1 && \
@@ -2071,6 +2080,18 @@ write_files:
         archiveOnDelete: "false"
       EOF
 
+      echo "⏳ Waiting for Longhorn core components to be Ready..."
+      for deploy in longhorn-driver-deployer longhorn-ui longhorn-admission-webhook longhorn-conversion-webhook longhorn-recovery-backend; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get deploy "$deploy" >/dev/null 2>&1; then
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system rollout status deploy/"$deploy" --timeout=600s
+        fi
+      done
+      for ds in longhorn-manager longhorn-csi-plugin; do
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get ds "$ds" >/dev/null 2>&1; then
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system rollout status ds/"$ds" --timeout=600s
+        fi
+      done
+
       echo "🚫 Disabling Longhorn scheduling on control/etcd/srvr nodes..."
       for NODE in ${CTRL_HOSTNAME} ${ETCD_HOSTNAME} ${SRVR_HOSTNAME}; do
         for i in {1..12}; do
@@ -2084,6 +2105,23 @@ write_files:
           sleep 10
         done
       done
+
+      echo "⏳ Waiting for schedulable Longhorn nodes with available disks..."
+      for i in {1..60}; do
+        SCHED_READY=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o json | \
+          jq '[.items[] | select(.spec.allowScheduling==true) | select(.status.conditions[]? | select(.type=="Ready" and .status=="True")) | select((.status.diskStatus // {} | to_entries | map(select(.value.schedulable==true and (.value.storageAvailable|tonumber)>0)) | length) > 0)] | length')
+        if [ "${SCHED_READY:-0}" -ge 1 ]; then
+          echo "✅ Longhorn scheduling is ready on ${SCHED_READY} node(s)."
+          break
+        fi
+        echo "⏳ Waiting for Longhorn schedulable nodes to be ready ($i/60)..."
+        sleep 10
+      done
+      if [ "${SCHED_READY:-0}" -lt 1 ]; then
+        echo "❌ No schedulable Longhorn nodes with available disk detected."
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o wide || true
+        exit 1
+      fi
 
   - path: /etc/systemd/system/k8s-addons.service
     permissions: '0644'
@@ -2107,6 +2145,131 @@ write_files:
       #!/bin/bash
       set -e
       export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
+
+      cleanup_longhorn_smoke() {
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete pod longhorn-smoke-pod -n longhorn-smoke --ignore-not-found >/dev/null 2>&1 || true
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete pvc longhorn-smoke-pvc -n longhorn-smoke --ignore-not-found >/dev/null 2>&1 || true
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete ns longhorn-smoke --ignore-not-found --wait=false >/dev/null 2>&1 || true
+      }
+
+      wait_for_longhorn() {
+        echo "⏳ Verifying Longhorn is fully ready before continuing..."
+
+        for i in {1..60}; do
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get ns longhorn-system >/dev/null 2>&1; then
+            break
+          fi
+          echo "⏳ Waiting for longhorn-system namespace ($i/60)..."
+          sleep 10
+        done
+
+        if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get ns longhorn-system >/dev/null 2>&1; then
+          echo "❌ longhorn-system namespace not found."
+          exit 1
+        fi
+
+        for crd in volumes.longhorn.io nodes.longhorn.io settings.longhorn.io; do
+          for i in {1..60}; do
+            if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get crd "$crd" >/dev/null 2>&1; then
+              break
+            fi
+            echo "⏳ Waiting for Longhorn CRD $crd ($i/60)..."
+            sleep 10
+          done
+          if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get crd "$crd" >/dev/null 2>&1; then
+            echo "❌ Longhorn CRD $crd not ready."
+            exit 1
+          fi
+        done
+
+        echo "⏳ Waiting for Longhorn core components to be Ready..."
+        for deploy in longhorn-driver-deployer longhorn-ui longhorn-admission-webhook longhorn-conversion-webhook longhorn-recovery-backend; do
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get deploy "$deploy" >/dev/null 2>&1; then
+            sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system rollout status deploy/"$deploy" --timeout=600s
+          fi
+        done
+        for ds in longhorn-manager longhorn-csi-plugin; do
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get ds "$ds" >/dev/null 2>&1; then
+            sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system rollout status ds/"$ds" --timeout=600s
+          fi
+        done
+
+        echo "⏳ Waiting for schedulable Longhorn nodes with available disks..."
+        local sched_ready
+        for i in {1..60}; do
+          sched_ready=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o json | \
+            jq '[.items[] | select(.spec.allowScheduling==true) | select(.status.conditions[]? | select(.type=="Ready" and .status=="True")) | select((.status.diskStatus // {} | to_entries | map(select(.value.schedulable==true and (.value.storageAvailable|tonumber)>0)) | length) > 0)] | length')
+          if [ "${sched_ready:-0}" -ge 1 ]; then
+            echo "✅ Longhorn scheduling is ready on ${sched_ready} node(s)."
+            break
+          fi
+          echo "⏳ Waiting for Longhorn schedulable nodes to be ready ($i/60)..."
+          sleep 10
+        done
+        if [ "${sched_ready:-0}" -lt 1 ]; then
+          echo "❌ No schedulable Longhorn nodes with available disk detected."
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o wide || true
+          exit 1
+        fi
+
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io "${SRVR_HOSTNAME}" >/dev/null 2>&1; then
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io "${SRVR_HOSTNAME}" -o json | jq -e '.spec.allowScheduling==true' >/dev/null; then
+            echo "❌ Longhorn scheduling is still enabled on ${SRVR_HOSTNAME}; refusing to proceed."
+            exit 1
+          fi
+        fi
+
+        echo "🔍 Running a Longhorn provisioning smoke test on work nodes..."
+        cleanup_longhorn_smoke
+        trap cleanup_longhorn_smoke EXIT
+        cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: longhorn-smoke
+        ---
+        apiVersion: v1
+        kind: PersistentVolumeClaim
+        metadata:
+          name: longhorn-smoke-pvc
+          namespace: longhorn-smoke
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          storageClassName: longhorn
+          resources:
+            requests:
+              storage: 1Gi
+        ---
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: longhorn-smoke-pod
+          namespace: longhorn-smoke
+        spec:
+          nodeSelector:
+            work-node: "true"
+          containers:
+            - name: smoke
+              image: public.ecr.aws/docker/library/busybox:1.36.1
+              command: ["sh","-c","echo ok > /data/ready && sleep 30"]
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: longhorn-smoke-pvc
+          restartPolicy: Never
+        EOF
+
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-smoke wait --for=condition=Bound pvc/longhorn-smoke-pvc --timeout=300s
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-smoke wait --for=condition=Ready pod/longhorn-smoke-pod --timeout=300s
+        cleanup_longhorn_smoke
+        trap - EXIT
+        echo "✅ Longhorn provisioning smoke test passed."
+      }
+
+      wait_for_longhorn
 
       echo "📦 Installing NGINX Ingress Controller..."
 
