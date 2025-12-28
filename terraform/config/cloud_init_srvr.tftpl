@@ -2237,43 +2237,47 @@ write_files:
         cleanup_longhorn_smoke
         trap cleanup_longhorn_smoke EXIT
         cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-        apiVersion: v1
-        kind: Namespace
-        metadata:
-          name: longhorn-smoke
-        ---
-        apiVersion: v1
-        kind: PersistentVolumeClaim
-        metadata:
-          name: longhorn-smoke-pvc
-          namespace: longhorn-smoke
-        spec:
-          accessModes: ["ReadWriteOnce"]
-          storageClassName: longhorn
-          resources:
-            requests:
-              storage: 1Gi
-        ---
-        apiVersion: v1
-        kind: Pod
-        metadata:
-          name: longhorn-smoke-pod
-          namespace: longhorn-smoke
-        spec:
-          nodeSelector:
-            work-node: "true"
-          containers:
-            - name: smoke
-              image: public.ecr.aws/docker/library/busybox:1.36.1
-              command: ["sh","-c","echo ok > /data/ready && sleep 30"]
-              volumeMounts:
-                - name: data
-                  mountPath: /data
-          volumes:
-            - name: data
-              persistentVolumeClaim:
-                claimName: longhorn-smoke-pvc
-          restartPolicy: Never
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: longhorn-smoke
+      EOF
+
+        cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: longhorn-smoke-pvc
+        namespace: longhorn-smoke
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: 1Gi
+      EOF
+
+        cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: longhorn-smoke-pod
+        namespace: longhorn-smoke
+      spec:
+        nodeSelector:
+          work-node: "true"
+        containers:
+          - name: smoke
+            image: public.ecr.aws/docker/library/busybox:1.36.1
+            command: ["sh","-c","echo ok > /data/ready && sleep 30"]
+            volumeMounts:
+              - name: data
+                mountPath: /data
+        volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: longhorn-smoke-pvc
+        restartPolicy: Never
       EOF
 
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-smoke wait --for=condition=Bound pvc/longhorn-smoke-pvc --timeout=300s
