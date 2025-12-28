@@ -2951,6 +2951,7 @@ write_files:
         --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
         --set-string postgres.spec.storage.size=30Gi \
+        --set-string postgres.spec.storage.storageClass=longhorn \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
@@ -2966,6 +2967,8 @@ write_files:
         --set-string querier.persistence.size=100Gi \
         --set-string alertmanager.persistence.storageClass=longhorn \
         --set-string alertmanager.persistence.size=100Gi \
+        --set-string alertquerier.persistence.storageClass=longhorn \
+        --set-string alertquerier.persistence.size=100Gi \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=longhorn \
         --set-string nats.config.jetstream.fileStore.pvc.size=50Gi \
         --set replicaCount.dex=0
