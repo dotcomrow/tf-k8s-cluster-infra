@@ -2199,14 +2199,14 @@ write_files:
         for i in {1..60}; do
           sched_ready=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o json | \
             jq '[.items[] | select(.spec.allowScheduling==true) | select(.status.conditions[]? | select(.type=="Ready" and .status=="True")) | select((.status.diskStatus // {} | to_entries | map(select(.value.schedulable==true and (.value.storageAvailable|tonumber)>0)) | length) > 0)] | length')
-          if [ "${sched_ready:-0}" -ge 1 ]; then
-            echo "✅ Longhorn scheduling is ready on ${sched_ready} node(s)."
+          if [ "$sched_ready" -ge 1 ]; then
+            echo "✅ Longhorn scheduling is ready on $sched_ready node(s)."
             break
           fi
           echo "⏳ Waiting for Longhorn schedulable nodes to be ready ($i/60)..."
           sleep 10
         done
-        if [ "${sched_ready:-0}" -lt 1 ]; then
+        if [ "$sched_ready" -lt 1 ]; then
           echo "❌ No schedulable Longhorn nodes with available disk detected."
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o wide || true
           exit 1
