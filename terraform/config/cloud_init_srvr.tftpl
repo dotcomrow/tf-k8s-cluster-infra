@@ -3834,6 +3834,30 @@ write_files:
         echo "Failed to add Helm repo after $RETRIES attempts" >&2
         exit 1
       fi
+
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: kyverno-background-controller-namespace-update
+      rules:
+        - apiGroups: [""]
+          resources: ["namespaces"]
+          verbs: ["get", "list", "watch", "patch", "update"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: kyverno-background-controller-namespace-update
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: kyverno-background-controller-namespace-update
+      subjects:
+        - kind: ServiceAccount
+          name: kyverno-background-controller
+          namespace: kyverno
+      EOF
       
       sudo helm repo update
 
