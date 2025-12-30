@@ -3694,6 +3694,10 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/oo-auth-bridge --timeout=180s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-auth-proxy --timeout=180s
 
+      sudo kubectl annotate namespace cnpg-system field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace cnpg-system scheduler.alpha.kubernetes.io/node-selector="dedicated=work-node" --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl annotate namespace cnpg-system linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      
       echo "📊 Installing OpenObserve community dashboards..."
       if [[ -z "$OPENOBSERVE_DASHBOARD_FOLDER" ]]; then
         OO_DASHBOARD_FOLDER="default"
