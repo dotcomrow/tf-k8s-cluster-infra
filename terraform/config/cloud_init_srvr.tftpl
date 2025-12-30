@@ -2849,13 +2849,6 @@ write_files:
                 image: erichough/nfs-server:latest
                 securityContext:
                   privileged: true
-                resources:
-                  limits:
-                    memory: "256Mi"
-                    cpu: "500m"
-                  requests:
-                    memory: "128Mi"
-                    cpu: "250m"
                 env:
                   - name: NFS_EXPORT_0
                     value: "/export *(rw,sync,no_subtree_check,no_root_squash)"
@@ -2994,13 +2987,6 @@ write_files:
             containers:
               - name: nfs-client-provisioner
                 image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-                resources:
-                  limits:
-                    memory: "128Mi"
-                    cpu: "500m"
-                  requests:
-                    memory: "64Mi"
-                    cpu: "250m"
                 env:
                   - name: PROVISIONER_NAME
                     value: example.com/nfs
@@ -3588,13 +3574,6 @@ write_files:
                   - name: otel-config-final
                     mountPath: /etc/otelcol
                     readOnly: true
-                resources:
-                  requests:
-                    cpu: 250m
-                    memory: 256Mi
-                  limits:
-                    cpu: "1"
-                    memory: 512Mi
                 securityContext:
                   runAsNonRoot: true
                   allowPrivilegeEscalation: false
@@ -4796,13 +4775,6 @@ write_files:
             containers:
             - name: dex
               image: ghcr.io/dexidp/dex:v2.37.0
-              resources:
-                requests:
-                  cpu: "100m"
-                  memory: "128Mi"
-                limits:
-                  cpu: "250m"
-                  memory: "256Mi"
               volumeMounts:
               - name: config
                 mountPath: /etc/dex/config.docker.yaml
@@ -4932,13 +4904,6 @@ write_files:
             containers:
               - name: vault
                 image: hashicorp/vault:1.14.3
-                resources:
-                  requests:
-                    cpu: "250m"
-                    memory: "256Mi"
-                  limits:
-                    cpu: "500m"
-                    memory: "512Mi"
                 env:
                   - name: VAULT_ADDR
                     value: "http://127.0.0.1:8200"
@@ -5251,9 +5216,6 @@ write_files:
                 containers:
                   - name: gcloud-update
                     image: google/cloud-sdk:slim
-                    resources:
-                      requests: { cpu: "100m", memory: "128Mi" }
-                      limits:   { cpu: "250m", memory: "256Mi" }
                     command: ["/bin/sh"]
                     args: ["-c", "cp /opt/configscript/run.sh /opt/scripts/run.sh && chmod +x /opt/scripts/run.sh && /opt/scripts/run.sh"]
                     volumeMounts:
