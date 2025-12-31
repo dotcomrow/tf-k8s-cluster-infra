@@ -2857,6 +2857,13 @@ write_files:
                 image: erichough/nfs-server:latest
                 securityContext:
                   privileged: true
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "512Mi"
+                  limits:
+                    cpu: "500m"
+                    memory: "512Mi"
                 env:
                   - name: NFS_EXPORT_0
                     value: "/export *(rw,sync,no_subtree_check,no_root_squash)"
@@ -2995,6 +3002,13 @@ write_files:
             containers:
               - name: nfs-client-provisioner
                 image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
+                resources:
+                  requests:
+                    cpu: "100m"
+                    memory: "512Mi"
+                  limits:
+                    cpu: "250m"
+                    memory: "512Mi"
                 env:
                   - name: PROVISIONER_NAME
                     value: example.com/nfs
