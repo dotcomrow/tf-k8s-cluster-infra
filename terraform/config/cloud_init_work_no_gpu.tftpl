@@ -812,6 +812,13 @@ write_files:
       # ────────────────────────────────────────────────────────────────────────
       kube-apiserver-arg:
         - "enable-admission-plugins=PodNodeSelector"
+        - "feature-gates=InPlacePodVerticalScaling=true"
+
+      kube-controller-manager-arg:
+        - "feature-gates=InPlacePodVerticalScaling=true"
+
+      kube-scheduler-arg:
+        - "feature-gates=InPlacePodVerticalScaling=true"
 
       kubelet-arg:
         - "--max-pods=${WORK_NODE_MAX_PODS}"
@@ -821,6 +828,7 @@ write_files:
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
         - "--system-reserved=memory=2Gi"
+        - "--feature-gates=InPlacePodVerticalScaling=true"
       EOF
 
       sudo systemctl enable rke2-server
