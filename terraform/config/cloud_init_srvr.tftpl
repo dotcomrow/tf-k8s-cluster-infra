@@ -2361,7 +2361,7 @@ write_files:
 
       for i in $(seq 1 $RETRIES); do
         echo "Attempt $i to add Helm repo..."
-        sudo helm repo add rancher-stable https://releases.rancher.com/server-charts/stable --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
+        sudo helm repo add rancher-${RANCHER_CHART_REPO} https://releases.rancher.com/server-charts/${RANCHER_CHART_REPO} --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
         echo "Failed to add repo, retrying in $DELAY seconds..."
         sleep $DELAY
       done
@@ -2381,7 +2381,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
         --cert=tls.crt --key=tls.key
 
-      sudo helm upgrade --install rancher rancher-stable/rancher \
+      sudo helm upgrade --install rancher rancher-${RANCHER_CHART_REPO}/rancher \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace cattle-system \
         --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \

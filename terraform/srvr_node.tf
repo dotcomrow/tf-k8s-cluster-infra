@@ -66,6 +66,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         VAULT_OIDC_CLIENT_ID = var.VAULT_OIDC_CLIENT_ID
         VAULT_OIDC_CLIENT_SECRET = var.VAULT_OIDC_CLIENT_SECRET
         KUBECTL_IMAGE_VERSION = var.k8s_base_version
+        RANCHER_CHART_REPO = var.RANCHER_CHART_REPO
         CTRL_HOSTNAME = var.ctrl_hostname
         ETCD_HOSTNAME = var.etcd_hostname
         SRVR_HOSTNAME = var.srvr_hostname
