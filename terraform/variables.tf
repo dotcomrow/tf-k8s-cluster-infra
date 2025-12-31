@@ -19,16 +19,16 @@ variable "admin_ssh_public_key" {
 }
 
 variable "k8s_base_version" {
-  default = "1.35.0"
+  default = "1.34.3"
   type    = string
 }
 
 variable "RKE2_VERSION" {
-  default = "v1.35.0+rke2r1"
+  default = "v1.34.3+rke2r1"
 }
 
 variable "RANCHER_CHART_REPO" {
-  default = "latest"
+  default = "stable"
 }
 
 variable "vm_img" {
