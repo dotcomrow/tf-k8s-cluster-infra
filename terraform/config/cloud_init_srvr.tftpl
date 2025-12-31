@@ -3711,7 +3711,6 @@ write_files:
       else
           # 2) Folders (no heredoc)
           DASHBOARD_FOLDERS_B64=$(printf '%s\n' \
-            "Kubernetes(kube-prometheus-stack)" \
             "Kubernetes(openobserve-collector)" \
             "NVIDIA GPU Monitoring" | base64 | tr -d '\r\n')
 
