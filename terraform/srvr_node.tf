@@ -13,6 +13,11 @@ variable "srvr_memory_gb" {
   default = 100
 }
 
+variable "longhorn_guaranteed_instance_manager_cpu" {
+  type    = number
+  default = 5
+}
+
 # Upload cloud-init configuration to Proxmox as a snippet
 resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
   content_type = "snippets"
@@ -71,6 +76,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         ETCD_HOSTNAME = var.etcd_hostname
         SRVR_HOSTNAME = var.srvr_hostname
         OPENOBSERVE_IMAGE_TAG = var.OPENOBSERVE_IMAGE_TAG
+        LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU = var.longhorn_guaranteed_instance_manager_cpu
       })
     file_name = "cloud_init_srvr.yaml"
   }
