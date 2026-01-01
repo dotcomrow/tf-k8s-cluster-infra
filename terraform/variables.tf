@@ -85,6 +85,22 @@ variable "GITHUB_CLIENT_SECRET" {
   default = "github"
 }
 
+variable "COCKPIT_HOSTNAME" {
+  default = "k8s-cockpit.suncoast.systems"
+}
+
+variable "COCKPIT_GITHUB_CLIENT_ID" {
+  default = "github"
+}
+
+variable "COCKPIT_GITHUB_CLIENT_SECRET" {
+  default = "github"
+}
+
+variable "COCKPIT_GITHUB_TEAM" {
+  default = "k8s_cockpit_access"
+}
+
 variable "MONITORED_RESOURCE_TYPE" {
   default = "generic_node"
 }

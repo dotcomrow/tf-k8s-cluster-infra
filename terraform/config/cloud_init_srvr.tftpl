@@ -105,6 +105,9 @@ write_files:
       systemctl enable setup-cockpit.service
       systemctl start setup-cockpit.service
 
+      systemctl enable setup-cockpit-oauth2-proxy.service
+      systemctl start setup-cockpit-oauth2-proxy.service
+
       systemctl enable setup-runtime.service
       systemctl start setup-runtime.service
 
@@ -982,10 +985,20 @@ write_files:
       #!/bin/bash
       echo "Enabling Cockpit..."
       mkdir -p /etc/cockpit
-      cat <<'EOF' >/etc/cockpit/cockpit.conf
+      cat <<EOF >/etc/cockpit/cockpit.conf
       [WebService]
-      AllowUnencrypted = false
+      AllowUnencrypted = true
+      Origins = https://${COCKPIT_HOSTNAME}
       EOF
+
+      mkdir -p /etc/systemd/system/cockpit.socket.d
+      cat <<'EOF' >/etc/systemd/system/cockpit.socket.d/override.conf
+      [Socket]
+      ListenStream=
+      ListenStream=127.0.0.1:9090
+      EOF
+
+      systemctl daemon-reload
 
       if systemctl list-unit-files cockpit.socket >/dev/null 2>&1; then
         systemctl enable --now cockpit.socket
@@ -993,6 +1006,66 @@ write_files:
       else
         echo "cockpit.socket not found; is the cockpit package installed?"
       fi
+
+  - path: /etc/oauth2-proxy/cockpit.env
+    permissions: '0600'
+    content: |
+      COCKPIT_HOSTNAME="${COCKPIT_HOSTNAME}"
+      COCKPIT_GITHUB_CLIENT_ID="${COCKPIT_GITHUB_CLIENT_ID}"
+      COCKPIT_GITHUB_CLIENT_SECRET="${COCKPIT_GITHUB_CLIENT_SECRET}"
+      COCKPIT_GITHUB_TEAM="${COCKPIT_GITHUB_TEAM}"
+      GITHUB_ORG="${GITHUB_ORG}"
+      OAUTH2_PROXY_COOKIE_SECRET="${OAUTH2_PROXY_COOKIE_SECRET}"
+
+  - path: /usr/local/bin/16-setup-cockpit-oauth2-proxy.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      VERSION="7.6.0"
+      ARCH="amd64"
+      OS="linux"
+      TMP_DIR="$(mktemp -d)"
+
+      cleanup() {
+        rm -rf "$TMP_DIR"
+      }
+      trap cleanup EXIT
+
+      echo "Installing oauth2-proxy v${VERSION}..."
+      curl -fsSL "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v${VERSION}/oauth2-proxy-v${VERSION}.${OS}-${ARCH}.tar.gz" -o "$TMP_DIR/oauth2-proxy.tgz"
+      tar -xzf "$TMP_DIR/oauth2-proxy.tgz" -C "$TMP_DIR"
+      install -m 0755 "$TMP_DIR/oauth2-proxy-v${VERSION}.${OS}-${ARCH}/oauth2-proxy" /usr/local/bin/oauth2-proxy
+
+      systemctl daemon-reload
+      systemctl enable --now oauth2-proxy-cockpit.service
+
+  - path: /usr/local/bin/cockpit-oauth2-proxy.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      exec /usr/local/bin/oauth2-proxy \
+        --provider=github \
+        --http-address=0.0.0.0:4180 \
+        --upstream=http://127.0.0.1:9090/ \
+        --email-domain=* \
+        --cookie-secret="${OAUTH2_PROXY_COOKIE_SECRET}" \
+        --client-id="${COCKPIT_GITHUB_CLIENT_ID}" \
+        --client-secret="${COCKPIT_GITHUB_CLIENT_SECRET}" \
+        --redirect-url="https://${COCKPIT_HOSTNAME}/oauth2/callback" \
+        --scope="user:email,read:org" \
+        --allowed-group="${GITHUB_ORG}:${COCKPIT_GITHUB_TEAM}" \
+        --cookie-secure=true \
+        --cookie-samesite=lax \
+        --cookie-refresh=1h \
+        --cookie-expire=8h \
+        --cookie-name=_oauth2_proxy_cockpit \
+        --reverse-proxy=true \
+        --proxy-websockets=true \
+        --pass-host-header=true
 
   - path: /usr/local/bin/20-configure-logging.sh
     permissions: '0755'
@@ -1428,6 +1501,40 @@ write_files:
       [Service]
       Type=oneshot
       ExecStart=/usr/local/bin/15-setup-cockpit.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/oauth2-proxy-cockpit.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Cockpit OAuth2 Proxy (GitHub)
+      After=network-online.target cockpit.socket
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      EnvironmentFile=/etc/oauth2-proxy/cockpit.env
+      ExecStart=/usr/local/bin/cockpit-oauth2-proxy.sh
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/setup-cockpit-oauth2-proxy.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Install and start Cockpit OAuth2 Proxy
+      After=network-online.target setup-cockpit.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/16-setup-cockpit-oauth2-proxy.sh
       RemainAfterExit=true
 
       [Install]
