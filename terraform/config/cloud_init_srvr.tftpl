@@ -3240,7 +3240,7 @@ write_files:
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
         --set-string minio.persistence.storageClass=longhorn \
-        --set-string minio.persistence.size=50Gi \
+        --set-string minio.persistence.size=100Gi \
         --set-string minio.buckets[0].name=openobserve \
         --set-string minio.buckets[0].policy=none \
         --set minio.buckets[0].purge=false \
@@ -3249,7 +3249,7 @@ write_files:
         --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
-        --set-string postgres.spec.storage.size=20Gi \
+        --set-string postgres.spec.storage.size=10Gi \
         --set-string postgres.spec.storage.storageClass=longhorn \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
@@ -3261,15 +3261,15 @@ write_files:
         --set replicaCount.alertmanager=0 \
         --set replicaCount.dex=0 \
         --set-string ingester.persistence.storageClass=longhorn \
-        --set-string ingester.persistence.size=50Gi \
+        --set-string ingester.persistence.size=25Gi \
         --set-string querier.persistence.storageClass=longhorn \
-        --set-string querier.persistence.size=50Gi \
+        --set-string querier.persistence.size=25Gi \
         --set-string alertmanager.persistence.storageClass=longhorn \
         --set-string alertmanager.persistence.size=20Gi \
         --set-string alertquerier.persistence.storageClass=longhorn \
         --set-string alertquerier.persistence.size=20Gi \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=longhorn \
-        --set-string nats.config.jetstream.fileStore.pvc.size=20Gi \
+        --set-string nats.config.jetstream.fileStore.pvc.size=10Gi \
         --set replicaCount.dex=0
 
       sudo helm repo add dex https://charts.dexidp.io || true
