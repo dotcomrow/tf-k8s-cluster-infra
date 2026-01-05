@@ -4851,9 +4851,9 @@ write_files:
         sudo kubectl --kubeconfig "$KUBECONFIG" -n "$NAMESPACE" get configmap "$CONFIGMAP_NAME" \
           -o jsonpath='{.data.config\.yaml}' > "$TMP_FILE"
 
-        # 2) Patch config: disable IPv6 and ensure etcd auth block is present
-        echo "🛠 Patching config (disable IPv6 + set etcd credentials)..."
-        # Static bits
+        # 2) Patch config: disable IPv6, set etcd auth, restrict admin API, and trust HAProxy for real client IP
+        echo "🛠 Patching config (IPv6 + etcd + admin allowlist + real IP trust)..."
+
         sudo yq -i '
           .apisix.enable_ipv6 = false
           | .etcd.host = ["http://etcd.etcd.svc.cluster.local:2379"]
@@ -4864,14 +4864,6 @@ write_files:
               "10.42.0.0/16",
               "10.0.0.0/24"
             ]
-        ' "$TMP_FILE"
-
-        # Patching apisix to trust haproxy for real client ip
-        sudo yq -i '
-          .apisix.enable_ipv6 = false
-          | .etcd.host = ["http://etcd.etcd.svc.cluster.local:2379"]
-          | .etcd.prefix = "/apisix"
-          | .etcd.user = "apisix"
           | .nginx_config.http.real_ip_header = "X-Forwarded-For"
           | .nginx_config.http.real_ip_recursive = "on"
           | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24"]
