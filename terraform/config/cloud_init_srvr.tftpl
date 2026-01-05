@@ -1033,10 +1033,10 @@ write_files:
       }
       trap cleanup EXIT
 
-      echo "Installing oauth2-proxy v${VERSION}..."
-      curl -fsSL "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v${VERSION}/oauth2-proxy-v${VERSION}.${OS}-${ARCH}.tar.gz" -o "$TMP_DIR/oauth2-proxy.tgz"
+      echo "Installing oauth2-proxy v$VERSION..."
+      curl -fsSL "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v$VERSION/oauth2-proxy-v$VERSION.$OS-$ARCH.tar.gz" -o "$TMP_DIR/oauth2-proxy.tgz"
       tar -xzf "$TMP_DIR/oauth2-proxy.tgz" -C "$TMP_DIR"
-      install -m 0755 "$TMP_DIR/oauth2-proxy-v${VERSION}.${OS}-${ARCH}/oauth2-proxy" /usr/local/bin/oauth2-proxy
+      install -m 0755 "$TMP_DIR/oauth2-proxy-v$VERSION.$OS-$ARCH/oauth2-proxy" /usr/local/bin/oauth2-proxy
 
       systemctl daemon-reload
       systemctl enable --now oauth2-proxy-cockpit.service
