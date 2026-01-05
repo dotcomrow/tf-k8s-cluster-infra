@@ -31,6 +31,11 @@ variable "RANCHER_CHART_REPO" {
   default = "stable"
 }
 
+variable "LONGHORN_VERSION" {
+  type    = string
+  default = "v1.10.1"
+}
+
 variable "vm_img" {
   default = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
   type    = string

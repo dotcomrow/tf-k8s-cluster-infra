@@ -2076,7 +2076,7 @@ write_files:
       EOF
 
       echo "📥 Installing Longhorn..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/master/deploy/longhorn.yaml
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/longhorn/longhorn/${LONGHORN_VERSION}/deploy/longhorn.yaml
 
       echo "⏳ Waiting for Longhorn CRDs..."
       for i in {1..60}; do
