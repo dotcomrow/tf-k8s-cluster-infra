@@ -4859,6 +4859,22 @@ write_files:
           | .etcd.host = ["http://etcd.etcd.svc.cluster.local:2379"]
           | .etcd.prefix = "/apisix"
           | .etcd.user = "apisix"
+          | .deployment.admin.allow_admin = [
+              "127.0.0.1/32",
+              "10.42.0.0/16",
+              "10.0.0.0/24"
+            ]
+        ' "$TMP_FILE"
+
+        # Patching apisix to trust haproxy for real client ip
+        sudo yq -i '
+          .apisix.enable_ipv6 = false
+          | .etcd.host = ["http://etcd.etcd.svc.cluster.local:2379"]
+          | .etcd.prefix = "/apisix"
+          | .etcd.user = "apisix"
+          | .nginx_config.http.real_ip_header = "X-Forwarded-For"
+          | .nginx_config.http.real_ip_recursive = "on"
+          | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24"]
         ' "$TMP_FILE"
 
         # Secret value (use env-injection so special chars are safe)
@@ -4979,18 +4995,18 @@ write_files:
       kind: ApisixGlobalRule
       metadata:
         name: real-ip-global
+        namespace: apisix
       spec:
         plugins:
           - name: real-ip
             enable: true
             config:
-              # read the address that HAProxy appends
               source: http_x_forwarded_for
-              recursive: true                
+              recursive: true
               trusted_addresses:
-                - "10.0.0.0/24"    # Host/node network
-                - "10.42.0.0/16"   # Pod network (cluster network 1)
-                - "10.43.0.0/16"   # Service network (cluster network 2)           
+                - "10.0.0.10/32"     # pfSense/HAProxy internal VIP (if that’s what APISIX sees)
+                - "10.0.0.1/32"      # pfSense LAN IP (if that’s what APISIX sees)
+                - "10.0.0.0/24"      # (optional) node LAN subnet; keep if unsure        
       EOF
 
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
