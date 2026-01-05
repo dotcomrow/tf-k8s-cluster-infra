@@ -4866,8 +4866,12 @@ write_files:
             ]
           | .nginx_config.http.real_ip_header = "X-Forwarded-For"
           | .nginx_config.http.real_ip_recursive = "on"
+          | .nginx_config.http.real_ip_recursive style="double"
           | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24"]
         ' "$TMP_FILE"
+
+        echo "🔎 real_ip_recursive in patched config:"
+        grep -n 'real_ip_recursive' "$TMP_FILE"
 
         # Secret value (use env-injection so special chars are safe)
         printf '%s' "$APISIX_ETCD_PASS" \
