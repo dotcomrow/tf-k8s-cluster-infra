@@ -4911,7 +4911,7 @@ write_files:
           | .nginx_config.http.real_ip_header = "X-Forwarded-For"
           | .nginx_config.http.real_ip_recursive = "on"
           | .nginx_config.http.real_ip_recursive style="double"
-          | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24"]
+          | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24","10.42.0.0/16"]
         ' "$TMP_FILE"
 
         echo "🔎 real_ip_recursive in patched config:"
@@ -4938,7 +4938,7 @@ write_files:
 
         echo "✅ IPv6 disabled, etcd auth configured, APISIX restarting."
 
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112"}}'
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml patch service apisix-gateway --namespace apisix --type 'merge'         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.112", "externalTrafficPolicy": "Local"}}'
 
       RETRIES=5
       DELAY=5
@@ -5046,7 +5046,8 @@ write_files:
               trusted_addresses:
                 - "10.0.0.10/32"     # pfSense/HAProxy internal VIP (if that’s what APISIX sees)
                 - "10.0.0.1/32"      # pfSense LAN IP (if that’s what APISIX sees)
-                - "10.0.0.0/24"      # (optional) node LAN subnet; keep if unsure        
+                - "10.0.0.0/24"      # (optional) node LAN subnet; keep if unsure
+                - "10.42.0.0/16"     # pod CIDR so Linkerd sidecar is trusted
       EOF
 
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
