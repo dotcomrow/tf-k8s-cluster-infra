@@ -42,6 +42,7 @@ packages:
   - ethtool
   - jq
   - cockpit
+  - sscg
 
 growpart:
   mode: auto
@@ -1001,10 +1002,29 @@ write_files:
       ListenStream=127.0.0.1:9090
       EOF
 
+      mkdir -p /etc/systemd/system/cockpit-wsinstance-http.service.d
+      cat <<'EOF' >/etc/systemd/system/cockpit-wsinstance-http.service.d/override.conf
+      [Service]
+      ExecStart=
+      ExecStart=/usr/lib/cockpit/cockpit-ws --no-tls --local-session=/usr/bin/cockpit-bridge --port=0
+      User=root
+      Group=root
+      EOF
+
+      mkdir -p /etc/systemd/system/cockpit-wsinstance-https@.service.d
+      cat <<'EOF' >/etc/systemd/system/cockpit-wsinstance-https@.service.d/override.conf
+      [Service]
+      ExecStart=
+      ExecStart=/usr/lib/cockpit/cockpit-ws --for-tls-proxy --local-session=/usr/bin/cockpit-bridge --port=0
+      User=root
+      Group=root
+      EOF
+
       systemctl daemon-reload
 
       if systemctl list-unit-files cockpit.socket >/dev/null 2>&1; then
-        systemctl enable --now cockpit.socket
+        systemctl enable cockpit.socket
+        systemctl restart cockpit.socket
         echo "Cockpit enabled on port 9090."
       else
         echo "cockpit.socket not found; is the cockpit package installed?"
