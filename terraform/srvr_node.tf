@@ -81,6 +81,9 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         SRVR_HOSTNAME = var.srvr_hostname
         OPENOBSERVE_IMAGE_TAG = var.OPENOBSERVE_IMAGE_TAG
         LONGHORN_VERSION = var.LONGHORN_VERSION
+        SRVR_IP_ALIAS = var.SRVR_IP_ALIAS
+        SRVR_IP_ALIAS_CIDR = var.SRVR_IP_ALIAS_CIDR
+        SRVR_IP_ALIAS_IFACE = var.SRVR_IP_ALIAS_IFACE
         LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU = var.longhorn_guaranteed_instance_manager_cpu
       })
     file_name = "cloud_init_srvr.yaml"

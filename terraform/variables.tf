@@ -36,6 +36,21 @@ variable "LONGHORN_VERSION" {
   default = "v1.10.1"
 }
 
+variable "SRVR_IP_ALIAS" {
+  type    = string
+  default = "10.0.0.109"
+}
+
+variable "SRVR_IP_ALIAS_CIDR" {
+  type    = string
+  default = "24"
+}
+
+variable "SRVR_IP_ALIAS_IFACE" {
+  type    = string
+  default = "eth0"
+}
+
 variable "vm_img" {
   default = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
   type    = string

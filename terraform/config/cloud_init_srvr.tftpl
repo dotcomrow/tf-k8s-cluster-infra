@@ -83,6 +83,9 @@ write_files:
       systemctl enable set-dhcp-hostname.service
       systemctl start set-dhcp-hostname.service
 
+      systemctl enable setup-ip-alias.service
+      systemctl start setup-ip-alias.service
+
       systemctl enable fix-dns-nfs.service
       systemctl start fix-dns-nfs.service
 
@@ -1549,6 +1552,31 @@ write_files:
 
       systemctl restart systemd-networkd
 
+  - path: /usr/local/bin/02-setup-ip-alias.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      IFACE="${SRVR_IP_ALIAS_IFACE}"
+      IP_ADDR="${SRVR_IP_ALIAS}"
+      CIDR="${SRVR_IP_ALIAS_CIDR}"
+
+      if [ -z "$IP_ADDR" ] || [ -z "$CIDR" ]; then
+        echo "⚠️ SRVR_IP_ALIAS or SRVR_IP_ALIAS_CIDR not set; skipping IP alias."
+        exit 0
+      fi
+
+      ALIAS="$IP_ADDR/$CIDR"
+
+      if ip -4 -o addr show dev "$IFACE" | awk '{print $4}' | grep -Fxq "$ALIAS"; then
+        echo "✅ IP alias $ALIAS already present on $IFACE"
+        exit 0
+      fi
+
+      echo "🌐 Adding IP alias $ALIAS to $IFACE..."
+      ip addr add "$ALIAS" dev "$IFACE"
+
   - path: /etc/systemd/system/set-dhcp-hostname.service
     permissions: '0644'
     content: |
@@ -1560,6 +1588,22 @@ write_files:
       [Service]
       Type=oneshot
       ExecStart=/usr/local/bin/01-set-dhcp-hostname.sh
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/setup-ip-alias.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Add static IP alias
+      After=network-online.target set-dhcp-hostname.service
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/02-setup-ip-alias.sh
       RemainAfterExit=true
 
       [Install]
