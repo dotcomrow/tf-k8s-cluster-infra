@@ -1031,7 +1031,7 @@ write_files:
       fi
 
   - path: /etc/oauth2-proxy/cockpit.env
-    permissions: '0600'
+    permissions: '0640'
     content: |
       COCKPIT_HOSTNAME="${COCKPIT_HOSTNAME}"
       COCKPIT_GITHUB_CLIENT_ID="${COCKPIT_GITHUB_CLIENT_ID}"
@@ -1046,7 +1046,7 @@ write_files:
       #!/bin/bash
       set -euo pipefail
 
-      VERSION="7.6.0"
+      VERSION="7.13.0"
       ARCH="amd64"
       OS="linux"
       TMP_DIR="$(mktemp -d)"
@@ -1055,6 +1055,16 @@ write_files:
         rm -rf "$TMP_DIR"
       }
       trap cleanup EXIT
+
+      if ! id -u oauth2-proxy >/dev/null 2>&1; then
+        useradd --system --no-create-home --shell /usr/sbin/nologin oauth2-proxy
+      fi
+
+      mkdir -p /etc/oauth2-proxy
+      chown root:oauth2-proxy /etc/oauth2-proxy
+      chmod 0750 /etc/oauth2-proxy
+      chown root:oauth2-proxy /etc/oauth2-proxy/cockpit.env
+      chmod 0640 /etc/oauth2-proxy/cockpit.env
 
       echo "Installing oauth2-proxy v$VERSION..."
       curl -fsSL "https://github.com/oauth2-proxy/oauth2-proxy/releases/download/v$VERSION/oauth2-proxy-v$VERSION.$OS-$ARCH.tar.gz" -o "$TMP_DIR/oauth2-proxy.tgz"
@@ -1085,7 +1095,10 @@ write_files:
         --cookie-samesite=lax \
         --cookie-refresh=1h \
         --cookie-expire=8h \
+        --cookie-csrf-per-request=true \
+        --cookie-csrf-expire=5m \
         --cookie-name=_oauth2_proxy_cockpit \
+        --whitelist-domain="${COCKPIT_HOSTNAME}" \
         --reverse-proxy=true \
         --proxy-websockets=true \
         --pass-host-header=true
@@ -1541,6 +1554,19 @@ write_files:
       Type=simple
       EnvironmentFile=/etc/oauth2-proxy/cockpit.env
       ExecStart=/usr/local/bin/cockpit-oauth2-proxy.sh
+      User=oauth2-proxy
+      Group=oauth2-proxy
+      NoNewPrivileges=true
+      PrivateTmp=true
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateDevices=true
+      ProtectKernelTunables=true
+      ProtectKernelModules=true
+      ProtectControlGroups=true
+      RestrictRealtime=true
+      LockPersonality=true
+      RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
       Restart=on-failure
       RestartSec=5
 
