@@ -36,6 +36,11 @@ variable "LONGHORN_VERSION" {
   default = "v1.10.1"
 }
 
+variable "VAULT_VERSION" {
+  type    = string
+  default = "1.21.2"
+}
+
 variable "SRVR_IP_ALIAS" {
   type    = string
   default = "10.0.0.109"
