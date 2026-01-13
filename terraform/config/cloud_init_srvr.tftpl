@@ -4909,9 +4909,9 @@ write_files:
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
         --set config.nginx_config.stream_proxy.udp="[]" \
-        --set-string config.nginx_config.proxy_buffer_size="256k" \
-        --set-string config.nginx_config.proxy_buffers="16 256k" \
-        --set-string config.nginx_config.proxy_busy_buffers_size="512k" \
+        --set-string config.nginx_config.http.proxy_buffer_size="256k" \
+        --set-string config.nginx_config.http.proxy_buffers="16 256k" \
+        --set-string config.nginx_config.http.proxy_busy_buffers_size="512k" \
         --set ingress-controller.enabled=true \
         --set ingress-controller.replicaCount=1 \
         --set ingress-controller.config.provider.type=apisix \
@@ -4960,9 +4960,9 @@ write_files:
             ]
           | .nginx_config.http.real_ip_header = "X-Forwarded-For"
           | .nginx_config.http.real_ip_recursive = "on"
-          | .nginx_config.proxy_buffer_size = "256k"
-          | .nginx_config.proxy_buffers = "16 256k"
-          | .nginx_config.proxy_busy_buffers_size = "512k"
+          | .nginx_config.http.proxy_buffer_size = "256k"
+          | .nginx_config.http.proxy_buffers = "16 256k"
+          | .nginx_config.http.proxy_busy_buffers_size = "512k"
           | .nginx_config.http.real_ip_recursive style="double"
           | .nginx_config.http.real_ip_from = ["10.0.0.10/32","10.0.0.1/32","10.0.0.0/24","10.42.0.0/16"]
         ' "$TMP_FILE"
