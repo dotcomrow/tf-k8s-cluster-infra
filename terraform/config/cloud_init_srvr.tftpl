@@ -3330,7 +3330,7 @@ write_files:
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
         --set-string minio.persistence.storageClass=longhorn \
-        --set-string minio.persistence.size=100Gi \
+        --set-string minio.persistence.size=200Gi \
         --set-string minio.buckets[0].name=openobserve \
         --set-string minio.buckets[0].policy=none \
         --set minio.buckets[0].purge=false \
@@ -4874,6 +4874,7 @@ write_files:
           - opentelemetry
           - prometheus
           - proxy-rewrite
+          - response-rewrite
           - real-ip
           - client-control
 
