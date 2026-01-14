@@ -6440,6 +6440,8 @@ write_files:
             params:
               server.insecure: true
             cm:
+              timeout.reconciliation: 3m
+              timeout.reconciliation.jitter: 30s
               admin.enabled: false
               url: https://argocd.teleport.app.${RANCHER_DOMAIN}
               dex.config: |
