@@ -87,6 +87,13 @@ write_files:
       systemctl enable setup-ip-alias.service
       systemctl start setup-ip-alias.service
 
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now setup-ip-alias.service
+      sudo systemctl enable --now setup-ip-alias.timer
+
+      # Confirm it’s scheduled
+      systemctl list-timers | grep setup-ip-alias
+
       systemctl enable fix-dns-nfs.service
       systemctl start fix-dns-nfs.service
 
@@ -1601,27 +1608,34 @@ write_files:
   - path: /usr/local/bin/02-setup-ip-alias.sh
     permissions: '0755'
     content: |
-      #!/bin/bash
-      set -euo pipefail
+        #!/bin/bash
+        set -eu
 
-      IFACE="${SRVR_IP_ALIAS_IFACE}"
-      IP_ADDR="${SRVR_IP_ALIAS}"
-      CIDR="${SRVR_IP_ALIAS_CIDR}"
+        IFACE="${SRVR_IP_ALIAS_IFACE}"
+        IP_ADDR="${SRVR_IP_ALIAS}"
+        CIDR="${SRVR_IP_ALIAS_CIDR}"
 
-      if [ -z "$IP_ADDR" ] || [ -z "$CIDR" ]; then
-        echo "⚠️ SRVR_IP_ALIAS or SRVR_IP_ALIAS_CIDR not set; skipping IP alias."
-        exit 0
-      fi
+        if [ -z "${IP_ADDR:-}" ] || [ -z "${CIDR:-}" ] || [ -z "${IFACE:-}" ]; then
+          echo "⚠️ SRVR_IP_ALIAS_IFACE/SRVR_IP_ALIAS/SRVR_IP_ALIAS_CIDR not set; skipping."
+          exit 0
+        fi
 
-      ALIAS="$IP_ADDR/$CIDR"
+        ALIAS="${IP_ADDR}/${CIDR}"
 
-      if ip -4 -o addr show dev "$IFACE" | awk '{print $4}' | grep -Fxq "$ALIAS"; then
-        echo "✅ IP alias $ALIAS already present on $IFACE"
-        exit 0
-      fi
+        # If interface is down, don't fail hard—just exit so timer will try again later.
+        if ! ip link show dev "$IFACE" >/dev/null 2>&1; then
+          echo "⚠️ Interface $IFACE not found."
+          exit 0
+        fi
 
-      echo "🌐 Adding IP alias $ALIAS to $IFACE..."
-      ip addr add "$ALIAS" dev "$IFACE"
+        # Re-add if missing
+        if ip -4 -o addr show dev "$IFACE" | awk '{print $4}' | grep -Fxq "$ALIAS"; then
+          echo "✅ IP alias $ALIAS already present on $IFACE"
+          exit 0
+        fi
+
+        echo "🌐 Re-adding IP alias $ALIAS to $IFACE..."
+        ip addr add "$ALIAS" dev "$IFACE"
 
   - path: /etc/systemd/system/set-dhcp-hostname.service
     permissions: '0644'
@@ -1643,17 +1657,31 @@ write_files:
     permissions: '0644'
     content: |
       [Unit]
-      Description=Add static IP alias
-      After=network-online.target set-dhcp-hostname.service
+      Description=Ensure static IP alias is present
+      After=network-online.target
       Wants=network-online.target
 
       [Service]
       Type=oneshot
       ExecStart=/usr/local/bin/02-setup-ip-alias.sh
-      RemainAfterExit=true
 
       [Install]
       WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/setup-ip-alias.timer
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Periodically ensure IP alias is present
+
+      [Timer]
+      OnBootSec=30s
+      OnUnitActiveSec=60s
+      AccuracySec=5s
+      Unit=setup-ip-alias.service
+
+      [Install]
+      WantedBy=timers.target
 
   - path: /usr/local/bin/rke2-preload-images.sh
     permissions: '0755'
