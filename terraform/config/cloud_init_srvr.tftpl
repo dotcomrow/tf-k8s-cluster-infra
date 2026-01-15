@@ -1620,7 +1620,7 @@ write_files:
           exit 0
         fi
 
-        ALIAS="${IP_ADDR}/${CIDR}"
+        ALIAS="$IP_ADDR/$CIDR"
 
         # If interface is down, don't fail hard—just exit so timer will try again later.
         if ! ip link show dev "$IFACE" >/dev/null 2>&1; then
