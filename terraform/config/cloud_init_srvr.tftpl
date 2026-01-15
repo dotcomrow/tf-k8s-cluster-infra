@@ -1615,7 +1615,7 @@ write_files:
         IP_ADDR="${SRVR_IP_ALIAS}"
         CIDR="${SRVR_IP_ALIAS_CIDR}"
 
-        if [ -z "${IP_ADDR:-}" ] || [ -z "${CIDR:-}" ] || [ -z "${IFACE:-}" ]; then
+        if [ -z "$IP_ADDR" ] || [ -z "$CIDR" ] || [ -z "$IFACE" ]; then
           echo "⚠️ SRVR_IP_ALIAS_IFACE/SRVR_IP_ALIAS/SRVR_IP_ALIAS_CIDR not set; skipping."
           exit 0
         fi
