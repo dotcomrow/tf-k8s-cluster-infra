@@ -3359,6 +3359,7 @@ write_files:
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
+        --set-string minio.deploymentUpdate.type=Recreate \
         --set-string minio.persistence.storageClass=longhorn \
         --set-string minio.persistence.size=200Gi \
         --set-string minio.buckets[0].name=openobserve \
