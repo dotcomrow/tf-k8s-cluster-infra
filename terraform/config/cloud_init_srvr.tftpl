@@ -6494,7 +6494,10 @@ write_files:
                 - name: avp-v1
                   allowConcurrency: true
                   discover:
-                    fileName: "*.yaml"
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        test ! -f "${ARGOCD_APP_SOURCE_PATH:-.}/.argocd-no-avp"
                   generate:
                     command:
                       - /usr/local/bin/argocd-vault-plugin
