@@ -6498,7 +6498,8 @@ write_files:
                     args:
                       - |
                         repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-                        test ! -f "${repo_root}/.argocd-no-avp" && test ! -f "${ARGOCD_APP_SOURCE_PATH:-.}/.argocd-no-avp"
+                        app_path="${ARGOCD_APP_SOURCE_PATH:-.}"
+                        test ! -f "${repo_root}/.argocd-no-avp" && test ! -f "${app_path}/.argocd-no-avp"
                   generate:
                     command:
                       - /usr/local/bin/argocd-vault-plugin
