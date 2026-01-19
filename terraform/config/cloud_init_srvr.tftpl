@@ -6410,6 +6410,15 @@ write_files:
       stringData:
         dex.github.clientSecret: ${ARGOCD_GITHUB_CLIENT_SECRET}
       ---
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: github-scm-token
+        namespace: argocd
+      type: Opaque
+      stringData:
+        token: ${ARGOCD_GITHUB_SCM_TOKEN}
+      ---
       apiVersion: helm.cattle.io/v1
       kind: HelmChart
       metadata:

@@ -180,6 +180,10 @@ variable "ARGOCD_GITHUB_CLIENT_SECRET" {
   default = "argocd"
 }
 
+variable "ARGOCD_GITHUB_SCM_TOKEN" {
+  default = "argocd"
+}
+
 variable "project_name" {
   description = "The GCP project ID"
   type        = string
