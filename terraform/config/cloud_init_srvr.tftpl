@@ -4936,6 +4936,7 @@ write_files:
         --set apisix.deployment.role_traditional.config_provider=etcd \
         --set apisix.enableIPv6=false \
         --set apisix.podAnnotations."linkerd\.io/inject"="disabled" \
+        --set replicaCount=2 \
         --set config.nginx_config.http_listen[0]="0.0.0.0:9080" \
         --set config.nginx_config.ssl.listen[0]="0.0.0.0:9443" \
         --set config.nginx_config.stream_proxy.tcp="[]" \
