@@ -3373,6 +3373,7 @@ write_files:
         --set-string postgres.spec.storage.size=10Gi \
         --set-string postgres.spec.storage.storageClass=longhorn \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
+        --set-string config.ZO_IGNORE_FILE_RETENTION_BY_STREAM="true" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
         --set replicaCount.ingester=0 \
