@@ -3509,6 +3509,186 @@ write_files:
         --from-literal=password="$OPENOBSERVE_PASSWORD" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
+      OO_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' trace_id span_id | base64 | tr -d '\r\n')
+      OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
+
+      echo "Seeding OpenObserve log stream schema with trace_id/span_id fields..."
+      if [[ -z "$OO_AUTH_HEADER" ]]; then
+        echo "⚠️  OO_AUTH_HEADER is empty; skipping OpenObserve schema seed."
+      else
+          OO_SCHEMA_SEED_SCRIPT=$'import base64, json, os, sys, urllib.request, urllib.error\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'auth = os.environ.get("OO_AUTH_HEADER")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'org = os.environ.get("OO_ORG", "default")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'streams_raw = os.environ.get("OO_STREAMS_B64", "")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'default_stream = os.environ.get("OO_STREAM", "default")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'if not auth:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    sys.exit("missing OO_AUTH_HEADER")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'streams = []\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'if streams_raw:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    try:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        streams = [s.strip() for s in base64.b64decode(streams_raw).decode().splitlines() if s.strip()]\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    except Exception as exc:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        print(f"unable to decode streams list: {exc}", file=sys.stderr)\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'if not streams:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    streams = [default_stream]\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'for stream in streams:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    url = f"http://openobserve-router:5080/api/{org}/{stream}/_json"\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    payload = [{\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "trace_id": "00000000000000000000000000000001",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "span_id": "0000000000000001",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "level": "info",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "message": "openobserve schema seed: trace/span fields",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "source": "bootstrap",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "seed": True\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    }]\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    data = json.dumps(payload).encode("utf-8")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    req = urllib.request.Request(url, data=data, headers={"Authorization": auth, "Content-Type": "application/json"})\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    try:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        with urllib.request.urlopen(req, timeout=20) as resp:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'            print(f"[{stream}] seed log ingest status={resp.status}")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    except urllib.error.HTTPError as exc:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        try:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'            body = exc.read().decode("utf-8", errors="ignore")\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        except Exception:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'            body = ""\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        print(f"[{stream}] seed log ingest failed: {exc.code} {body}", file=sys.stderr)\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'    except Exception as exc:\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        print(f"[{stream}] seed log ingest error: {exc}", file=sys.stderr)\n'
+
+          OO_SCHEMA_SEED_SCRIPT64=$(printf '%s' "$OO_SCHEMA_SEED_SCRIPT" | base64 | tr -d '\r\n')
+
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-seed --rm -i --restart=Never \
+            --image=python:3-alpine \
+            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+            --env OO_ORG="default" \
+            --env OO_STREAMS_B64="$OO_STREAMS_B64" \
+            --env OO_SCHEMA_SEED_SCRIPT64="$OO_SCHEMA_SEED_SCRIPT64" \
+            -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"OO_SCHEMA_SEED_SCRIPT64\"]).decode())"'
+      fi
+
+      echo "Ensuring OpenObserve log stream indexes include trace_id and span_id..."
+      if [[ -z "$OO_AUTH_HEADER" ]]; then
+        echo "⚠️  OO_AUTH_HEADER is empty; skipping OpenObserve stream settings."
+      else
+          OO_STREAM_SETTINGS_SCRIPT=$'import base64, json, os, sys, urllib.request, urllib.error\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'auth = os.environ.get("OO_AUTH_HEADER")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'if not auth: sys.exit("missing OO_AUTH_HEADER")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'org = os.environ.get("OO_ORG", "default")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'streams_raw = os.environ.get("OO_STREAMS_B64", "")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'default_stream = os.environ.get("OO_STREAM", "default")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'fields_raw = os.environ.get("OO_STREAM_INDEX_FIELDS_B64", "")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    fields = [f.strip() for f in base64.b64decode(fields_raw).decode().splitlines() if f.strip()]\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'except Exception as exc:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    sys.exit(f"unable to decode index fields: {exc}")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'if not fields:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    sys.exit("no index fields supplied")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'headers = {"Authorization": auth, "Content-Type": "application/json"}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'streams = []\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'if streams_raw:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        streams = [s.strip() for s in base64.b64decode(streams_raw).decode().splitlines() if s.strip()]\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    except Exception as exc:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        print(f"unable to decode streams list: {exc}", file=sys.stderr)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'if not streams:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    streams = [default_stream]\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'def request(method, url, payload=None):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    data = None\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if payload is not None:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        data = json.dumps(payload).encode("utf-8")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    req = urllib.request.Request(url, data=data, headers=headers, method=method)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    with urllib.request.urlopen(req, timeout=20) as resp:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        body = resp.read()\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        if not body:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            return {}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            return json.loads(body)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        except Exception:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            return {}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'def fetch_stream_settings(stream_name):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    url = f"http://openobserve-router:5080/api/{org}/streams/{stream_name}/schema?type=logs"\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    req = urllib.request.Request(url, headers=headers)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    with urllib.request.urlopen(req, timeout=20) as resp:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        data = json.loads(resp.read().decode("utf-8"))\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if isinstance(data, dict) and "data" in data:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        data = data["data"]\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    return data.get("settings") or {}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'def normalize(item):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if item is None:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        return None\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if isinstance(item, (list, tuple)):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        if not item:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            return None\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        return str(item[0])\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if isinstance(item, str):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        return item\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    return str(item)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'def normalize_index_fields(current):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    normalized = []\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    seen = set()\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    for item in current:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        key = normalize(item)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        if not key or key in seen:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            continue\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        seen.add(key)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        normalized.append(key)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    return normalized, seen\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'for stream in streams:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    settings = {}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        settings = fetch_stream_settings(stream)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    except Exception as exc:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        print(f"[{stream}] settings fetch error: {exc}", file=sys.stderr)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        continue\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    current = settings.get("index_fields") or settings.get("indexFields") or []\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    normalized, _ = normalize_index_fields(current)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    counts = {field: normalized.count(field) for field in fields}\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if all(counts.get(field, 0) == 1 for field in fields):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        print(f"[{stream}] index_fields already normalized: {counts}")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        continue\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    urls = [\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        f"http://openobserve-router:5080/api/{org}/streams/{stream}/settings",\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        f"http://openobserve-router:5080/api/{org}/streams/{stream}/settings?type=logs",\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    ]\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    def apply_payload(payload, label):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        last_err = None\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        for url in urls:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'            for method in ("PUT", "POST"):\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    request(method, url, payload)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    print(f"[{stream}] {method} {label} ok url={url}")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    return None\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                except urllib.error.HTTPError as exc:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    last_err = exc\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    try:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                        body = exc.read().decode("utf-8", errors="ignore")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    except Exception:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                        body = ""\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    print(f"[{stream}] {method} {label} failed: {exc.code} {body}", file=sys.stderr)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                except Exception as exc:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    last_err = exc\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'                    print(f"[{stream}] {method} {label} error: {exc}", file=sys.stderr)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        return last_err\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    err = apply_payload({"index_fields": {"remove": fields}}, "remove")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if err:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        sys.exit(1)\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    err = apply_payload({"index_fields": {"add": fields}}, "add")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    if err:\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        sys.exit(1)\n'
+
+          OO_STREAM_SETTINGS_SCRIPT64=$(printf '%s' "$OO_STREAM_SETTINGS_SCRIPT" | base64 | tr -d '\r\n')
+
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-settings --rm -i --restart=Never \
+            --image=python:3-alpine \
+            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+            --env OO_ORG="default" \
+            --env OO_STREAMS_B64="$OO_STREAMS_B64" \
+            --env OO_STREAM_INDEX_FIELDS_B64="$OO_STREAM_INDEX_FIELDS_B64" \
+            --env OO_STREAM_SETTINGS_SCRIPT64="$OO_STREAM_SETTINGS_SCRIPT64" \
+            -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"OO_STREAM_SETTINGS_SCRIPT64\"]).decode())"'
+      fi
+
       echo "🔐 Installing GitHub auth proxy for OpenObserve (Dex + oauth2-proxy + NGINX + cookie bootstrap)..."
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
