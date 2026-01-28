@@ -252,6 +252,12 @@ async function getVaultToken(): Promise<string> {
 /* ================================
    KV helpers
 ================================== */
+const PLACEHOLDER_VALUE = '__PLACEHOLDER__';
+
+function isPlaceholderValue(value?: string | null): boolean {
+  return value === PLACEHOLDER_VALUE;
+}
+
 async function writeToVault(dataPath: string, value: string): Promise<void> {
   const token = await getVaultToken();
   await vaultJson(`/v1/${dataPath}`, {
@@ -375,9 +381,9 @@ app.post('/', async (req: Request, res: Response) => {
   try {
     switch (methodName) {
       case 'google.cloud.secretmanager.v1.SecretManagerService.CreateSecret': {
-        // Seed a placeholder so the path exists in Vault
-        await writeToVault(vaultDataPath, '__PLACEHOLDER__');
-        break;
+        // CreateSecret does not carry a real value; ignore placeholder seed.
+        console.log('ℹ️  CreateSecret placeholder ignored for %s', secretPath);
+        return res.status(204).send('ignored placeholder');
       }
       case 'google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion':
       case 'google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret': {
@@ -390,6 +396,10 @@ app.post('/', async (req: Request, res: Response) => {
           // Permanent problem (empty secret) — log & ACK so we don’t spin
           console.error('⚠️  Empty secret payload for %s; ACKing.', secretPath);
           return res.status(204).send('empty payload');
+        }
+        if (isPlaceholderValue(payload)) {
+          console.log('ℹ️  Placeholder payload ignored for %s', secretPath);
+          return res.status(204).send('ignored placeholder');
         }
         await writeToVault(vaultDataPath, payload);
         break;
@@ -432,6 +442,10 @@ app.post('/sync-all', async (_req: Request, res: Response) => {
       const [accessResponse] = await client.accessSecretVersion({ name: latestVersion });
       const payload = accessResponse.payload?.data?.toString();
       if (!payload) continue;
+      if (isPlaceholderValue(payload)) {
+        console.log('[sync-all] skipping placeholder for %s', latestVersion);
+        continue;
+      }
 
       const secretName = extractSecretName(latestVersion);
       const vaultDataPath = `secret/data/${secretName}`;
