@@ -3790,6 +3790,12 @@ write_files:
               limit_percentage: 75
               spike_limit_percentage: 25
               check_interval: 5s
+            transform/logs:
+              log_statements:
+                - context: log
+                  statements:
+                    - set(attributes["trace_id"], trace_id) where trace_id != nil
+                    - set(attributes["span_id"], span_id) where span_id != nil
             batch:
               timeout: 10s
               send_batch_size: 1024
@@ -3828,7 +3834,7 @@ write_files:
                 exporters: [debug, otlp/openobserve]
               logs:
                 receivers: [otlp]
-                processors: [memory_limiter, batch]
+                processors: [memory_limiter, transform/logs, batch]
                 exporters: [debug, otlp/openobserve]
       ---
       apiVersion: apps/v1
