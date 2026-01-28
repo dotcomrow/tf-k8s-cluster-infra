@@ -3796,6 +3796,16 @@ write_files:
                   statements:
                     - set(attributes["trace_id"], trace_id) where trace_id != nil
                     - set(attributes["span_id"], span_id) where span_id != nil
+                    - set(attributes["user_id"], attributes["x-user-id"]) where attributes["x-user-id"] != nil
+                    - set(attributes["user_id"], attributes["X-User-Id"]) where attributes["X-User-Id"] != nil
+                    - set(attributes["user_id"], attributes["entrypoint-request.headers.x-user-id"]) where attributes["entrypoint-request.headers.x-user-id"] != nil
+                    - set(attributes["user_email"], attributes["x-user-email"]) where attributes["x-user-email"] != nil
+                    - set(attributes["user_email"], attributes["X-User-Email"]) where attributes["X-User-Email"] != nil
+                    - set(attributes["user_email"], attributes["entrypoint-request.headers.x-user-email"]) where attributes["entrypoint-request.headers.x-user-email"] != nil
+                    - set(attributes["user_username"], attributes["x-user-username"]) where attributes["x-user-username"] != nil
+                    - set(attributes["user_username"], attributes["entrypoint-request.headers.x-user-username"]) where attributes["entrypoint-request.headers.x-user-username"] != nil
+                    - set(attributes["user_issuer"], attributes["x-user-issuer"]) where attributes["x-user-issuer"] != nil
+                    - set(attributes["user_issuer"], attributes["entrypoint-request.headers.x-user-issuer"]) where attributes["entrypoint-request.headers.x-user-issuer"] != nil
             batch:
               timeout: 10s
               send_batch_size: 1024
