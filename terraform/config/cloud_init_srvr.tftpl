@@ -5133,7 +5133,7 @@ write_files:
           - name: real-ip
             enable: true
             config:
-              source: http_x_forwarded_for
+              source: X-Forwarded-For
               recursive: true
               trusted_addresses:
                 - "10.0.0.10/32"     # pfSense/HAProxy internal VIP (if that’s what APISIX sees)
