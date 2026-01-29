@@ -3509,6 +3509,23 @@ write_files:
         --from-literal=password="$OPENOBSERVE_PASSWORD" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
+      OO_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' \
+        trace_id \
+        span_id \
+        user-agent \
+        x-client-ip \
+        x-forwarded-for \
+        x-forwarded-host \
+        x-forwarded-proto \
+        x-real-ip \
+        x-user-email \
+        x-user-id \
+        x-user-issuer \
+        x-user-username \
+        x-gravitee-request-id \
+        x-gravitee-transaction-id | base64 | tr -d '\r\n')
+      OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
+
       OO_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' trace_id span_id | base64 | tr -d '\r\n')
       OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
 
@@ -3536,8 +3553,20 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT+=$'    payload = [{\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "trace_id": "00000000000000000000000000000001",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "span_id": "0000000000000001",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "user-agent": "Python-urllib/3.11",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-client-ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-for": "72.187.152.150, 72.187.152.150, 72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-host": "graphql.app.suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-proto": "http",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-real-ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-email": "administrator@suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-id": "8dfd3008-b361-4af9-8590-4abebc08734a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-issuer": "https://auth.suncoast.systems/realms/external",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-username": "administrator@suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-gravitee-request-id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x-gravitee-transaction-id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "level": "info",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "message": "openobserve schema seed: trace/span fields",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "message": "openobserve schema seed: trace/span + header fields",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "source": "bootstrap",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "seed": True\n'
           OO_SCHEMA_SEED_SCRIPT+=$'    }]\n'
