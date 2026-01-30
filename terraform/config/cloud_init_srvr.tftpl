@@ -3522,8 +3522,6 @@ write_files:
         x_user_id \
         x_user_issuer \
         x_user_username \
-        x_gravitee_request_id \
-        x_gravitee_transaction_id \
         gravitee_request_id \
         gravitee_transaction_id | base64 | tr -d '\r\n')
       OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
@@ -3562,8 +3560,6 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_id": "8dfd3008-b361-4af9-8590-4abebc08734a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_issuer": "https://auth.suncoast.systems/realms/external",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_username": "administrator@suncoast.systems",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_request_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_transaction_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "gravitee_request_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "gravitee_transaction_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "level": "info",\n'
