@@ -3512,21 +3512,18 @@ write_files:
       OO_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' \
         trace_id \
         span_id \
-        user-agent \
-        x-client-ip \
-        x-forwarded-for \
-        x-forwarded-host \
-        x-forwarded-proto \
-        x-real-ip \
-        x-user-email \
-        x-user-id \
-        x-user-issuer \
-        x-user-username \
-        x-gravitee-request-id \
-        x-gravitee-transaction-id | base64 | tr -d '\r\n')
-      OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
-
-      OO_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' trace_id span_id | base64 | tr -d '\r\n')
+        user_agent \
+        x_client_ip \
+        x_forwarded_for \
+        x_forwarded_host \
+        x_forwarded_proto \
+        x_real_ip \
+        x_user_email \
+        x_user_id \
+        x_user_issuer \
+        x_user_username \
+        x_gravitee_request_id \
+        x_gravitee_transaction_id | base64 | tr -d '\r\n')
       OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
 
       echo "Seeding OpenObserve log stream schema with trace_id/span_id fields..."
@@ -3553,18 +3550,18 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT+=$'    payload = [{\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "trace_id": "00000000000000000000000000000001",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "span_id": "0000000000000001",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "user-agent": "Python-urllib/3.11",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-client-ip": "72.187.152.150",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-for": "72.187.152.150, 72.187.152.150, 72.187.152.150",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-host": "graphql.app.suncoast.systems",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-forwarded-proto": "http",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-real-ip": "72.187.152.150",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-email": "administrator@suncoast.systems",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-id": "8dfd3008-b361-4af9-8590-4abebc08734a",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-issuer": "https://auth.suncoast.systems/realms/external",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-user-username": "administrator@suncoast.systems",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-gravitee-request-id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
-          OO_SCHEMA_SEED_SCRIPT+=$'        "x-gravitee-transaction-id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "user_agent": "Python-urllib/3.11",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_client_ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_forwarded_for": "72.187.152.150, 72.187.152.150, 72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_forwarded_host": "graphql.app.suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_forwarded_proto": "http",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_real_ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_email": "administrator@suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_id": "8dfd3008-b361-4af9-8590-4abebc08734a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_issuer": "https://auth.suncoast.systems/realms/external",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_username": "administrator@suncoast.systems",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_request_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_transaction_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "level": "info",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "message": "openobserve schema seed: trace/span + header fields",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "source": "bootstrap",\n'
@@ -5224,7 +5221,7 @@ write_files:
           | .nginx_config.http.real_ip_recursive = "on"
           | .nginx_config.http.enable_access_log = true
           | .nginx_config.http.access_log = "/dev/stdout"
-          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
+          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_forwarded_host\":\"$http_x_forwarded_host\",\"x_forwarded_proto\":\"$http_x_forwarded_proto\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
           | .nginx_config.http.access_log_format_escape = "json"
           | .nginx_config.http.proxy_buffer_size = "256k"
           | .nginx_config.http.proxy_buffers = "16 256k"
