@@ -5408,6 +5408,8 @@ write_files:
                 Traceparent: "$opentelemetry_context_traceparent"
                 Tracestate: "$http_tracestate"
                 Baggage: "$http_baggage"
+                X-Trace-Id: "$opentelemetry_trace_id"
+                X-Span-Id: "$opentelemetry_span_id"
                 X-Traceparent: "$opentelemetry_context_traceparent"
                 X-Tracestate: "$http_tracestate"
                 X-Baggage: "$http_baggage"
