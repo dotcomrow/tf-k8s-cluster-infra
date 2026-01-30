@@ -5407,6 +5407,9 @@ write_files:
                 Traceparent: "$opentelemetry_context_traceparent"
                 Tracestate: "$http_tracestate"
                 Baggage: "$http_baggage"
+                X-Traceparent: "$opentelemetry_context_traceparent"
+                X-Tracestate: "$http_tracestate"
+                X-Baggage: "$http_baggage"
       EOF
 
   - path: /etc/systemd/system/install-apisix-rancher.service
