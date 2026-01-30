@@ -5392,6 +5392,23 @@ write_files:
                 service.namespace: apisix
       EOF
 
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: apisix.apache.org/v2
+      kind: ApisixGlobalRule
+      metadata:
+        name: trace-context-global
+        namespace: apisix
+      spec:
+        plugins:
+          - name: proxy-rewrite
+            enable: true
+            config:
+              headers:
+                Traceparent: "$opentelemetry_context_traceparent"
+                Tracestate: "$http_tracestate"
+                Baggage: "$http_baggage"
+      EOF
+
   - path: /etc/systemd/system/install-apisix-rancher.service
     permissions: '0644'
     content: |
