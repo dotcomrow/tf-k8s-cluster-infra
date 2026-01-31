@@ -6219,11 +6219,37 @@ write_files:
             VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault auth enable "\$m"
           done
 
-          # Kubernetes auth config
+          # Kubernetes auth config (use long-lived SA token for reviewer)
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: vault-auth-token
+            namespace: vault
+            annotations:
+              kubernetes.io/service-account.name: vault-auth
+          type: kubernetes.io/service-account-token
+          EOF
+
+          TOKEN_B64=""
+          for i in \$(seq 1 30); do
+            TOKEN_B64="\$(kubectl -n vault get secret vault-auth-token -o jsonpath='{.data.token}' 2>/dev/null || true)"
+            [ -n "\$TOKEN_B64" ] && break
+            echo "Waiting for vault-auth-token..."
+            sleep 2
+          done
+          if [ -n "\$TOKEN_B64" ]; then
+            TOKEN="\$(echo "\$TOKEN_B64" | base64 -d)"
+          else
+            echo "vault-auth-token not ready; falling back to pod token"
+            TOKEN="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+          fi
+          kubectl -n vault get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' > /vault/data/k8s-ca.crt
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/kubernetes/config \
-            token_reviewer_jwt="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+            token_reviewer_jwt="\$TOKEN" \
             kubernetes_host="https://\$KUBERNETES_SERVICE_HOST:\$KUBERNETES_SERVICE_PORT_HTTPS" \
-            kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            kubernetes_ca_cert=@/vault/data/k8s-ca.crt \
+            disable_iss_validation=true
 
           # Enable KV v2
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv || true
