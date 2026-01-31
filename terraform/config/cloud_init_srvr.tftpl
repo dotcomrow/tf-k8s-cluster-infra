@@ -6220,6 +6220,11 @@ write_files:
           done
 
           # Kubernetes auth config (use long-lived SA token for reviewer)
+          for i in \$(seq 1 30); do
+            kubectl -n vault get sa vault-auth >/dev/null 2>&1 && break
+            echo "Waiting for vault-auth service account..."
+            sleep 2
+          done
           cat <<EOF | kubectl apply -f -
           apiVersion: v1
           kind: Secret
@@ -6239,11 +6244,26 @@ write_files:
             sleep 2
           done
           if [ -n "\$TOKEN_B64" ]; then
-            TOKEN="\$(echo "\$TOKEN_B64" | base64 -d)"
+            if command -v base64 >/dev/null 2>&1; then
+              TOKEN="\$(echo "\$TOKEN_B64" | base64 -d)"
+            elif command -v openssl >/dev/null 2>&1; then
+              TOKEN="\$(echo "\$TOKEN_B64" | openssl base64 -d)"
+            else
+              echo "No base64 decoder found; falling back to pod token"
+              TOKEN=""
+            fi
           else
             echo "vault-auth-token not ready; falling back to pod token"
+            TOKEN=""
+          fi
+          if [ -z "\$TOKEN" ]; then
             TOKEN="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
           fi
+          for i in \$(seq 1 30); do
+            kubectl -n vault get cm kube-root-ca.crt >/dev/null 2>&1 && break
+            echo "Waiting for kube-root-ca.crt..."
+            sleep 2
+          done
           kubectl -n vault get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' > /vault/data/k8s-ca.crt
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/kubernetes/config \
             token_reviewer_jwt="\$TOKEN" \
