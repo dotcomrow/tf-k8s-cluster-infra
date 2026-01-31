@@ -6761,15 +6761,22 @@ write_files:
               - --insecure
             ingress:
               enabled: false
+            resources:
+              requests:
+                cpu: 200m
+                memory: 256Mi
+              limits:
+                cpu: "1"
+                memory: 1Gi
 
           controller:
             resources:
               requests:
-                cpu: 500m
-                memory: 1Gi
-              limits:
-                cpu: "2"
+                cpu: "1"
                 memory: 2Gi
+              limits:
+                cpu: "4"
+                memory: 4Gi
 
           repoServer:
             image:
@@ -6782,11 +6789,11 @@ write_files:
               fsGroup: 999
             resources:
               requests:
-                cpu: 200m
-                memory: 512Mi
-              limits:
-                cpu: "1"
+                cpu: 500m
                 memory: 1Gi
+              limits:
+                cpu: "2"
+                memory: 2Gi
 
             # 6) Vault-plugin ENV configuration
             env:
