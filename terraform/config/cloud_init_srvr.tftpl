@@ -2167,6 +2167,13 @@ write_files:
 
       echo "✅ CoreDNS is patched and ready with persistent DNS fallback."
 
+      echo "🔧 Excluding rke2-metrics-server from VPA and restoring default resources..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system annotate deployment rke2-metrics-server platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system patch deployment rke2-metrics-server --type=merge \
+        -p '{"spec":{"template":{"metadata":{"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}}}}}'
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system patch deployment rke2-metrics-server --type='json' \
+        -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources"}]' || true
+
       echo "📥 Installing Cert-Manager..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager -n cert-manager
@@ -2175,6 +2182,19 @@ write_files:
       echo "📥 Installing MetalLB..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/controller -n metallb-system
+
+      echo "🔧 Excluding MetalLB from VPA and restoring default resources..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system annotate deployment controller platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system patch deployment controller --type=merge \
+        -p '{"spec":{"template":{"metadata":{"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}}}}}'
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system patch deployment controller --type='json' \
+        -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources"}]' || true
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system annotate daemonset speaker platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system patch daemonset speaker --type=merge \
+        -p '{"spec":{"template":{"metadata":{"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}}}}}'
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system patch daemonset speaker --type='json' \
+        -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources"}]' || true
 
       cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: metallb.io/v1beta1
