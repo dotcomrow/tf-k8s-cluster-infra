@@ -6725,6 +6725,13 @@ write_files:
 
             podSecurityContext:
               fsGroup: 999
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                cpu: "1"
+                memory: 1Gi
 
             # 6) Vault-plugin ENV configuration
             env:
