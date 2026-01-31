@@ -6762,6 +6762,15 @@ write_files:
             ingress:
               enabled: false
 
+          controller:
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: "2"
+                memory: 2Gi
+
           repoServer:
             image:
               repository: ghcr.io/dotcomrow/argocd-repo-server-avp
