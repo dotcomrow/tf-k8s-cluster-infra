@@ -5523,6 +5523,8 @@ write_files:
         --wait \
         --version=v24.9.2 \
         --set driver.enabled=false \
+        --set validator.driver.env[0].name=HOST_ROOT \
+        --set validator.driver.env[0].value=/host \
         --set toolkit.env[0].name=CONTAINERD_SOCKET \
         --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock" \
         --set devicePlugin.env[0].name=HOST_ULIMIT \
