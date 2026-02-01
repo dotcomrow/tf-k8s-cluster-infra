@@ -4805,12 +4805,20 @@ write_files:
         --set dashboard.auth.enabled=false \
         --set jaeger.enabled=true \
         --set dashboard.enforcedHostRegexp=".*" \
+        --set prometheus.resources.requests.memory=2Gi \
+        --set prometheus.resources.limits.memory=3Gi \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
       | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
 
       # 7) Tell Linkerd this namespace hosts the viz extension
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml \
         label ns linkerd-viz linkerd.io/extension=viz --overwrite
+
+      # Exclude Linkerd Prometheus from VPA adjustments (OOM-sensitive)
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n linkerd-viz \
+        label deployment/prometheus platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n linkerd-viz \
+        annotate deployment/prometheus platform.suncoast.systems/vpa-exclude=true --overwrite
 
       # 8) Validate the viz extension
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml
