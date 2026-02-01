@@ -5994,6 +5994,9 @@ write_files:
         namespace: vault
         labels:
           app: vault
+          platform.suncoast.systems/vpa-exclude: "true"
+        annotations:
+          platform.suncoast.systems/vpa-exclude: "true"
       spec:
         serviceName: vault
         replicas: 1
@@ -6022,12 +6025,26 @@ write_files:
                 command: ["sh", "-c"]
                 args:
                   - cp /usr/bin/kubectl /shared/kubectl && chmod +x /shared/kubectl
+                resources:
+                  requests:
+                    cpu: 50m
+                    memory: 64Mi
+                  limits:
+                    cpu: 200m
+                    memory: 128Mi
                 volumeMounts:
                   - name: shared-utils
                     mountPath: /shared
             containers:
               - name: vault
                 image: hashicorp/vault:${VAULT_VERSION}
+                resources:
+                  requests:
+                    cpu: 200m
+                    memory: 1Gi
+                  limits:
+                    cpu: 500m
+                    memory: 2Gi
                 env:
                   - name: VAULT_ADDR
                     value: "http://127.0.0.1:8200"
@@ -6073,18 +6090,21 @@ write_files:
                     port: 8200
                   failureThreshold: 60
                   periodSeconds: 5
+                  timeoutSeconds: 5
                 livenessProbe:
                   httpGet:
                     path: /v1/sys/health?standbyok=true
                     port: 8200
                   failureThreshold: 3
                   periodSeconds: 10
+                  timeoutSeconds: 5
                 readinessProbe:
                   httpGet:
                     path: /v1/sys/health?standbyok=true
                     port: 8200
                   failureThreshold: 2
                   periodSeconds: 5
+                  timeoutSeconds: 5
             volumes:
               - name: config
                 configMap:
@@ -6208,10 +6228,15 @@ write_files:
             # Discover namespace & pod name without new env vars:
             NS="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo vault)"
             POD="$HOSTNAME"
+            if [ -z "$POD" ]; then
+              POD="$(cat /etc/hostname 2>/dev/null || true)"
+            fi
 
             # Best-effort self-delete (don’t block the container exit)
-            if command -v kubectl >/dev/null 2>&1; then
+            if [ -n "$POD" ] && command -v kubectl >/dev/null 2>&1; then
               kubectl -n "$NS" delete pod "$POD" --wait=false || true
+            else
+              echo "WARN: pod name not found; skipping self-delete."
             fi
 
             # Exit non-zero so the container stops if deletion didn’t happen
