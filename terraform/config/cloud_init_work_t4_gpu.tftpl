@@ -66,6 +66,22 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  - path: /etc/systemd/system/host-root-rbind.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Bind mount host root at /host for NVIDIA runtime compatibility
+      After=local-fs.target
+      Before=containerd.service rke2-agent.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/sh -c 'mkdir -p /host; mountpoint -q /host || mount --rbind / /host'
+      RemainAfterExit=true
+
+      [Install]
+      WantedBy=multi-user.target
+
   - path: /usr/local/bin/initial-setup.sh
     permissions: '0755'
     content: |
@@ -97,6 +113,8 @@ write_files:
       /usr/local/bin/setup-longhorn-disk.sh
       systemctl restart systemd-journald || true
       /usr/local/bin/setup-docker.sh
+      systemctl enable host-root-rbind.service
+      systemctl start host-root-rbind.service
       /usr/local/bin/setup-nvidia.sh
       /usr/local/bin/setup-fluentbit.sh
       /usr/local/bin/setup-rke2.sh
