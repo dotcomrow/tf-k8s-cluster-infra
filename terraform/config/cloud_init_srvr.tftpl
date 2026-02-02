@@ -7020,6 +7020,44 @@ write_files:
         -p '{"metadata":{"annotations":{"teleport.dev/name":"policy-reporter-ui","teleport.dev/protocol":"http","teleport.dev/public-addr":"policy-reporter-ui.teleport.app.suncoast.systems","teleport.dev/description":"Policy Reporter UI Service"},"labels":{"app":"policy-reporter-ui","app.kubernetes.io/name":"policy-reporter-ui","app.kubernetes.io/component":"policy-reporter-ui","teleport.dev/enroll":"true"}}}' \
         -n policy-reporter
 
+      echo "Applying VPA exclusions to namespaces outside Applications/Infrastructure projects..."
+      KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
+      projects_json=$(sudo kubectl --kubeconfig="$KUBECONFIG_PATH" get projects.management.cattle.io -A -o json 2>/dev/null || true)
+      if [[ -z "$projects_json" ]]; then
+        echo "⚠️ Rancher projects not available; skipping VPA exclusion labeling."
+      else
+        declare -A allowed_project_ids
+        while IFS=$'\t' read -r proj_ns proj_name proj_label proj_display; do
+          if [[ "$proj_display" != "Applications" && "$proj_display" != "Infrastructure" && "$proj_name" != "applications" && "$proj_name" != "infrastructure" ]]; then
+            continue
+          fi
+          if [[ -n "$proj_ns" && -n "$proj_name" ]]; then
+            allowed_project_ids["${proj_ns}:${proj_name}"]=1
+          fi
+          if [[ -n "$proj_name" ]]; then
+            allowed_project_ids["${proj_name}"]=1
+          fi
+          if [[ -n "$proj_label" ]]; then
+            allowed_project_ids["${proj_label}"]=1
+          fi
+        done < <(echo "$projects_json" | jq -r '.items[] | [.metadata.namespace, .metadata.name, (.metadata.labels["field.cattle.io/projectId"] // ""), (.spec.displayName // "")] | @tsv')
+
+        if [[ ${#allowed_project_ids[@]} -eq 0 ]]; then
+          echo "⚠️ No Applications/Infrastructure project IDs found; skipping VPA exclusion labeling."
+        else
+          echo "Allowed Rancher project IDs for VPA: ${!allowed_project_ids[*]}"
+          while IFS=$'\t' read -r ns proj_label proj_ann; do
+            project_id="$proj_label"
+            if [[ -z "$project_id" ]]; then
+              project_id="$proj_ann"
+            fi
+            if [[ -z "$project_id" || -z "${allowed_project_ids[$project_id]:-}" ]]; then
+              sudo kubectl --kubeconfig="$KUBECONFIG_PATH" label ns "$ns" platform.suncoast.systems/vpa-exclude=true --overwrite
+            fi
+          done < <(sudo kubectl --kubeconfig="$KUBECONFIG_PATH" get ns -o json | jq -r '.items[] | [.metadata.name, (.metadata.labels["field.cattle.io/projectId"] // ""), (.metadata.annotations["field.cattle.io/projectId"] // "")] | @tsv')
+        fi
+      fi
+
       echo "Cleaning up uneeded resources..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace applications
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace infrastructure
