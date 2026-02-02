@@ -3471,6 +3471,7 @@ write_files:
         --set service.ports.http.port=5556 \
         --set ingress.enabled=true \
         --set ingress.className=nginx \
+        --set ingress.annotations."nginx\.ingress\.kubernetes\.io/app-root"="/dex" \
         --set ingress.hosts[0].host="openobserve-dex.teleport.app.${RANCHER_DOMAIN}" \
         --set ingress.hosts[0].paths[0].path="/" \
         --set ingress.hosts[0].paths[0].pathType=Prefix \
