@@ -3021,6 +3021,22 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=Available deployment/rancher-webhook -n cattle-system --timeout=120s
       echo "✅ Rancher webhook is ready."
 
+      echo "🔧 Tuning Rancher webhooks and excluding Rancher from VPA..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        label deployment/rancher platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        annotate deployment/rancher platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        patch deployment rancher --type=merge -p '{"spec":{"template":{"metadata":{"labels":{"platform.suncoast.systems/vpa-exclude":"true"},"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}}}}}'
+
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        label deployment/rancher-webhook platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        annotate deployment/rancher-webhook platform.suncoast.systems/vpa-exclude=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
+        patch deployment rancher-webhook --type=merge -p '{"spec":{"replicas":2,"template":{"metadata":{"labels":{"platform.suncoast.systems/vpa-exclude":"true"},"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}},"spec":{"containers":[{"name":"rancher-webhook","resources":{"requests":{"cpu":"100m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}},"livenessProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":6},"startupProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":60}}]}}}}'
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system rollout status deploy/rancher-webhook --timeout=180s
+
       # Confirm version matches
       sudo linkerd version --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
