@@ -15,7 +15,7 @@ variable "srvr_memory_gb" {
 
 variable "longhorn_guaranteed_instance_manager_cpu" {
   type    = number
-  default = 5
+  default = 3
 }
 
 # Upload cloud-init configuration to Proxmox as a snippet
