@@ -842,7 +842,7 @@ write_files:
         - "--max-pods=${WORK_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
-        - "--reserved-cpus=0,1"
+        - "--reserved-cpus=0"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
         - "--system-reserved=memory=2Gi"

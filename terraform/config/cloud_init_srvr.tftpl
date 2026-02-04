@@ -1965,7 +1965,7 @@ write_files:
         - "--max-pods=${SRVR_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
-        - "--reserved-cpus=0,1"
+        - "--reserved-cpus=0"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
         - "--system-reserved=memory=2Gi"
@@ -1992,13 +1992,13 @@ write_files:
         sleep 60
       done
       echo "✅ All nodes are Ready!"
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node dedicated=srvr-node --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node dedicated=srvr-node system=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node system=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu dedicated=work-node --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu dedicated=work-node-gpu --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu work-node=true --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node system=true --overwrite
 
   - path: /etc/systemd/system/bootstrap-rke2.service
     permissions: '0644'
@@ -7070,6 +7070,8 @@ write_files:
             fi
             if [[ -z "$project_id" || -z "${allowed_project_ids[$project_id]:-}" ]]; then
               sudo kubectl --kubeconfig="$KUBECONFIG_PATH" label ns "$ns" platform.suncoast.systems/vpa-exclude=true --overwrite
+              sudo kubectl --kubeconfig="$KUBECONFIG_PATH" label ns "$ns" platform.suncoast.systems/system=true --overwrite
+              sudo kubectl --kubeconfig="$KUBECONFIG_PATH" annotate ns "$ns" scheduler.alpha.kubernetes.io/affinity='{"nodeAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"preference":{"matchExpressions":[{"key":"system","operator":"In","values":["true"]}]}}]}}' --overwrite
             fi
           done < <(sudo kubectl --kubeconfig="$KUBECONFIG_PATH" get ns -o json | jq -r '.items[] | [.metadata.name, (.metadata.labels["field.cattle.io/projectId"] // ""), (.metadata.annotations["field.cattle.io/projectId"] // "")] | @tsv')
         fi
