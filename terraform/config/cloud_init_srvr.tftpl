@@ -1014,8 +1014,8 @@ write_files:
       [Service]
       ExecStart=
       ExecStart=/usr/lib/cockpit/cockpit-ws --no-tls --local-session=/usr/bin/cockpit-bridge --port=0
-      User=root
-      Group=root
+      User=ubuntu
+      Group=ubuntu
       EOF
 
       mkdir -p /etc/systemd/system/cockpit-wsinstance-https@.service.d
@@ -1023,8 +1023,8 @@ write_files:
       [Service]
       ExecStart=
       ExecStart=/usr/lib/cockpit/cockpit-ws --for-tls-proxy --local-session=/usr/bin/cockpit-bridge --port=0
-      User=root
-      Group=root
+      User=ubuntu
+      Group=ubuntu
       EOF
 
       systemctl daemon-reload
