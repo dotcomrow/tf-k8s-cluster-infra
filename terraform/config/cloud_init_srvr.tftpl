@@ -7050,10 +7050,11 @@ write_files:
       KUBECONFIG_PATH="/etc/rancher/rke2/rke2.yaml"
       projects_json=$(sudo kubectl --kubeconfig="$KUBECONFIG_PATH" get projects.management.cattle.io -A -o json 2>/dev/null || true)
       if [[ -z "$projects_json" ]]; then
-        echo "⚠️ Rancher projects not available; skipping VPA exclusion labeling."
+        echo "WARN: Rancher projects not available; skipping VPA exclusion labeling."
       else
         declare -A allowed_project_ids
-        while IFS="$(printf '\t')" read -r proj_ns proj_name proj_label proj_display; do
+        while IFS="$(printf '\t')" read -r proj_ns proj_name proj_label proj_display
+        do
           if [[ "$proj_display" != "Applications" && "$proj_display" != "Infrastructure" && "$proj_name" != "applications" && "$proj_name" != "infrastructure" ]]; then
             continue
           fi
@@ -7072,7 +7073,8 @@ write_files:
           echo "WARN: No Applications/Infrastructure project IDs found; skipping VPA exclusion labeling."
         else
           echo "Allowed Rancher project IDs for VPA: $${!allowed_project_ids[*]}"
-          while IFS="$(printf '\t')" read -r ns proj_label proj_ann; do
+          while IFS="$(printf '\t')" read -r ns proj_label proj_ann
+          do
             project_id="$proj_label"
             if [[ -z "$project_id" ]]; then
               project_id="$proj_ann"
