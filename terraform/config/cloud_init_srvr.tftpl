@@ -2289,7 +2289,7 @@ write_files:
       echo "🔧 Forcing Longhorn default replica count to 1..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
 
-      desired_instance_manager_cpu_value="{\"v1\":\"${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}\",\"v2\":\"${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}\"}"
+      desired_instance_manager_cpu_value="$(printf '{"v1":"%s","v2":"%s"}' "${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}" "${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}")"
       echo "🔧 Setting Longhorn guaranteed instance manager CPU to $${desired_instance_manager_cpu_value}..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io guaranteed-instance-manager-cpu --type=merge -p "{\"value\":\"$${desired_instance_manager_cpu_value}\"}"
       actual_instance_manager_cpu_value=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get settings.longhorn.io guaranteed-instance-manager-cpu -o jsonpath='{.value}')
