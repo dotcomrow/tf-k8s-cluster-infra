@@ -23,6 +23,11 @@ resource "google_project_iam_member" "rancher_logging_permission" {
   depends_on = [ google_project.infra ]
 }
 
+resource "google_service_account_key" "logging_key" {
+  service_account_id = google_service_account.rancher_sa.name
+  private_key_type   = "TYPE_GOOGLE_CREDENTIALS_FILE"
+}
+
 # Optional: External credentials block (e.g., for cloud-init or Secret)
 locals {
   rancher_credentials_json = google_service_account_key.logging_key.private_key
