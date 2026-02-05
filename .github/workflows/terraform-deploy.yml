@@ -193,6 +193,7 @@ jobs:
       - name: Trigger Terraform Destroy
         if: contains(fromJson('["rebuild-all", "rebuild-vms", "destroy-all"]'), env.MODE)
         run: |
+          set -euo pipefail
           WORKSPACE_NAME="${{ github.event.repository.name }}"
           ORG_NAME="${{ github.repository_owner }}"
           TOKEN="${{ secrets.TFE_TOKEN }}"
@@ -217,6 +218,10 @@ jobs:
 
           echo "Destroy target list (mode=$MODE):"
           echo "$TARGET_JSON"
+          echo "$TARGET_JSON" | jq -e 'type=="array" and length>0' >/dev/null || {
+            echo "❌ Refusing to run unscoped destroy: target list is empty or invalid."
+            exit 1
+          }
 
           DATA=$(jq -n \
             --arg wid "$WORKSPACE_ID" \
