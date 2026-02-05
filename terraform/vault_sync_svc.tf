@@ -77,7 +77,11 @@ locals {
 # --- DRY helpers ---
 locals {
   app_image  = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
-  tbot_image = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/thirdparty/teleport-bot-container@sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+  tbot_image_digest = "sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+  tbot_image_name   = "teleport-bot-container"
+  tbot_source_image = "ghcr.io/${var.GITHUB_ORG}/${local.tbot_image_name}@${local.tbot_image_digest}"
+  tbot_target_repo  = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/thirdparty/${local.tbot_image_name}"
+  tbot_image        = "${local.tbot_target_repo}@${local.tbot_image_digest}"
 
   app_env = [
     { name = "VAULT_ADDRS",              value = "${var.VAULT_ADDRESS},http://127.0.0.1:8200" },
@@ -96,6 +100,70 @@ locals {
     # { name = "TBOT_ARGS",       value = "start" },  # default is "start"
     # { name = "TBOT_DISABLED",   value = "" },       # set "1" to park sidecar
   ]
+}
+
+resource "null_resource" "tbot_image_sync" {
+  provisioner "local-exec" {
+    environment = {
+      GHCR_USER   = var.GITHUB_ORG
+      GHCR_PAT    = var.GHCR_PAT
+      PROJECT_ID  = google_project.infra.project_id
+      REGION      = var.region
+      SOURCE_IMG  = local.tbot_source_image
+      TARGET_REPO = local.tbot_target_repo
+      DIGEST      = local.tbot_image_digest
+    }
+
+    command = <<-EOT
+      #!/bin/bash
+      set -euo pipefail
+
+      export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
+      export DOCKER_CONFIG="$(pwd)/.docker"
+      mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
+
+      # Install gcloud CLI
+      curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
+      tar -xf google-cloud-cli-linux-x86_64.tar.gz
+      export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
+
+      # Authenticate to GCP
+      printf "%s" "$GOOGLE_CREDENTIALS" > key.json
+      gcloud auth activate-service-account --key-file=key.json
+      gcloud config set project "$PROJECT_ID"
+      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin "https://$REGION-docker.pkg.dev"
+      gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+
+      # Authenticate to GHCR (required if private)
+      echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      # Check if digest already exists in Artifact Registry
+      if gcloud artifacts docker images list "$TARGET_REPO" --format="get(digest)" | grep -q "$DIGEST"; then
+        echo "✅ tbot image already present in Artifact Registry: $TARGET_REPO@$DIGEST"
+        exit 0
+      fi
+
+      echo "📦 Pulling source image: $SOURCE_IMG"
+      docker pull "$SOURCE_IMG"
+
+      short_digest="$(echo "$DIGEST" | sed 's/^sha256://' | cut -c1-12)"
+      target_tag="$TARGET_REPO:mirror-$short_digest"
+
+      echo "🚀 Pushing to Artifact Registry: $target_tag"
+      docker tag "$SOURCE_IMG" "$target_tag"
+      docker push "$target_tag"
+
+      echo "✅ tbot image synced to Artifact Registry."
+    EOT
+  }
+
+  depends_on = [
+    google_artifact_registry_repository.thirdparty
+  ]
+
+  triggers = {
+    digest = local.tbot_image_digest
+  }
 }
 
 resource "google_cloud_run_v2_service" "vault_sync_svc" {
@@ -170,6 +238,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_project_iam_member.registry_permissions,
     google_project_iam_member.secret_manager_grant,
     null_resource.ghcr_to_gcp_image_sync,
+    null_resource.tbot_image_sync,
     google_service_account.eventarc_service_account,
     google_project_iam_member.cloud_run_secret_access,
     google_project_iam_member.eventarc_receive_auditlog,
@@ -283,4 +352,3 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     create_before_destroy = true
   }
 }
-
