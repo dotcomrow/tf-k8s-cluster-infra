@@ -4903,6 +4903,15 @@ write_files:
         exit 1
       fi
 
+      # Ensure Kyverno admission controller has enough capacity for policy validation
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno \
+        scale deploy/kyverno-admission-controller --replicas=2
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno \
+        set resources deploy/kyverno-admission-controller \
+        --requests=cpu=200m,memory=256Mi --limits=cpu=1,memory=512Mi
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno \
+        rollout status deploy/kyverno-admission-controller --timeout=180s
+
       echo "Installing policy reporter..."
       for i in $(seq 1 $RETRIES); do
         echo "Attempt $i to add Helm repo..."
