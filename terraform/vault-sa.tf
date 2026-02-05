@@ -1,5 +1,5 @@
 resource "google_kms_key_ring" "vault_infra_ring" {
-  name     = "vault-infra-ring"
+  name     = "vault-infra-ring-2"
   location = var.region
   project  = google_project.infra.project_id
 }
