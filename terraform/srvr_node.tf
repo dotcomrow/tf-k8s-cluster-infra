@@ -10,7 +10,7 @@ variable "srvr_cpu_sockets" {
 
 variable "srvr_memory_gb" {
   type    = number
-  default = 100
+  default = 102
 }
 
 variable "longhorn_guaranteed_instance_manager_cpu" {
