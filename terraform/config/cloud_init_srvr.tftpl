@@ -3038,7 +3038,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
         annotate deployment/rancher-webhook platform.suncoast.systems/vpa-exclude=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system \
-        patch deployment rancher-webhook --type=merge -p '{"spec":{"replicas":2,"template":{"metadata":{"labels":{"platform.suncoast.systems/vpa-exclude":"true"},"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}},"spec":{"containers":[{"name":"rancher-webhook","resources":{"requests":{"cpu":"100m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}},"livenessProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":6},"startupProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":60}}]}}}}'
+        patch deployment rancher-webhook --type=strategic -p '{"spec":{"replicas":2,"template":{"metadata":{"labels":{"platform.suncoast.systems/vpa-exclude":"true"},"annotations":{"platform.suncoast.systems/vpa-exclude":"true"}},"spec":{"containers":[{"name":"rancher-webhook","resources":{"requests":{"cpu":"100m","memory":"256Mi"},"limits":{"cpu":"500m","memory":"512Mi"}},"livenessProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":6},"startupProbe":{"timeoutSeconds":5,"periodSeconds":10,"failureThreshold":60}}]}}}}'
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system rollout status deploy/rancher-webhook --timeout=180s
 
       # Confirm version matches
