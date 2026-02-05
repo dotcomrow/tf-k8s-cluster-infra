@@ -7069,7 +7069,7 @@ write_files:
         done < <(echo "$projects_json" | jq -r '.items[] | [.metadata.namespace, .metadata.name, (.metadata.labels["field.cattle.io/projectId"] // ""), (.spec.displayName // "")] | @tsv')
 
         if [[ ${#allowed_project_ids[@]} -eq 0 ]]; then
-          echo "⚠️ No Applications/Infrastructure project IDs found; skipping VPA exclusion labeling."
+          echo "WARN: No Applications/Infrastructure project IDs found; skipping VPA exclusion labeling."
         else
           echo "Allowed Rancher project IDs for VPA: ${!allowed_project_ids[*]}"
           while IFS=$'\t' read -r ns proj_label proj_ann; do
