@@ -13,6 +13,7 @@ on:
           - apply-vms
           - rebuild-all
           - rebuild-vms
+          - destroy-all
           - apply-patch
           - state-cleanup
           - state-remove
@@ -190,7 +191,7 @@ jobs:
           '
 
       - name: Trigger Terraform Destroy
-        if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
+        if: contains(fromJson('["rebuild-all", "rebuild-vms", "destroy-all"]'), env.MODE)
         run: |
           WORKSPACE_NAME="${{ github.event.repository.name }}"
           ORG_NAME="${{ github.repository_owner }}"
@@ -250,7 +251,7 @@ jobs:
             https://app.terraform.io/api/v2/runs | jq
 
       - name: Wait for destroy to complete
-        if: contains(fromJson('["rebuild-all", "rebuild-vms"]'), env.MODE)
+        if: contains(fromJson('["rebuild-all", "rebuild-vms", "destroy-all"]'), env.MODE)
         run: |
           echo "🕐 Waiting 180 seconds to allow destroy to complete..."
           sleep 180
@@ -264,6 +265,7 @@ jobs:
           plan_only: false
 
       - name: Trigger Terraform Apply
+        if: ${{ github.event.inputs.mode != 'destroy-all' }}
         uses: hashicorp/tfc-workflows-github/actions/create-run@8e08d1ba957673f5fbf971a22b3219639dc45661
         with:
           workspace: ${{ github.event.repository.name }}
