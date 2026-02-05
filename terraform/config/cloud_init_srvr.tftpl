@@ -4882,9 +4882,9 @@ write_files:
       DELAY=5
 
       KYVERNO_VERSION="$(sudo helm search repo kyverno/kyverno --versions 2>/dev/null | awk 'NR==2 {print $2}')"
-      if [ -n "${KYVERNO_VERSION:-}" ]; then
-        echo "Using Kyverno chart version ${KYVERNO_VERSION}"
-        KYVERNO_HELM_VERSION_ARGS="--version ${KYVERNO_VERSION}"
+      if [ -n "$${KYVERNO_VERSION:-}" ]; then
+        echo "Using Kyverno chart version $${KYVERNO_VERSION}"
+        KYVERNO_HELM_VERSION_ARGS="--version $${KYVERNO_VERSION}"
       else
         echo "Unable to determine Kyverno chart version; installing latest available"
         KYVERNO_HELM_VERSION_ARGS=""
@@ -4892,7 +4892,7 @@ write_files:
 
       for i in $(seq 1 $RETRIES); do
         echo "Attempt $i to install Kyverno..."
-        sudo helm upgrade --install kyverno kyverno/kyverno -n kyverno --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml ${KYVERNO_HELM_VERSION_ARGS} && break
+        sudo helm upgrade --install kyverno kyverno/kyverno -n kyverno --create-namespace --kubeconfig=/etc/rancher/rke2/rke2.yaml $${KYVERNO_HELM_VERSION_ARGS} && break
 
         echo "Helm install failed. Retrying in $DELAY seconds..."
         sleep $DELAY
