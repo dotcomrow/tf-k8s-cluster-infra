@@ -2290,11 +2290,11 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io default-replica-count --type=merge -p '{"value":"1"}'
 
       desired_instance_manager_cpu_value="{\"v1\":\"${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}\",\"v2\":\"${LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU}\"}"
-      echo "🔧 Setting Longhorn guaranteed instance manager CPU to ${desired_instance_manager_cpu_value}..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io guaranteed-instance-manager-cpu --type=merge -p "{\"value\":\"${desired_instance_manager_cpu_value}\"}"
+      echo "🔧 Setting Longhorn guaranteed instance manager CPU to $${desired_instance_manager_cpu_value}..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch settings.longhorn.io guaranteed-instance-manager-cpu --type=merge -p "{\"value\":\"$${desired_instance_manager_cpu_value}\"}"
       actual_instance_manager_cpu_value=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get settings.longhorn.io guaranteed-instance-manager-cpu -o jsonpath='{.value}')
-      if [ "${actual_instance_manager_cpu_value}" != "${desired_instance_manager_cpu_value}" ]; then
-        echo "❌ Longhorn guaranteed instance manager CPU not applied. Expected ${desired_instance_manager_cpu_value}, got ${actual_instance_manager_cpu_value}"
+      if [ "$${actual_instance_manager_cpu_value}" != "$${desired_instance_manager_cpu_value}" ]; then
+        echo "❌ Longhorn guaranteed instance manager CPU not applied. Expected $${desired_instance_manager_cpu_value}, got $${actual_instance_manager_cpu_value}"
         exit 1
       fi
 
