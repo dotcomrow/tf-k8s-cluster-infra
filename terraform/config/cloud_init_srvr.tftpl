@@ -6200,6 +6200,9 @@ write_files:
 
           SEAL_JSON=/etc/vault/vault-unseal-sa.json
           CONF=/vault/config/vault.hcl
+          BOOTSTRAP_SENTINEL_DATA=/vault/data/.bootstrap-complete
+          BOOTSTRAP_SENTINEL_CREDS=/vault/creds-data/bootstrap-complete
+          BOOTSTRAP_WIPE_MARK=/vault/creds-data/bootstrap-wipe-attempted
 
           echo "Preflight: waiting for \$SEAL_JSON and \$CONF ..."
           i=0
@@ -6208,6 +6211,13 @@ write_files:
             sleep 1
           done
           echo "Preflight OK."
+
+          # If init.json exists, clear any stale init-in-progress lock before starting Vault
+          if [ -s /vault/data/init.json ]; then
+            for f in /vault/data/core/init /vault/data/core/init.lock /vault/data/core/init.lck; do
+              [ -f "\$f" ] && rm -f "\$f" || true
+            done
+          fi
 
           vault server -config="\$CONF" &
           VAULT_PID=\$!
@@ -6261,6 +6271,25 @@ write_files:
             fi
           fi
 
+          # If initialized+sealed and an init lock exists, clear it once (prevents "init in progress" deadlock)
+          if is_initialized && is_sealed; then
+            INIT_LOCK="/vault/data/core/init"
+            if [ -f "\$INIT_LOCK" ]; then
+              if [ -s /vault/data/init.json ]; then
+                echo "⚠️ Detected init lock file; clearing to allow unseal..."
+                rm -f "\$INIT_LOCK"
+                echo "Restarting Vault after clearing init lock..."
+                kill \$VAULT_PID
+                wait \$VAULT_PID || true
+                vault server -config="\$CONF" &
+                VAULT_PID=\$!
+                sleep 5
+              else
+                echo "❌ Init lock present but /vault/data/init.json missing; cannot auto-recover."
+              fi
+            fi
+          fi
+
           echo "Waiting for Vault to become unsealed..."
           for _ in \$(seq 1 120); do
             if is_unsealed; then break; fi
@@ -6275,6 +6304,25 @@ write_files:
                 vault operator unseal "\$RECOVERY_KEY" || true
                 sleep 3
               fi
+            fi
+          fi
+
+          # If still sealed and we haven't completed bootstrap, wipe data once and retry
+          if ! is_unsealed; then
+            if [ ! -f "\$BOOTSTRAP_SENTINEL_DATA" ] && [ ! -f "\$BOOTSTRAP_SENTINEL_CREDS" ] && [ ! -f "\$BOOTSTRAP_WIPE_MARK" ]; then
+              echo "⚠️ Unseal failed during initial bootstrap; wiping /vault/data and retrying once..."
+              touch "\$BOOTSTRAP_WIPE_MARK" || true
+              kill \$VAULT_PID
+              wait \$VAULT_PID || true
+              find /vault/data -mindepth 1 -delete || true
+              vault server -config="\$CONF" &
+              VAULT_PID=\$!
+              sleep 5
+
+              for _ in \$(seq 1 120); do
+                if is_unsealed; then break; fi
+                sleep 2
+              done
             fi
           fi
 
@@ -6301,6 +6349,7 @@ write_files:
           fi
 
           echo "✅ Vault is unsealed"
+          touch "\$BOOTSTRAP_SENTINEL_DATA" "\$BOOTSTRAP_SENTINEL_CREDS" || true
 
           # Install jq/wget for later steps (same as before)
           apk add --no-cache jq wget >/dev/null 2>&1 || true
