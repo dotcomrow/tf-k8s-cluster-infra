@@ -6449,6 +6449,9 @@ write_files:
             exit 1
           fi
 
+          # Mark bootstrap complete once we have a valid root token
+          touch "\$BOOTSTRAP_SENTINEL_DATA" "\$BOOTSTRAP_SENTINEL_CREDS" || true
+
           # Wait for Vault to be unsealed and ready (jq now available)
           until vault status -format=json | jq -e '.sealed == false' >/dev/null; do
             echo "Waiting for Vault to be unsealed..."
