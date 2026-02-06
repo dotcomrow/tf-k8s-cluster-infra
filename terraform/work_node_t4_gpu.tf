@@ -182,6 +182,7 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
   }
 
   depends_on = [ 
+    null_resource.download_iso,
     proxmox_virtual_environment_vm.srvr_rancher_vm,
     null_resource.delay_before_vm_work_t4_gpu
   ]

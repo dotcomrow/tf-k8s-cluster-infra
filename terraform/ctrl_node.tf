@@ -149,6 +149,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
   }
 
   depends_on = [ 
+    null_resource.download_iso,
     proxmox_virtual_environment_vm.srvr_rancher_vm,
     null_resource.delay_before_vm_ctrl
   ]
