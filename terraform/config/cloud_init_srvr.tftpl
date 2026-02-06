@@ -6015,7 +6015,7 @@ write_files:
           seal "gcpckms" {
             project     = "${GCP_PROJECT_ID}"
             region      = "${GCP_REGION}"
-            key_ring    = "vault-infra-ring"
+            key_ring    = "${VAULT_KMS_KEY_RING}"
             crypto_key  = "vault-unseal"
             credentials = "/etc/vault/vault-unseal-sa.json"
           }
@@ -6219,8 +6219,7 @@ write_files:
           }
           do_init() {
             INIT_JSON="$${INIT_JSON:-/vault/data/init.json}"
-            init_dir="$(dirname "$INIT_JSON" 2>/dev/null || true)"
-            [ -n "$init_dir" ] || init_dir="/vault/data"
+            init_dir="/vault/data"
             mkdir -p "$init_dir"
             tmp="$init_dir/.init.json.tmp"
             rm -f "$tmp"

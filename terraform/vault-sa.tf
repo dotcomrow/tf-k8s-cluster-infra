@@ -2,6 +2,10 @@ resource "google_kms_key_ring" "vault_infra_ring" {
   name     = "vault-infra-ring-2"
   location = var.region
   project  = google_project.infra.project_id
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_kms_crypto_key" "vault_crypto_key" {
@@ -9,6 +13,10 @@ resource "google_kms_crypto_key" "vault_crypto_key" {
   key_ring        = google_kms_key_ring.vault_infra_ring.id
   purpose         = "ENCRYPT_DECRYPT"
   rotation_period = "100000s"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "google_service_account" "vault_crypto_unseal_acct" {
@@ -82,7 +90,7 @@ resource "null_resource" "kms_iam_binding" {
 
       ./google-cloud-sdk/bin/gcloud kms keys add-iam-policy-binding vault-unseal \
         --location=${var.region} \
-        --keyring=vault-infra-ring \
+        --keyring=${google_kms_key_ring.vault_infra_ring.name} \
         --member="serviceAccount:${google_service_account.vault_crypto_unseal_acct.email}" \
         --role="projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto_role.role_id}" \
         --project=${google_project.infra.project_id}
