@@ -6218,7 +6218,7 @@ write_files:
             [ -s "$INIT_JSON" ] && grep -q '"root_token"' "$INIT_JSON"
           }
           do_init() {
-            INIT_JSON="${INIT_JSON:-/vault/data/init.json}"
+            INIT_JSON="$${INIT_JSON:-/vault/data/init.json}"
             init_dir="$(dirname "$INIT_JSON" 2>/dev/null || true)"
             [ -n "$init_dir" ] || init_dir="/vault/data"
             mkdir -p "$init_dir"
