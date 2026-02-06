@@ -32,7 +32,7 @@ resource "google_service_account_key" "vault_crypto_key" {
   depends_on = [
     google_service_account.vault_crypto_unseal_acct,
     google_kms_crypto_key.vault_crypto_key,
-    null_resource.kms_iam_binding
+    google_kms_crypto_key_iam_member.vault_unseal_member
   ]
 }
 
@@ -67,33 +67,14 @@ resource "null_resource" "wait_for_custom_role" {
   }
 }
 
-resource "null_resource" "kms_iam_binding" {
+resource "google_kms_crypto_key_iam_member" "vault_unseal_member" {
+  crypto_key_id = google_kms_crypto_key.vault_crypto_key.id
+  role          = "projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto_role.role_id}"
+  member        = "serviceAccount:${google_service_account.vault_crypto_unseal_acct.email}"
+
   depends_on = [
-    google_kms_crypto_key.vault_crypto_key,
     google_service_account.vault_crypto_unseal_acct,
-    null_resource.wait_for_custom_role,
-    google_kms_crypto_key.vault_crypto_key
+    google_kms_crypto_key.vault_crypto_key,
+    null_resource.wait_for_custom_role
   ]
-
-  provisioner "local-exec" {
-    command = <<EOT
-      echo "Applying IAM binding for Vault KMS..."
-
-      curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
-      tar -xf google-cloud-cli-linux-x86_64.tar.gz
-      ./google-cloud-sdk/install.sh
-      printf '%s' "$GOOGLE_CREDENTIALS" > key.json
-
-      ./google-cloud-sdk/bin/gcloud auth activate-service-account --key-file=key.json
-      ./google-cloud-sdk/bin/gcloud config set project ${google_project.infra.project_id}
-      ./google-cloud-sdk/bin/gcloud config set compute/region ${var.region}
-
-      ./google-cloud-sdk/bin/gcloud kms keys add-iam-policy-binding vault-unseal \
-        --location=${var.region} \
-        --keyring=${google_kms_key_ring.vault_infra_ring.name} \
-        --member="serviceAccount:${google_service_account.vault_crypto_unseal_acct.email}" \
-        --role="projects/${google_project.infra.project_id}/roles/${google_project_iam_custom_role.vault_kms_crypto_role.role_id}" \
-        --project=${google_project.infra.project_id}
-    EOT
-  }
 }

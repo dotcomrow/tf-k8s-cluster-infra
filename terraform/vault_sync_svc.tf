@@ -243,7 +243,7 @@ resource "google_cloud_run_v2_service" "vault_sync_svc" {
     google_service_account.eventarc_service_account,
     google_project_iam_member.cloud_run_secret_access,
     google_project_iam_member.eventarc_receive_auditlog,
-    null_resource.kms_iam_binding,
+    google_kms_crypto_key_iam_member.vault_unseal_member,
     google_project_iam_member.cloud_run_secret_list,
   ]
 }
