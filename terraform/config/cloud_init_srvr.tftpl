@@ -6131,21 +6131,21 @@ write_files:
                 # --- Probes (minimal addition) ---
                 startupProbe:
                   httpGet:
-                    path: /v1/sys/health?standbyok=true&sealedcode=503&uninitcode=501
+                    path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
                     port: 8200
                   failureThreshold: 60
                   periodSeconds: 5
                   timeoutSeconds: 5
                 livenessProbe:
                   httpGet:
-                    path: /v1/sys/health?standbyok=true
+                    path: /v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204
                     port: 8200
                   failureThreshold: 3
                   periodSeconds: 10
                   timeoutSeconds: 5
                 readinessProbe:
                   httpGet:
-                    path: /v1/sys/health?standbyok=true
+                    path: /v1/sys/health?standbyok=true&sealedcode=503&uninitcode=503
                     port: 8200
                   failureThreshold: 2
                   periodSeconds: 5
@@ -6268,7 +6268,18 @@ write_files:
             sleep 2
           done
           if ! is_unsealed; then
-            echo "❌ Vault did not unseal in time; deleting this pod to retry cleanly."
+            echo "⚠️ Vault did not auto-unseal in time; attempting recovery-key unseal..."
+            if [ -f /vault/data/init.json ]; then
+              RECOVERY_KEY="\$(jq -r '.recovery_keys_b64[0] // empty' /vault/data/init.json 2>/dev/null || true)"
+              if [ -n "\$RECOVERY_KEY" ]; then
+                vault operator unseal "\$RECOVERY_KEY" || true
+                sleep 3
+              fi
+            fi
+          fi
+
+          if ! is_unsealed; then
+            echo "❌ Vault still sealed after fallback; deleting this pod to retry cleanly."
 
             # Discover namespace & pod name without new env vars:
             NS="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo vault)"
