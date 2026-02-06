@@ -18,3 +18,11 @@ resource "null_resource" "download_iso" {
     google_project.infra
   ]
 }
+
+resource "null_resource" "gate_after_etcd" {
+  count = var.serialize_vm_rollout ? 1 : 0
+
+  depends_on = [
+    proxmox_virtual_environment_vm.etcd_rancher_vm
+  ]
+}
