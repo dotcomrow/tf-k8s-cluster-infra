@@ -6269,8 +6269,8 @@ write_files:
             sleep 1
           done
 
-          # If no valid init.json and no bootstrap sentinel, force an init attempt (fresh cluster path)
-          if ! init_json_valid && [ ! -f "\$BOOTSTRAP_SENTINEL_DATA" ] && [ ! -f "\$BOOTSTRAP_SENTINEL_CREDS" ]; then
+          # If no valid init.json and no bootstrap sentinel, force an init attempt only if Vault is uninitialized
+          if ! init_json_valid && [ ! -f "\$BOOTSTRAP_SENTINEL_DATA" ] && [ ! -f "\$BOOTSTRAP_SENTINEL_CREDS" ] && is_uninitialized; then
             echo "No valid init.json/sentinel found; forcing Vault init for fresh bootstrap..."
             if ! do_init; then
               echo "Init failed; wiping /vault/data and retrying init once..."
@@ -6400,20 +6400,57 @@ write_files:
           fi
 
           echo "✅ Vault is unsealed"
-          touch "\$BOOTSTRAP_SENTINEL_DATA" "\$BOOTSTRAP_SENTINEL_CREDS" || true
 
           # Install jq/wget for later steps (same as before)
           apk add --no-cache jq wget >/dev/null 2>&1 || true
 
           # ---- Existing bootstrap (kept intact) ----
 
-          # Initialize if necessary (convenience; state is already validated)
-          if ! init_json_valid; then
+          # Resolve root token (init.json or existing secret) before bootstrap actions
+          get_root_token_from_secret() {
+            TOKEN_B64=""
+            TOKEN=""
+            if kubectl -n vault get secret vault-root-token >/dev/null 2>&1; then
+              TOKEN_B64="$(kubectl -n vault get secret vault-root-token -o jsonpath='{.data.VAULT_TOKEN}' 2>/dev/null || true)"
+            fi
+            if [ -n "\$TOKEN_B64" ]; then
+              if command -v base64 >/dev/null 2>&1; then
+                TOKEN="$(echo "\$TOKEN_B64" | base64 -d)"
+              elif command -v openssl >/dev/null 2>&1; then
+                TOKEN="$(echo "\$TOKEN_B64" | openssl base64 -d)"
+              fi
+            fi
+            echo "\$TOKEN"
+          }
+
+          ROOT_TOKEN=""
+          if init_json_valid; then
+            ROOT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON" 2>/dev/null || true)"
+          fi
+          if [ -z "\$ROOT_TOKEN" ]; then
+            ROOT_TOKEN="\$(get_root_token_from_secret || true)"
+          fi
+
+          # If Vault is initialized but we still have no token and bootstrap hasn't completed, reset data once.
+          if [ -z "\$ROOT_TOKEN" ] && is_initialized && [ ! -f "\$BOOTSTRAP_SENTINEL_DATA" ] && [ ! -f "\$BOOTSTRAP_SENTINEL_CREDS" ]; then
+            echo "⚠️ Vault initialized but no root token available; resetting /vault/data for fresh bootstrap..."
+            kill \$VAULT_PID
+            wait \$VAULT_PID || true
+            find /vault/data -mindepth 1 -delete || true
+            vault server -config="\$CONF" &
+            VAULT_PID=\$!
+            sleep 5
             do_init || true
+            ROOT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON" 2>/dev/null || true)"
+          fi
+
+          if [ -z "\$ROOT_TOKEN" ]; then
+            echo "❌ Vault initialized but no root token available; cannot complete bootstrap."
+            exit 1
           fi
 
           # Wait for Vault to be unsealed and ready (jq now available)
-          until vault status -format=json | jq -e '.sealed == false'; do
+          until vault status -format=json | jq -e '.sealed == false' >/dev/null; do
             echo "Waiting for Vault to be unsealed..."
             sleep 2
           done
@@ -6422,12 +6459,12 @@ write_files:
           cat <<EOF > /vault/data/admin-policy.hcl
           path "*" { capabilities = ["create","read","update","delete","list","sudo"] }
           EOF
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault policy write admin /vault/data/admin-policy.hcl
+          VAULT_TOKEN="\$ROOT_TOKEN" vault policy write admin /vault/data/admin-policy.hcl
 
           # Enable auth methods (idempotent)
           for m in oidc kubernetes approle; do
-            VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault auth list -format=json | grep -q "\"\$m/\"" || \
-            VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault auth enable "\$m"
+            VAULT_TOKEN="\$ROOT_TOKEN" vault auth list -format=json | grep -q "\"\$m/\"" || \
+            VAULT_TOKEN="\$ROOT_TOKEN" vault auth enable "\$m"
           done
 
           # Kubernetes auth config (use long-lived SA token for reviewer)
@@ -6476,40 +6513,40 @@ write_files:
             sleep 2
           done
           kubectl -n vault get cm kube-root-ca.crt -o jsonpath='{.data.ca\.crt}' > /vault/data/k8s-ca.crt
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write auth/kubernetes/config \
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write auth/kubernetes/config \
             token_reviewer_jwt="\$TOKEN" \
             kubernetes_host="https://\$KUBERNETES_SERVICE_HOST:\$KUBERNETES_SERVICE_PORT_HTTPS" \
             kubernetes_ca_cert=@/vault/data/k8s-ca.crt \
             disable_iss_validation=true
 
           # Enable KV v2
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault secrets enable -path=secret -version=2 kv || true
+          VAULT_TOKEN="\$ROOT_TOKEN" vault secrets enable -path=secret -version=2 kv || true
 
           # Policies
           cat <<EOF > /vault/data/avp-policy.hcl
           path "secret/data/*" { capabilities = ["read"] }
           EOF
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault policy write vault-sync - <<EOF
+          VAULT_TOKEN="\$ROOT_TOKEN" vault policy write vault-sync - <<EOF
           path "secret/data/*" { capabilities = ["create","read","update","delete"] }
           path "secret/metadata/*" { capabilities = ["read","delete","list"] }
           path "secret/*" { capabilities = ["list"] }
           EOF
-          cat <<EOF | VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault policy write avp -
+          cat <<EOF | VAULT_TOKEN="\$ROOT_TOKEN" vault policy write avp -
           path "secret/data/*" { capabilities = ["read"] }
           EOF
 
           # AppRole for AVP
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write auth/approle/role/vault-sync \
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write auth/approle/role/vault-sync \
             token_ttl=1h token_max_ttl=4h bind_secret_id=true secret_id_bound_cidrs=0.0.0.0/0 policies=vault-sync
 
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault read -field=role_id auth/approle/role/vault-sync/role-id > /vault/creds-data/role_id.txt
+          VAULT_TOKEN="\$ROOT_TOKEN" vault read -field=role_id auth/approle/role/vault-sync/role-id > /vault/creds-data/role_id.txt
           echo >> /vault/creds-data/role_id.txt
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
           echo >> /vault/creds-data/secret_id.txt
 
           # Store root token
           kubectl create secret generic vault-root-token \
-            --from-literal=VAULT_TOKEN=\$(jq -r '.root_token' "$INIT_JSON") \
+            --from-literal=VAULT_TOKEN=\$ROOT_TOKEN \
             -n vault || kubectl -n vault get secret vault-root-token >/dev/null
 
           # GCP identifiers for the follow-up job
@@ -6518,7 +6555,7 @@ write_files:
           echo "vault-sync-run-container" > /vault/creds-data/service_name.txt
 
           # ArgoCD role for AVP
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write auth/kubernetes/role/argocd \
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write auth/kubernetes/role/argocd \
             bound_service_account_names=argocd-repo-server \
             bound_service_account_namespaces=argocd \
             policies=avp ttl=24h
@@ -6529,13 +6566,13 @@ write_files:
             wget -q --spider "\$DISC_URL" && break || true
             echo "Waiting for Dex discovery (\$i/12)..."; sleep 5
           done
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write auth/oidc/config \
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write auth/oidc/config \
             oidc_discovery_url="https://vault-dex.teleport.app.${RANCHER_DOMAIN}" \
             oidc_client_id="\$(cat /etc/vault-oidc/client_id)" \
             oidc_client_secret="\$(cat /etc/vault-oidc/client_secret)" \
             default_role="default" || true
 
-          VAULT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON")" vault write auth/oidc/role/default \
+          VAULT_TOKEN="\$ROOT_TOKEN" vault write auth/oidc/role/default \
             bound_audiences="\$(cat /etc/vault-oidc/client_id)" \
             user_claim="email" \
             groups_claim="groups" \
