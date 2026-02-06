@@ -6200,7 +6200,6 @@ write_files:
 
           SEAL_JSON=/etc/vault/vault-unseal-sa.json
           CONF=/vault/config/vault.hcl
-          INIT_JSON=/vault/data/init.json
           INIT_FLAG=/vault/data/core/_seal-initialization-flag
           BOOTSTRAP_SENTINEL_DATA=/vault/data/.bootstrap-complete
           BOOTSTRAP_SENTINEL_CREDS=/vault/creds-data/bootstrap-complete
@@ -6215,17 +6214,16 @@ write_files:
           echo "Preflight OK."
 
           init_json_valid() {
-            [ -s "$INIT_JSON" ] && grep -q '"root_token"' "$INIT_JSON"
+            [ -s /vault/data/init.json ] && grep -q '"root_token"' /vault/data/init.json
           }
           do_init() {
-            INIT_JSON="$${INIT_JSON:-/vault/data/init.json}"
             init_dir="/vault/data"
             mkdir -p "$init_dir"
             tmp="$init_dir/.init.json.tmp"
             rm -f "$tmp"
             if vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"; then
               if grep -q '"root_token"' "$tmp"; then
-                mv "$tmp" "$INIT_JSON"
+                mv "$tmp" /vault/data/init.json
                 return 0
               fi
             fi
@@ -6350,7 +6348,7 @@ write_files:
           if ! is_unsealed; then
             echo "⚠️ Vault did not auto-unseal in time; attempting recovery-key unseal..."
             if init_json_valid; then
-              RECOVERY_KEY="\$(jq -r '.recovery_keys_b64[0] // empty' "$INIT_JSON" 2>/dev/null || true)"
+              RECOVERY_KEY="\$(jq -r '.recovery_keys_b64[0] // empty' /vault/data/init.json 2>/dev/null || true)"
               if [ -n "\$RECOVERY_KEY" ]; then
                 vault operator unseal "\$RECOVERY_KEY" || true
                 sleep 3
@@ -6425,7 +6423,7 @@ write_files:
 
           ROOT_TOKEN=""
           if init_json_valid; then
-            ROOT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON" 2>/dev/null || true)"
+            ROOT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json 2>/dev/null || true)"
           fi
           if [ -z "\$ROOT_TOKEN" ]; then
             ROOT_TOKEN="\$(get_root_token_from_secret || true)"
@@ -6441,7 +6439,7 @@ write_files:
             VAULT_PID=\$!
             sleep 5
             do_init || true
-            ROOT_TOKEN="\$(jq -r '.root_token' "$INIT_JSON" 2>/dev/null || true)"
+            ROOT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json 2>/dev/null || true)"
           fi
 
           if [ -z "\$ROOT_TOKEN" ]; then
