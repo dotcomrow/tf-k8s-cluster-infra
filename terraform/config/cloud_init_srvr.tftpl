@@ -6218,10 +6218,15 @@ write_files:
             [ -s "$INIT_JSON" ] && grep -q '"root_token"' "$INIT_JSON"
           }
           do_init() {
-            tmp="$(mktemp)"
+            tmp_dir="$(dirname "$INIT_JSON")"
+            tmp="$tmp_dir/.init.json.tmp"
+            mkdir -p "$tmp_dir"
+            rm -f "$tmp"
             if vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"; then
-              mv "$tmp" "$INIT_JSON"
-              return 0
+              if grep -q '"root_token"' "$tmp"; then
+                mv "$tmp" "$INIT_JSON"
+                return 0
+              fi
             fi
             rm -f "$tmp"
             return 1
