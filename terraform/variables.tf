@@ -160,6 +160,12 @@ variable "VM_DISK_STORAGE" {
   default = "Cluster"
 }
 
+variable "serialize_vm_rollout" {
+  description = "If true, enforce srvr -> etcd -> all other VMs ordering (others remain parallel)."
+  type        = bool
+  default     = false
+}
+
 variable "UBUNTU_RELEASE_CODE_NAME" {
   default = "noble"
 }
