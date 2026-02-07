@@ -7092,6 +7092,25 @@ write_files:
         fi
       fi
 
+      echo "Assigning specific cattle-* namespaces to the Rancher System project (so they are not 'Not in a project')..."
+      system_project_name=$(sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n local get projects.management.cattle.io -o json | \
+        jq -r '.items[] | select(.spec.displayName=="System") | .metadata.name' | head -n1)
+      if [[ -z "$system_project_name" ]]; then
+        echo "WARN: Could not determine Rancher System project id; skipping explicit project assignment for cattle-* namespaces."
+      else
+        for ns in cattle-capi-system cattle-turtles-system cattle-ui-plugin-system; do
+          if sudo kubectl --kubeconfig="$KUBECONFIG_PATH" get ns "$ns" >/dev/null 2>&1; then
+            if sudo kubectl --kubeconfig="$KUBECONFIG_PATH" annotate ns "$ns" field.cattle.io/projectId="local:$system_project_name" --overwrite; then
+              echo "✅ Assigned namespace '$ns' to System project (local:$system_project_name)"
+            else
+              echo "WARN: Failed assigning namespace '$ns' to System project (local:$system_project_name)"
+            fi
+          else
+            echo "INFO: Namespace '$ns' not found; skipping"
+          fi
+        done
+      fi
+
       echo "Cleaning up uneeded resources..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace applications
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete namespace infrastructure
