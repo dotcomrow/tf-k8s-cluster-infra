@@ -6380,15 +6380,15 @@ write_files:
             echo "❌ Vault still sealed after fallback; deleting this pod to retry cleanly."
 
             # Discover namespace & pod name without new env vars:
-            NS="$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo vault)"
-            POD="$HOSTNAME"
-            if [ -z "$POD" ]; then
-              POD="$(cat /etc/hostname 2>/dev/null || true)"
+            NS="\$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || echo vault)"
+            POD="\$HOSTNAME"
+            if [ -z "\$POD" ]; then
+              POD="\$(cat /etc/hostname 2>/dev/null || true)"
             fi
 
             # Best-effort self-delete (don’t block the container exit)
-            if [ -n "$POD" ] && command -v kubectl >/dev/null 2>&1; then
-              kubectl -n "$NS" delete pod "$POD" --wait=false || true
+            if [ -n "\$POD" ] && command -v kubectl >/dev/null 2>&1; then
+              kubectl -n "\$NS" delete pod "\$POD" --wait=false || true
             else
               echo "WARN: pod name not found; skipping self-delete."
             fi
@@ -6410,13 +6410,13 @@ write_files:
             TOKEN_B64=""
             TOKEN=""
             if kubectl -n vault get secret vault-root-token >/dev/null 2>&1; then
-              TOKEN_B64="$(kubectl -n vault get secret vault-root-token -o jsonpath='{.data.VAULT_TOKEN}' 2>/dev/null || true)"
+              TOKEN_B64="\$(kubectl -n vault get secret vault-root-token -o jsonpath='{.data.VAULT_TOKEN}' 2>/dev/null || true)"
             fi
             if [ -n "\$TOKEN_B64" ]; then
               if command -v base64 >/dev/null 2>&1; then
-                TOKEN="$(echo "\$TOKEN_B64" | base64 -d)"
+                TOKEN="\$(echo "\$TOKEN_B64" | base64 -d)"
               elif command -v openssl >/dev/null 2>&1; then
-                TOKEN="$(echo "\$TOKEN_B64" | openssl base64 -d)"
+                TOKEN="\$(echo "\$TOKEN_B64" | openssl base64 -d)"
               fi
             fi
             echo "\$TOKEN"
