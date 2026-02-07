@@ -5790,7 +5790,10 @@ write_files:
         sudo kubectl apply --kubeconfig=/etc/rancher/rke2/rke2.yaml -f -
 
       # installing vault
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # NOTE: This must NOT be an unquoted heredoc, otherwise the SRVR node shell will expand $vars
+      # inside embedded YAML (including the Vault bootstrap script), causing hard-to-debug breakage.
+      # We inject only the one runtime secret we actually need via a placeholder+sed.
+      cat <<'EOF' | sed -e "s|__VAULT_OIDC_SECRET__|$VAULT_OIDC_SECRET|g" -e 's/\\\$/$/g' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Secret
       metadata:
@@ -5869,7 +5872,7 @@ write_files:
       type: Opaque
       stringData:
         client_id: "vault"
-        client_secret: "$VAULT_OIDC_SECRET"
+        client_secret: "__VAULT_OIDC_SECRET__"
         redirect_uri: "https://vault.teleport.app.${RANCHER_DOMAIN}/ui/vault/auth/oidc/oidc/callback"
       ---
       apiVersion: v1
@@ -5906,7 +5909,7 @@ write_files:
             redirectURIs:
             - "https://vault.teleport.app.${RANCHER_DOMAIN}/ui/vault/auth/oidc/oidc/callback"
             name: "Vault UI"
-            secret: "$VAULT_OIDC_SECRET"
+            secret: "__VAULT_OIDC_SECRET__"
 
           connectors:
           - type: github
