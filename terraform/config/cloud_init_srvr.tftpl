@@ -6221,15 +6221,14 @@ write_files:
               echo "❌ /vault/data is missing; cannot init Vault"
               return 1
             fi
-            tmp="/vault/data/.init.json.tmp"
-            rm -f "$tmp"
-            if vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"; then
-              if grep -q '"root_token"' "$tmp"; then
-                mv "$tmp" /vault/data/init.json
+            rm -f /vault/data/.init.json.tmp
+            if vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /vault/data/.init.json.tmp; then
+              if grep -q '"root_token"' /vault/data/.init.json.tmp; then
+                mv /vault/data/.init.json.tmp /vault/data/init.json
                 return 0
               fi
             fi
-            rm -f "$tmp"
+            rm -f /vault/data/.init.json.tmp
             return 1
           }
 
