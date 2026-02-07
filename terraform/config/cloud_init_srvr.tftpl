@@ -6217,11 +6217,9 @@ write_files:
             [ -s /vault/data/init.json ] && grep -q '"root_token"' /vault/data/init.json
           }
           do_init() {
-            if [ ! -d /vault/data ]; then
-              echo "❌ /vault/data is missing; cannot init Vault"
-              return 1
-            fi
-            tmp="/vault/data/.init.json.tmp"
+            init_dir="/vault/data"
+            mkdir -p "$init_dir"
+            tmp="$init_dir/.init.json.tmp"
             rm -f "$tmp"
             if vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"; then
               if grep -q '"root_token"' "$tmp"; then
