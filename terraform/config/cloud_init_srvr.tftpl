@@ -2196,7 +2196,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n metallb-system patch daemonset speaker --type='json' \
         -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources"}]' || true
 
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: metallb.io/v1beta1
       kind: IPAddressPool
       metadata:
@@ -2236,7 +2236,7 @@ write_files:
       done
 
       echo "🔧 Setting Longhorn defaults/configmaps to 1 replica..."
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: ConfigMap
       metadata:
@@ -2305,7 +2305,7 @@ write_files:
       echo "🔄 Recreating Longhorn StorageClasses with 1 replica..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml delete storageclass longhorn longhorn-rwx --ignore-not-found
 
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: storage.k8s.io/v1
       kind: StorageClass
       metadata:
@@ -2697,7 +2697,7 @@ write_files:
         exit 1
       fi
 
-      cat <<EOF | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: management.cattle.io/v3
       kind: Project
       metadata:
@@ -2767,7 +2767,7 @@ write_files:
       tls: true
       type: githubConfig
       logoutAllSupported: false
-      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
+      rancherUrl: 'https://${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}'
       allowedPrincipalIds:
         - 'github_team:${GITHUB_AUTH_VAL}'
       scopes:
@@ -2854,7 +2854,7 @@ write_files:
 
       # 4. Add Linode node driver
       echo "⚙️ Installing Linode node driver..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<EOF
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
       apiVersion: management.cattle.io/v3
       kind: NodeDriver
       metadata:
@@ -3090,7 +3090,7 @@ write_files:
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml
 
       # Installing NFS system
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
       metadata:
@@ -5361,7 +5361,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=800s deployment/apisix -n apisix
 
       echo "🚀 Deploying OAuth2 Proxy..."
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: apps/v1
       kind: Deployment
       metadata:
@@ -5396,7 +5396,7 @@ write_files:
                   - --allowed-group=${GITHUB_ORG}:k8s_cluster_admins
       EOF
 
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Service
       metadata:
@@ -6944,7 +6944,7 @@ write_files:
       sudo kubectl annotate namespace reloader field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace reloader scheduler.alpha.kubernetes.io/affinity='{"nodeAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"preference":{"matchExpressions":[{"key":"dedicated","operator":"In","values":["srvr-node"]}]}}]}}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       
-      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: Namespace
       metadata:
@@ -7163,7 +7163,7 @@ write_files:
       echo "✅ Argo CD is ready."
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n cattle-system rollout status deploy rancher-webhook --timeout=120s
       
-      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<'EOF'
       apiVersion: v1
       kind: Service
       metadata:
