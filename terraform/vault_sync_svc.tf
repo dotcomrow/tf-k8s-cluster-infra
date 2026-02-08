@@ -77,7 +77,7 @@ locals {
 # --- DRY helpers ---
 locals {
   app_image  = "${var.region}-docker.pkg.dev/${google_project.infra.project_id}/vault-sync-run-container/vault-sync-run-container:${local.image_tag}"
-  tbot_image_digest = "sha256:42656ba9c19437d0646fcaf27c18aeba21218d6ca10d16bfc9ca5376c2864f1d"
+  tbot_image_digest = "sha256:609882855326e04e0c1feea1d687622f58966b16ff60a859b403923984b7a0e3"
   tbot_ghcr_image_tag = "ts-20250902-004239"
   tbot_image_name   = "teleport-bot-container"
   tbot_source_image = "ghcr.io/${var.GITHUB_ORG}/${local.tbot_image_name}:${local.tbot_ghcr_image_tag}"

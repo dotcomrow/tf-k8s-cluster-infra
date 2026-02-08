@@ -32,6 +32,7 @@ const READ_TIMEOUT_MS    = parseInt(process.env.VAULT_READ_TIMEOUT_MS    || '300
 const DEBUG_VAULT_RESOLVER = (process.env.DEBUG_VAULT_RESOLVER || 'false').toLowerCase() === 'true';
 const ACTIVE_BASE_TTL_MS   = parseInt(process.env.VAULT_ACTIVE_BASE_TTL_MS || '10000', 10);
 const PASSIVE_RECHECK_MS   = parseInt(process.env.VAULT_PASSIVE_RECHECK_MS || '5000', 10);
+const WAIT_FOR_TUNNEL_MS   = parseInt(process.env.VAULT_WAIT_FOR_TUNNEL_MS || '0', 10);
 
 // Treat these as "reachable" health statuses even if Vault is sealed/standby/etc.
 const HEALTH_OK_CODES = new Set([200, 204, 429, 472, 473, 501, 503]);
@@ -57,6 +58,10 @@ function safePreview(obj: unknown, n = 500) {
   catch { return '[unserializable]'; }
 }
 
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
 /* ================================
    HTTP helper (with timeout)
 ================================== */
@@ -80,6 +85,37 @@ function joinUrl(base: string, path: string) {
   return `${b}${p}`;
 }
 
+type VaultishHealth = {
+  initialized?: boolean;
+  sealed?: boolean;
+  standby?: boolean;
+};
+
+function looksLikeVaultHealthJson(v: unknown): v is VaultishHealth {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.initialized === 'boolean' ||
+    typeof o.sealed === 'boolean' ||
+    typeof o.standby === 'boolean'
+  );
+}
+
+function looksLikeVaultApiJson(v: unknown): boolean {
+  if (!v || typeof v !== 'object') return false;
+  const o = v as Record<string, unknown>;
+
+  // Many Vault responses include `request_id`.
+  if (typeof o.request_id === 'string') return true;
+  // Errors are returned as `{ errors: [...] }`.
+  if (Array.isArray(o.errors)) return true;
+  // Common response top-level keys.
+  if ('auth' in o || 'data' in o || 'warnings' in o || 'wrap_info' in o) return true;
+  // Health endpoint shape (no request_id).
+  if (looksLikeVaultHealthJson(v)) return true;
+  return false;
+}
+
 /* ================================
    Active endpoint auto-detection
 ================================== */
@@ -88,34 +124,46 @@ let activeBaseExpiresAt = 0;
 
 async function resolveActiveBase(): Promise<string> {
   const now = Date.now();
+  const apisix = ADDRS.find(a => a !== TUNNEL_BASE) || null;
+  const tunnel = TUNNEL_BASE;
+
+  // This system flips exactly once during platform buildout:
+  // - early: public/APISIX reachable, tunnel not
+  // - later: tunnel reachable, public never works again
+  // Because of that, ALWAYS prefer the tunnel once it becomes reachable, even if
+  // a public endpoint returns some kind of "healthy" looking response.
   if (activeBase && now < activeBaseExpiresAt) {
+    if (activeBase !== tunnel) {
+      const ok = await isReachable(tunnel);
+      if (ok) return setActive(tunnel);
+    }
     dbg('using cached activeBase:', activeBase);
     return activeBase;
   }
 
-  const apisix = ADDRS.find(a => a !== TUNNEL_BASE);
-  const tunnel = TUNNEL_BASE;
-  const candidates = [apisix, tunnel].filter(Boolean) as string[];
+  if (await isReachable(tunnel)) return setActive(tunnel);
+  if (apisix && await isReachable(apisix)) return setActive(apisix);
 
-  dbg('detecting among:', candidates);
-
-  const probes = candidates.map(base => probe(base));
-  try {
-    const winner = await Promise.any(probes);
-    return setActive(winner);
-  } catch {
-    const errs: string[] = [];
-    for (const base of candidates) {
-      try {
-        const ok = await isReachable(base);
-        if (ok) return setActive(base);
-        errs.push(`${base}: health not OK`);
-      } catch (e: any) {
-        errs.push(`${base}: ${String(e?.message || e)}`);
-      }
+  // If neither endpoint is reachable, the most common reason is that the tbot sidecar
+  // is still starting (tunnel will become reachable shortly). Give it a short grace
+  // period before failing and relying on external retries.
+  if (WAIT_FOR_TUNNEL_MS > 0) {
+    const deadline = Date.now() + WAIT_FOR_TUNNEL_MS;
+    dbg('waiting for tunnel up to', WAIT_FOR_TUNNEL_MS, 'ms');
+    while (Date.now() < deadline) {
+      if (await isReachable(tunnel)) return setActive(tunnel);
+      await sleep(250);
     }
-    throw new Error(`No Vault endpoints reachable. Details: ${errs.join(' | ')}`);
   }
+
+  const errs: string[] = [];
+  if (apisix) {
+    const apisixOk = await isReachable(apisix);
+    if (!apisixOk) errs.push(`${apisix}: health not OK`);
+  }
+  const tunnelOk = await isReachable(tunnel);
+  if (!tunnelOk) errs.push(`${tunnel}: health not OK`);
+  throw new Error(`No Vault endpoints reachable. Details: ${errs.join(' | ') || 'unknown'}`);
 
   function setActive(base: string) {
     activeBase = base;
@@ -127,24 +175,48 @@ async function resolveActiveBase(): Promise<string> {
 
 async function probe(base: string): Promise<string> {
   const r = await fetchWithTimeout(joinUrl(base, '/v1/sys/health'), { method: 'GET' });
-  if (HEALTH_OK_CODES.has(r.status)) return base;
-  throw new Error(`health HTTP ${r.status}`);
+  const ct = r.headers.get('content-type') || '';
+  const xVault = r.headers.get('x-vault-request') || '';
+
+  let vaultish = false;
+  if (xVault) vaultish = true;
+  else if (ct.includes('json')) {
+    try {
+      const j = await r.json();
+      vaultish = looksLikeVaultHealthJson(j);
+    } catch {
+      vaultish = false;
+    }
+  }
+
+  if (vaultish && HEALTH_OK_CODES.has(r.status)) return base;
+  throw new Error(`health HTTP ${r.status} vaultish=${vaultish}`);
 }
 
 async function isReachable(base: string): Promise<boolean> {
   try {
-    const r = await fetchWithTimeout(joinUrl(base, '/v1/sys/health'), { method: 'GET' });
-    dbg('health', base, r.status);
-    return HEALTH_OK_CODES.has(r.status);
+    await probe(base);
+    return true;
   } catch (e) {
     dbg('health error', base, String((e as Error).message));
     return false;
   }
 }
 
-// Passive background recheck—cheap, lets us flip even between calls
+// Passive background recheck:
+// - when running on the public endpoint early in the build, keep probing for the tunnel
+//   and flip as soon as it is available.
 setInterval(async () => {
   try {
+    if (activeBase !== TUNNEL_BASE) {
+      const ok = await isReachable(TUNNEL_BASE);
+      if (ok) {
+        activeBase = TUNNEL_BASE;
+        activeBaseExpiresAt = Date.now() + ACTIVE_BASE_TTL_MS;
+        dbg('passive upgrade: activeBase ->', activeBase);
+      }
+      return;
+    }
     await resolveActiveBase();
   } catch (e) {
     dbg('passive recheck failed:', String((e as Error).message));
@@ -163,10 +235,18 @@ async function vaultRequest(path: string, init?: RequestInit, maxRetries: number
     try {
       dbg(`→ attempt ${attempt + 1}/${maxRetries} using`, url);
       const res = await fetchWithTimeout(url, init);
+      const ct = res.headers.get('content-type') || '';
+      const xVault = res.headers.get('x-vault-request') || '';
+      const vaultish =
+        res.status === 204 ||
+        Boolean(xVault) ||
+        (ct.includes('json') && looksLikeVaultApiJson(await res.clone().json().catch(() => null)));
 
       // If infra/auth looks flaky (rebuild/flip), invalidate and retry
-      if (!res.ok && (RETRY_STATUSES.has(res.status) || FLIP_TRIGGER_STATUSES.has(res.status))) {
-        dbg('flip-trigger HTTP', res.status, '— invalidating activeBase and re-detecting');
+      // If we got a response but it doesn't look like Vault at all, treat it as the wrong base.
+      const flipTrigger = (!vaultish) || (!res.ok && (RETRY_STATUSES.has(res.status) || FLIP_TRIGGER_STATUSES.has(res.status)));
+      if (flipTrigger) {
+        dbg('flip-trigger HTTP', res.status, `vaultish=${vaultish}`, '— invalidating activeBase and re-detecting');
         activeBase = null; activeBaseExpiresAt = 0;
         
         if (attempt < maxRetries - 1) {
