@@ -255,7 +255,9 @@ async function getVaultToken(): Promise<string> {
 const PLACEHOLDER_VALUE = '__PLACEHOLDER__';
 
 function isPlaceholderValue(value?: string | null): boolean {
-  return value === PLACEHOLDER_VALUE;
+  // Secret payloads often come from files / CLI input and may include trailing newlines.
+  // We only normalize for placeholder detection; we still write the original value to Vault.
+  return (value ?? '').trim() === PLACEHOLDER_VALUE;
 }
 
 async function writeToVault(dataPath: string, value: string): Promise<void> {
