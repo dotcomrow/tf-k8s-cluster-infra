@@ -88,6 +88,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         SRVR_IP_ALIAS_CIDR = var.SRVR_IP_ALIAS_CIDR
         SRVR_IP_ALIAS_IFACE = var.SRVR_IP_ALIAS_IFACE
         LONGHORN_GUARANTEED_INSTANCE_MANAGER_CPU = var.longhorn_guaranteed_instance_manager_cpu
+        NVIDIA_HELM_CHART_VERSION = var.NVIDIA_HELM_CHART_VERSION
       })
     file_name = "cloud_init_srvr.yaml"
   }

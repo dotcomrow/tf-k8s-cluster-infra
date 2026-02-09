@@ -8364,7 +8364,7 @@ write_files:
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n nvidia \
         --wait \
-        --version=v24.9.2 \
+        --version=${NVIDIA_HELM_CHART_VERSION} \
         --set driver.enabled=false \
         --set validator.driver.env[0].name=HOST_ROOT \
         --set validator.driver.env[0].value=/host \
