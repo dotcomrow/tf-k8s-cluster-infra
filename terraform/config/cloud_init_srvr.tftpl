@@ -8885,6 +8885,18 @@ write_files:
                     value: "http://127.0.0.1:8200"
                   - name: VAULT_NAMESPACE
                     value: "root"
+                  - name: TFC_API_TOKEN
+                    value: "${TFC_API_TOKEN}"
+                  - name: TFC_EXTERNAL_APPS_VARSET_ID
+                    value: "${TFC_EXTERNAL_APPS_VARSET_ID}"
+                  - name: TFC_EXTERNAL_APPS_VARSET_NAME
+                    value: "${TFC_EXTERNAL_APPS_VARSET_NAME}"
+                  - name: TFC_ORGANIZATION
+                    value: "${TFC_ORGANIZATION}"
+                  - name: TFC_VAULT_TOKEN_VAR_KEY
+                    value: "${TFC_VAULT_TOKEN_VAR_KEY}"
+                  - name: TFC_API_BASE_URL
+                    value: "${TFC_API_BASE_URL}"
                 volumeMounts:
                   - name: config
                     mountPath: /vault/config/vault.hcl
@@ -9081,8 +9093,8 @@ write_files:
 
           echo "✅ Vault is unsealed"
 
-          # Install jq/wget for later steps (same as before)
-          apk add --no-cache jq wget >/dev/null 2>&1 || true
+          # Install tools used by bootstrap follow-up steps.
+          apk add --no-cache jq wget curl >/dev/null 2>&1 || true
 
           # ---- Existing bootstrap (kept intact) ----
 
@@ -9190,6 +9202,92 @@ write_files:
           kubectl create secret generic vault-root-token \
             --from-literal=VAULT_TOKEN=\$(jq -r '.root_token' /vault/data/init.json) \
             -n vault || kubectl -n vault get secret vault-root-token >/dev/null
+
+          # Push/update Vault root token into Terraform Cloud variable set for external app runs.
+          if [ -n "\$TFC_API_TOKEN" ]; then
+            VAULT_ROOT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)"
+            TFC_VAR_KEY="\$TFC_VAULT_TOKEN_VAR_KEY"
+            [ -n "\$TFC_VAR_KEY" ] || TFC_VAR_KEY="VAULT_TOKEN"
+            TFC_API_URL="\$TFC_API_BASE_URL"
+            [ -n "\$TFC_API_URL" ] || TFC_API_URL="https://app.terraform.io/api/v2"
+            TFC_VARSET_ID="\$TFC_EXTERNAL_APPS_VARSET_ID"
+
+            if [ -z "\$TFC_VARSET_ID" ] && [ -n "\$TFC_EXTERNAL_APPS_VARSET_NAME" ]; then
+              if [ -z "\$TFC_ORGANIZATION" ]; then
+                echo "WARNING: TFC_ORGANIZATION is required to resolve variable set by name."
+              else
+                echo "Resolving Terraform variable set ID for '\$TFC_EXTERNAL_APPS_VARSET_NAME' in organization '\$TFC_ORGANIZATION'..."
+                NEXT_URL="\$TFC_API_URL/organizations/\$TFC_ORGANIZATION/varsets?page%5Bsize%5D=100"
+                while [ -n "\$NEXT_URL" ]; do
+                  PAGE_JSON="\$(curl -fsS \
+                    -H "Authorization: Bearer \$TFC_API_TOKEN" \
+                    -H "Content-Type: application/vnd.api+json" \
+                    "\$NEXT_URL" 2>/dev/null || true)"
+                  [ -n "\$PAGE_JSON" ] || { echo "WARNING: failed to list variable sets for organization '\$TFC_ORGANIZATION'."; break; }
+
+                  MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg name "\$TFC_EXTERNAL_APPS_VARSET_NAME" '.data[]? | select(.attributes.name == $name) | .id')"
+                  if [ -n "\$MATCH_IDS" ]; then
+                    TFC_VARSET_ID="\$(echo "\$MATCH_IDS" | head -n1)"
+                    MATCH_COUNT="\$(echo "\$MATCH_IDS" | wc -l | tr -d ' ')"
+                    [ -n "\$MATCH_COUNT" ] || MATCH_COUNT=0
+                    if [ "\$MATCH_COUNT" -gt 1 ]; then
+                      echo "WARNING: multiple variable sets matched '\$TFC_EXTERNAL_APPS_VARSET_NAME'; using \$TFC_VARSET_ID."
+                    fi
+                    break
+                  fi
+
+                  NEXT_URL="\$(echo "\$PAGE_JSON" | jq -r '.links.next // empty')"
+                  if [ -n "\$NEXT_URL" ] && ! echo "\$NEXT_URL" | grep -Eq '^https?://'; then
+                    NEXT_URL="\$TFC_API_URL\$NEXT_URL"
+                  fi
+                done
+              fi
+            fi
+
+            if [ -n "\$TFC_VARSET_ID" ]; then
+              echo "Syncing Vault token to Terraform variable set \$TFC_VARSET_ID (\$TFC_VAR_KEY)..."
+              VARS_JSON="\$(curl -fsS \
+                -H "Authorization: Bearer \$TFC_API_TOKEN" \
+                -H "Content-Type: application/vnd.api+json" \
+                "\$TFC_API_URL/varsets/\$TFC_VARSET_ID/relationships/vars?page%5Bsize%5D=100" 2>/dev/null || true)"
+
+              if [ -n "\$VARS_JSON" ]; then
+                VAR_ID="\$(echo "\$VARS_JSON" | jq -r --arg key "\$TFC_VAR_KEY" '.data[]? | select(.attributes.key == $key and .attributes.category == "terraform") | .id' | head -n1)"
+
+                if [ -n "\$VAR_ID" ]; then
+                  PAYLOAD="\$(jq -cn --arg id "\$VAR_ID" --arg value "\$VAULT_ROOT_TOKEN" --arg description "Vault root token managed by srvr bootstrap." \
+                    '{data:{id:$id,type:"vars",attributes:{value:$value,sensitive:true,hcl:false,description:$description}}}')"
+                  if curl -fsS -X PATCH \
+                    -H "Authorization: Bearer \$TFC_API_TOKEN" \
+                    -H "Content-Type: application/vnd.api+json" \
+                    --data "\$PAYLOAD" \
+                    "\$TFC_API_URL/varsets/\$TFC_VARSET_ID/relationships/vars/\$VAR_ID" >/dev/null 2>&1; then
+                    echo "Updated Terraform variable '\$TFC_VAR_KEY' in variable set \$TFC_VARSET_ID."
+                  else
+                    echo "WARNING: failed to update Terraform variable '\$TFC_VAR_KEY' in variable set \$TFC_VARSET_ID."
+                  fi
+                else
+                  PAYLOAD="\$(jq -cn --arg key "\$TFC_VAR_KEY" --arg value "\$VAULT_ROOT_TOKEN" --arg description "Vault root token managed by srvr bootstrap." \
+                    '{data:{type:"vars",attributes:{key:$key,value:$value,category:"terraform",sensitive:true,hcl:false,description:$description}}}')"
+                  if curl -fsS -X POST \
+                    -H "Authorization: Bearer \$TFC_API_TOKEN" \
+                    -H "Content-Type: application/vnd.api+json" \
+                    --data "\$PAYLOAD" \
+                    "\$TFC_API_URL/varsets/\$TFC_VARSET_ID/relationships/vars" >/dev/null 2>&1; then
+                    echo "Created Terraform variable '\$TFC_VAR_KEY' in variable set \$TFC_VARSET_ID."
+                  else
+                    echo "WARNING: failed to create Terraform variable '\$TFC_VAR_KEY' in variable set \$TFC_VARSET_ID."
+                  fi
+                fi
+              else
+                echo "WARNING: failed to list variables in Terraform variable set \$TFC_VARSET_ID."
+              fi
+            else
+              echo "WARNING: Terraform variable-set sync skipped: no variable set ID resolved."
+            fi
+          else
+            echo "Terraform variable-set sync skipped: missing TFC_API_TOKEN."
+          fi
 
           # GCP identifiers for the follow-up job
           cat /config/gcp-project-id/PROJECT_ID > /vault/creds-data/project_id.txt

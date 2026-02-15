@@ -531,6 +531,47 @@ variable "VAULT_OIDC_CLIENT_SECRET" {
 }
 
 ###############################################################################
+# Terraform Cloud / HCP Terraform
+###############################################################################
+
+variable "TFC_API_TOKEN" {
+  description = "Terraform Cloud API token used by node bootstrap to manage variable-set values."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "TFC_EXTERNAL_APPS_VARSET_ID" {
+  description = "Terraform Cloud variable set ID that should receive the Vault root token (optional when TFC_EXTERNAL_APPS_VARSET_NAME is set)."
+  type        = string
+  default     = ""
+}
+
+variable "TFC_EXTERNAL_APPS_VARSET_NAME" {
+  description = "Terraform Cloud variable set name used to resolve the target variable set when ID is not provided."
+  type        = string
+  default     = "Cloudflare Platform Variables"
+}
+
+variable "TFC_ORGANIZATION" {
+  description = "Terraform Cloud organization name used when resolving variable sets by name."
+  type        = string
+  default     = "dotcomrow"
+}
+
+variable "TFC_VAULT_TOKEN_VAR_KEY" {
+  description = "Terraform variable key in the target variable set to store the Vault root token."
+  type        = string
+  default     = "VAULT_TOKEN"
+}
+
+variable "TFC_API_BASE_URL" {
+  description = "Terraform Cloud API base URL."
+  type        = string
+  default     = "https://app.terraform.io/api/v2"
+}
+
+###############################################################################
 # Google Cloud (Bootstrap / Runtime)
 ###############################################################################
 
