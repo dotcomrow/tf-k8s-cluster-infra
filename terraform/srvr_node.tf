@@ -148,7 +148,7 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     interface    = "scsi0"           # ✅ Use SCSI for iothread support
     iothread     = true              # ✅ Improve I/O parallelism
     discard      = "on"
-    size         = 147
+    size         = 120
     file_format  = "raw"             # ✅ Best raw performance
     cache     = "unsafe"
   }

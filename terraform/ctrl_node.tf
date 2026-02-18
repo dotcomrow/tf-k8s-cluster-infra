@@ -119,7 +119,7 @@ resource "proxmox_virtual_environment_vm" "ctrl_rancher_vm" {
     interface    = "scsi0"           # ✅ Required for iothread
     iothread     = true              # ✅ Improves disk performance
     discard      = "on"
-    size         = 107
+    size         = 80
     file_format  = "raw"             # ✅ Fastest disk format
     cache     = "writeback"
   }

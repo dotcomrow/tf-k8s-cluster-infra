@@ -463,31 +463,31 @@ variable "serialize_vm_rollout" {
 variable "WORK_T4_GPU_NODE_MAX_PODS" {
   description = "Maximum number of pods for the GPU worker node."
   type        = number
-  default     = 250
+  default     = 180
 }
 
 variable "WORK_NO_GPU_NODE_MAX_PODS" {
   description = "Maximum number of pods for the non-GPU worker node."
   type        = number
-  default     = 250
+  default     = 180
 }
 
 variable "CTRL_NODE_MAX_PODS" {
   description = "Maximum number of pods for the control-plane node."
   type        = number
-  default     = 250
+  default     = 80
 }
 
 variable "ETCD_NODE_MAX_PODS" {
   description = "Maximum number of pods for the etcd node."
   type        = number
-  default     = 250
+  default     = 80
 }
 
 variable "SRVR_NODE_MAX_PODS" {
   description = "Maximum number of pods for the srvr node."
   type        = number
-  default     = 250
+  default     = 100
 }
 
 ###############################################################################

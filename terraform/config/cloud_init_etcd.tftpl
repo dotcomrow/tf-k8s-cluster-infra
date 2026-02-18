@@ -945,6 +945,68 @@ write_files:
       RuntimeMaxUse=500M
       MaxRetentionSec=259200
       SystemMaxFileSize=200M
+      SystemKeepFree=2G
+      RuntimeKeepFree=250M
+      RuntimeMaxFileSize=100M
+
+  - path: /etc/logrotate.d/rsyslog
+    permissions: '0644'
+    content: |
+      /var/log/syslog
+      /var/log/messages
+      /var/log/kern.log
+      /var/log/auth.log
+      /var/log/mail.log
+      /var/log/user.log
+      /var/log/daemon.log
+      /var/log/debug
+      {
+        daily
+        rotate 7
+        maxsize 50M
+        missingok
+        notifempty
+        compress
+        delaycompress
+        sharedscripts
+        postrotate
+          systemctl kill -s HUP rsyslog.service >/dev/null 2>&1 || true
+        endscript
+      }
+
+  - path: /etc/logrotate.d/nginx
+    permissions: '0644'
+    content: |
+      /var/log/nginx/*.log {
+        daily
+        rotate 14
+        maxsize 100M
+        missingok
+        notifempty
+        compress
+        delaycompress
+        create 0640 root adm
+        sharedscripts
+        postrotate
+          [ -s /run/nginx.pid ] && kill -USR1 "$(cat /run/nginx.pid)" || true
+        endscript
+      }
+
+  - path: /etc/logrotate.d/cloud-init
+    permissions: '0644'
+    content: |
+      /var/log/cloud-init.log
+      /var/log/cloud-init-output.log
+      {
+        daily
+        rotate 7
+        maxsize 25M
+        missingok
+        notifempty
+        compress
+        delaycompress
+        copytruncate
+      }
 
   - path: /etc/systemd/system/rke2-server.service.d/override.conf
     permissions: '0644'
