@@ -1965,10 +1965,10 @@ write_files:
         - "--max-pods=${SRVR_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
-        - "--reserved-cpus=0"
+        - "--kube-reserved=cpu=500m,memory=1Gi,ephemeral-storage=1Gi"
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
-        - "--system-reserved=memory=2Gi"
+        - "--system-reserved=cpu=500m,memory=2Gi,ephemeral-storage=2Gi"
         - "--feature-gates=InPlacePodVerticalScaling=true"
       EOF
 
@@ -1999,6 +1999,11 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node system=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu node.longhorn.io/create-default-disk=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu node.longhorn.io/create-default-disk=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node node.longhorn.io/create-default-disk=false --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node node.longhorn.io/create-default-disk=false --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node node.longhorn.io/create-default-disk=false --overwrite
 
   - path: /etc/systemd/system/bootstrap-rke2.service
     permissions: '0644'
@@ -2247,6 +2252,7 @@ write_files:
           default-replica-count: "1"
           priority-class: "longhorn-critical"
           disable-revision-counter: "{\"v1\":\"true\"}"
+          create-default-disk-labeled-nodes: "true"
       ---
       apiVersion: v1
       kind: ConfigMap
@@ -2362,8 +2368,8 @@ write_files:
       for NODE in ${CTRL_HOSTNAME} ${ETCD_HOSTNAME} ${SRVR_HOSTNAME}; do
         for i in {1..12}; do
           if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io "$NODE" >/dev/null 2>&1; then
-            if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch nodes.longhorn.io "$NODE" --type=merge -p '{"spec":{"allowScheduling":false}}'; then
-              echo "✅ Longhorn scheduling disabled on $NODE"
+            if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch nodes.longhorn.io "$NODE" --type=merge -p '{"spec":{"allowScheduling":false,"disks":{}}}'; then
+              echo "✅ Longhorn scheduling disabled and disks removed on $NODE"
               break
             fi
           fi
