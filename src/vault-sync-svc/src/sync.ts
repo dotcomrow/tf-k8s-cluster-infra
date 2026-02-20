@@ -334,13 +334,47 @@ async function getVaultToken(): Promise<string> {
 ================================== */
 const PLACEHOLDER_VALUE = '__PLACEHOLDER__';
 
+function normalizePlaceholderCandidate(value: string): string {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 function isPlaceholderValue(value?: string | null): boolean {
-  // Secret payloads often come from files / CLI input and may include trailing newlines.
-  // We only normalize for placeholder detection; we still write the original value to Vault.
-  return (value ?? '').trim() === PLACEHOLDER_VALUE;
+  // Secret payloads often come from files / CLI input and may include trailing newlines,
+  // quotes, or a tiny wrapper object.
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) return false;
+  if (normalizePlaceholderCandidate(trimmed) === PLACEHOLDER_VALUE) return true;
+
+  // Guard against wrapper payloads like {"value":"__PLACEHOLDER__"}.
+  const parsed = safeParseJson(trimmed);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const inner = (parsed as Record<string, unknown>).value;
+    if (typeof inner === 'string' && normalizePlaceholderCandidate(inner) === PLACEHOLDER_VALUE) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function decodeSecretPayload(data?: string | Buffer | Uint8Array | null): string | undefined {
+  if (data == null) return undefined;
+  if (typeof data === 'string') return data;
+  return Buffer.from(data).toString('utf8');
 }
 
 async function writeToVault(dataPath: string, value: string): Promise<void> {
+  if (isPlaceholderValue(value)) {
+    console.log('ℹ️  Guardrail: placeholder payload refused for %s', dataPath);
+    return;
+  }
   const token = await getVaultToken();
   await vaultJson(`/v1/${dataPath}`, {
     method: 'POST',
@@ -467,13 +501,12 @@ app.post('/', async (req: Request, res: Response) => {
         console.log('ℹ️  CreateSecret placeholder ignored for %s', secretPath);
         return res.status(204).send('ignored placeholder');
       }
-      case 'google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion':
-      case 'google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret': {
+      case 'google.cloud.secretmanager.v1.SecretManagerService.AddSecretVersion': {
         // Fetch payload from GSM
         const [accessResponse] = await client.accessSecretVersion({
           name: secretPath.includes('/versions/') ? secretPath : `${secretPath}/versions/latest`,
         });
-        const payload = accessResponse.payload?.data?.toString();
+        const payload = decodeSecretPayload(accessResponse.payload?.data);
         if (!payload) {
           // Permanent problem (empty secret) — log & ACK so we don’t spin
           console.error('⚠️  Empty secret payload for %s; ACKing.', secretPath);
@@ -485,6 +518,11 @@ app.post('/', async (req: Request, res: Response) => {
         }
         await writeToVault(vaultDataPath, payload);
         break;
+      }
+      case 'google.cloud.secretmanager.v1.SecretManagerService.UpdateSecret': {
+        // UpdateSecret is metadata-only (labels/replication), not a value change.
+        console.log('ℹ️  UpdateSecret metadata change ignored for %s', secretPath);
+        return res.status(204).send('ignored metadata update');
       }
       case 'google.cloud.secretmanager.v1.SecretManagerService.DeleteSecret': {
         // Permanent removal — delete Vault secret too
@@ -506,7 +544,7 @@ app.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// Manual sync-all (unchanged except for a bit more logging)
+// Manual sync-all
 app.post('/sync-all', async (_req: Request, res: Response) => {
   try {
     const projectId = process.env.GCP_PROJECT_ID;
@@ -522,7 +560,7 @@ app.post('/sync-all', async (_req: Request, res: Response) => {
 
       const latestVersion = `${name}/versions/latest`;
       const [accessResponse] = await client.accessSecretVersion({ name: latestVersion });
-      const payload = accessResponse.payload?.data?.toString();
+      const payload = decodeSecretPayload(accessResponse.payload?.data);
       if (!payload) continue;
       if (isPlaceholderValue(payload)) {
         console.log('[sync-all] skipping placeholder for %s', latestVersion);
@@ -531,18 +569,7 @@ app.post('/sync-all', async (_req: Request, res: Response) => {
 
       const secretName = extractSecretName(latestVersion);
       const vaultDataPath = `secret/data/${secretName}`;
-
-      const token = await getVaultToken();
-      const { res: r, base } = await vaultRequest(`/v1/${vaultDataPath}`, {
-        method: 'POST',
-        headers: { 'X-Vault-Token': token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: { value: payload } }),
-      });
-
-      if (!r.ok) {
-        const text = await r.text();
-        throw new Error(`Failed to sync ${vaultDataPath} via ${base}: ${text}`);
-      }
+      await writeToVault(vaultDataPath, payload);
       count++;
     }
 
