@@ -1,6 +1,6 @@
 variable "srvr_cpu_cores" {
   type    = number
-  default = 10
+  default = 14
 }
 
 variable "srvr_cpu_sockets" {
@@ -122,12 +122,13 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     type    = "host"       # ✅ Use host CPU for full feature set
     numa    = true         # ✅ Enable NUMA for multi-socket configs
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
-    affinity = "27,31,51,55,59,63,67,71,75,79"
+    # Node-3 CPU allocation for srvr VM, expanded with reclaimed pfSense/host CPUs.
+    affinity = "11,15,27,31,43,47,51,55,59,63,67,71,75,79"
   }
 
   numa {
     device     = "numa0"
-    cpus       = "0-9"
+    cpus       = "0-13"
     memory     = var.srvr_memory_gb * 1024  # 100 GiB in MiB
     hostnodes  = "3"
     policy     = "bind"
