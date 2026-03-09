@@ -62,7 +62,8 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     type    = "host"     # ✅ Full CPU instruction set
     numa    = true       # ✅ Enable NUMA for multi-socket configs
     flags   = ["+aes", "+pdpe1gb", "+pcid", "+spec-ctrl", "+ssbd", "+md-clear"]
-    affinity = "42,46,50,54,58,62,66,70,74,78"
+    # Keep HT sibling pairs on the same VM (node2): (22,62) (26,66) (30,70) (34,74) (38,78)
+    affinity = "22,26,30,34,38,62,66,70,74,78"
   }
 
   numa {
