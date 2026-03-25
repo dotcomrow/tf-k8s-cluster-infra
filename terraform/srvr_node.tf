@@ -123,8 +123,11 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     numa    = true         # ✅ Enable NUMA for multi-socket configs
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
     # Node-3 CPU allocation for srvr VM.
-    # Utility keeps host-sibling CPUs (43,47); srvr takes non-sibling CPUs 19,23.
-    affinity = "15,19,23,27,31,51,55,59,63,67,71,75,79"
+    # Reserved on node3:
+    # - Proxmox host: 3,7,43
+    # - pfSense: 35,75
+    # - utility VM: 39,79
+    affinity = "11,15,19,23,27,31,47,51,55,59,63,67,71"
   }
 
   numa {
