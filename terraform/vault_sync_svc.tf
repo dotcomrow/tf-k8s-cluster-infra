@@ -142,8 +142,9 @@ resource "null_resource" "tbot_image_sync" {
         arm64|aarch64) ARCH="arm64" ;;
         *) echo "Unsupported ARCH: $ARCH" && exit 1 ;;
       esac
-      CRANE_TARBALL="go-containerregistry_${OS}_${ARCH}.tar.gz"
-      curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/${CRANE_TARBALL}" -o "$CRANE_TARBALL"
+      CRANE_TARBALL="go-containerregistry_"$OS"_"$ARCH".tar.gz"
+      CRANE_URL="https://github.com/google/go-containerregistry/releases/download/$CRANE_VERSION/$CRANE_TARBALL"
+      curl -fsSL "$CRANE_URL" -o "$CRANE_TARBALL"
       tar -xf "$CRANE_TARBALL"
       [ -x ./crane ] || { echo "crane binary not found after extraction"; exit 1; }
       chmod +x ./crane
@@ -336,8 +337,9 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
         arm64|aarch64) ARCH="arm64" ;;
         *) echo "Unsupported ARCH: $ARCH" && exit 1 ;;
       esac
-      CRANE_TARBALL="go-containerregistry_${OS}_${ARCH}.tar.gz"
-      curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/${CRANE_TARBALL}" -o "$CRANE_TARBALL"
+      CRANE_TARBALL="go-containerregistry_"$OS"_"$ARCH".tar.gz"
+      CRANE_URL="https://github.com/google/go-containerregistry/releases/download/$CRANE_VERSION/$CRANE_TARBALL"
+      curl -fsSL "$CRANE_URL" -o "$CRANE_TARBALL"
       tar -xf "$CRANE_TARBALL"
       [ -x ./crane ] || { echo "crane binary not found after extraction"; exit 1; }
       chmod +x ./crane
