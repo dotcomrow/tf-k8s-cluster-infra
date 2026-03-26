@@ -105,6 +105,8 @@ locals {
 
 resource "null_resource" "tbot_image_sync" {
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+
     environment = {
       GHCR_USER   = var.GITHUB_ORG
       GHCR_PAT    = var.GHCR_PAT
@@ -116,27 +118,45 @@ resource "null_resource" "tbot_image_sync" {
     }
 
     command = <<-EOT
-      #!/bin/bash
       set -euo pipefail
 
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
-      export DOCKER_CONFIG="$(pwd)/.docker"
-      mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
+      mkdir -p "$CLOUDSDK_CONFIG"
 
       # Install gcloud CLI
       curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
       tar -xf google-cloud-cli-linux-x86_64.tar.gz
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
 
+      # Install crane (daemonless image copy tool)
+      CRANE_VERSION="v0.21.3"
+      OS="$(uname -s)"
+      ARCH="$(uname -m)"
+      case "$OS" in
+        Linux) OS="Linux" ;;
+        Darwin) OS="Darwin" ;;
+        *) echo "Unsupported OS: $OS" && exit 1 ;;
+      esac
+      case "$ARCH" in
+        x86_64|amd64) ARCH="x86_64" ;;
+        arm64|aarch64) ARCH="arm64" ;;
+        *) echo "Unsupported ARCH: $ARCH" && exit 1 ;;
+      esac
+      CRANE_TARBALL="go-containerregistry_${OS}_${ARCH}.tar.gz"
+      curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/${CRANE_TARBALL}" -o "$CRANE_TARBALL"
+      tar -xf "$CRANE_TARBALL"
+      [ -x ./crane ] || { echo "crane binary not found after extraction"; exit 1; }
+      chmod +x ./crane
+      export PATH="$(pwd):$PATH"
+
       # Authenticate to GCP
       printf "%s" "$GOOGLE_CREDENTIALS" > key.json
       gcloud auth activate-service-account --key-file=key.json
       gcloud config set project "$PROJECT_ID"
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin "https://$REGION-docker.pkg.dev"
-      gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+      gcloud auth print-access-token | crane auth login "$REGION-docker.pkg.dev" -u oauth2accesstoken --password-stdin
 
       # Authenticate to GHCR (required if private)
-      echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      echo "$GHCR_PAT" | crane auth login ghcr.io -u "$GHCR_USER" --password-stdin
 
       # Check if digest already exists in Artifact Registry
       if gcloud artifacts docker images list "$TARGET_REPO" --format="get(digest)" | grep -q "$DIGEST"; then
@@ -144,15 +164,11 @@ resource "null_resource" "tbot_image_sync" {
         exit 0
       fi
 
-      echo "📦 Pulling source image: $SOURCE_IMG"
-      docker pull "$SOURCE_IMG"
-
       short_digest="$(echo "$DIGEST" | sed 's/^sha256://' | cut -c1-12)"
       target_tag="$TARGET_REPO:mirror-$short_digest"
 
-      echo "🚀 Pushing to Artifact Registry: $target_tag"
-      docker tag "$SOURCE_IMG" "$target_tag"
-      docker push "$target_tag"
+      echo "🚀 Copying image to Artifact Registry: $target_tag"
+      crane copy "$SOURCE_IMG" "$target_tag"
 
       echo "✅ tbot image synced to Artifact Registry."
     EOT
@@ -284,6 +300,8 @@ resource "null_resource" "image_sync_complete" {
 
 resource "null_resource" "ghcr_to_gcp_image_sync" {
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+
     environment = {
       GHCR_USER    = var.GITHUB_ORG
       GHCR_PAT     = var.GHCR_PAT
@@ -294,27 +312,45 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
     }
 
     command = <<-EOT
-      #!/bin/bash
-      set -e
+      set -euo pipefail
 
       export CLOUDSDK_CONFIG="$(pwd)/.gcloud"
-      export DOCKER_CONFIG="$(pwd)/.docker"
-      mkdir -p "$CLOUDSDK_CONFIG" "$DOCKER_CONFIG"
+      mkdir -p "$CLOUDSDK_CONFIG"
 
       # Install gcloud CLI
       curl -sS -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz
       tar -xf google-cloud-cli-linux-x86_64.tar.gz
       export PATH="$(pwd)/google-cloud-sdk/bin:$PATH"
 
+      # Install crane (daemonless image copy tool)
+      CRANE_VERSION="v0.21.3"
+      OS="$(uname -s)"
+      ARCH="$(uname -m)"
+      case "$OS" in
+        Linux) OS="Linux" ;;
+        Darwin) OS="Darwin" ;;
+        *) echo "Unsupported OS: $OS" && exit 1 ;;
+      esac
+      case "$ARCH" in
+        x86_64|amd64) ARCH="x86_64" ;;
+        arm64|aarch64) ARCH="arm64" ;;
+        *) echo "Unsupported ARCH: $ARCH" && exit 1 ;;
+      esac
+      CRANE_TARBALL="go-containerregistry_${OS}_${ARCH}.tar.gz"
+      curl -fsSL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/${CRANE_TARBALL}" -o "$CRANE_TARBALL"
+      tar -xf "$CRANE_TARBALL"
+      [ -x ./crane ] || { echo "crane binary not found after extraction"; exit 1; }
+      chmod +x ./crane
+      export PATH="$(pwd):$PATH"
+
       # Authenticate to GCP
       printf "%s" "$GOOGLE_CREDENTIALS" > key.json
       gcloud auth activate-service-account --key-file=key.json
       gcloud config set project "$PROJECT_ID"
-      echo "$(gcloud auth print-access-token)" | docker login -u oauth2accesstoken --password-stdin "https://$REGION-docker.pkg.dev"
-      gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
+      gcloud auth print-access-token | crane auth login "$REGION-docker.pkg.dev" -u oauth2accesstoken --password-stdin
 
       # Authenticate to GHCR
-      echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+      echo "$GHCR_PAT" | crane auth login ghcr.io -u "$GHCR_USER" --password-stdin
 
       # Validate vars
       if [ -z "$TAG" ] || [ -z "$IMAGE_NAME" ] || [ -z "$GHCR_USER" ]; then
@@ -325,17 +361,13 @@ resource "null_resource" "ghcr_to_gcp_image_sync" {
       GHCR_IMAGE="ghcr.io/$GHCR_USER/$IMAGE_NAME:$TAG"
       REPO_PATH="$REGION-docker.pkg.dev/$PROJECT_ID/$IMAGE_NAME/$IMAGE_NAME"
 
-      echo "📦 Pulling from GHCR: $GHCR_IMAGE"
-      docker pull "$GHCR_IMAGE"
-
       echo "🧹 Cleaning up existing images in Artifact Registry..."
       for digest in $(gcloud artifacts docker images list "$REPO_PATH" --format="get(digest)" || true); do
         gcloud artifacts docker images delete "$REPO_PATH@$digest" --quiet --delete-tags || true
       done
 
-      echo "🚀 Tagging and pushing image to GCP Artifact Registry: $REPO_PATH:$TAG"
-      docker tag "$GHCR_IMAGE" "$REPO_PATH:$TAG"
-      docker push "$REPO_PATH:$TAG"
+      echo "🚀 Copying image to GCP Artifact Registry: $REPO_PATH:$TAG"
+      crane copy "$GHCR_IMAGE" "$REPO_PATH:$TAG"
 
       echo "✅ GHCR image successfully pushed to GCP with tag $TAG"
     EOT
