@@ -124,10 +124,10 @@ resource "proxmox_virtual_environment_vm" "srvr_rancher_vm" {
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
     # Node-3 CPU allocation for srvr VM.
     # Reserved on node3:
-    # - Proxmox host: 3,7,43
+    # - Proxmox host: 3,7,43,47
     # - pfSense: 35,75
     # - utility VM: 39,79
-    affinity = "11,15,19,23,27,31,47,51,55,59,63,67,71"
+    affinity = "11,15,19,23,27,31,51,55,59,63,67,71"
   }
 
   numa {
