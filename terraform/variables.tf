@@ -40,7 +40,7 @@ variable "admin_ssh_public_key" {
 ###############################################################################
 
 variable "proxmox_host_ip" {
-  description = "IP address of the Proxmox host (used by VMs to mount the NFS share)."
+  description = "IP address of the Proxmox host (used for Proxmox API/SSH access and by VMs to mount the NFS share)."
   type        = string
   default     = "10.0.0.1"
 }

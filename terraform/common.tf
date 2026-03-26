@@ -4,10 +4,10 @@ resource "null_resource" "download_iso" {
   }
 
   provisioner "local-exec" {
-    command = "echo \"${var.proxmox_ssh_private_key}\" > tmp_key && chmod 600 tmp_key && ssh -o StrictHostKeyChecking=no -i tmp_key root@127.0.0.1 'ISO_NAME=$(basename ${var.vm_img}) && ISO_PATH=\"/var/lib/vz/template/iso/$ISO_NAME\" && mkdir -p '/var/lib/vz/template/iso' && if [ ! -f \"$ISO_PATH\" ]; then echo \"$ISO_NAME not found at $ISO_PATH. Downloading...\" && wget -O \"$ISO_PATH\" \"${var.vm_img}\"; else echo 'ISO already exists. Skipping download.'; fi'"
+    command = "echo \"${var.proxmox_ssh_private_key}\" > tmp_key && chmod 600 tmp_key && ssh -o StrictHostKeyChecking=no -i tmp_key root@${var.proxmox_host_ip} 'ISO_NAME=$(basename ${var.vm_img}) && ISO_PATH=\"/var/lib/vz/template/iso/$ISO_NAME\" && mkdir -p '/var/lib/vz/template/iso' && if [ ! -f \"$ISO_PATH\" ]; then echo \"$ISO_NAME not found at $ISO_PATH. Downloading...\" && wget -O \"$ISO_PATH\" \"${var.vm_img}\"; else echo 'ISO already exists. Skipping download.'; fi'"
 
     environment = {
-      PROXMOX_HOST = "127.0.0.1"
+      PROXMOX_HOST   = var.proxmox_host_ip
       SSH_PRIVATE_KEY = var.proxmox_ssh_private_key
     }
   }
