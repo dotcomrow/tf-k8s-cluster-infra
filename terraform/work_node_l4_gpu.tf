@@ -162,12 +162,12 @@ resource "proxmox_virtual_environment_vm" "work_l4_gpu_rancher_vm" {
     mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
-  # hostpci {
-  #   device  = "hostpci0"
-  #   mapping = "nvidia"               # ✅ GPU passthrough
-  #   rombar    = true            # ✅ Required for full NVIDIA driver compatibility
-  #   pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
-  # }
+  hostpci {
+    device  = "hostpci0"
+    mapping = "nvidia_l4"               # ✅ GPU passthrough
+    rombar    = true            # ✅ Required for full NVIDIA driver compatibility
+    pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
+  }
 
   initialization {
     datastore_id = "local"

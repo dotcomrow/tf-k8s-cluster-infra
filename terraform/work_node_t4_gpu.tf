@@ -164,7 +164,7 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   hostpci {
     device  = "hostpci0"
-    mapping = "nvidia"               # ✅ GPU passthrough
+    mapping = "nvidia_t4"               # ✅ GPU passthrough
     rombar    = true            # ✅ Required for full NVIDIA driver compatibility
     pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
   }
