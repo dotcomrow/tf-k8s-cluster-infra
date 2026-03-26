@@ -900,6 +900,9 @@ write_files:
       kube-scheduler-arg:
         - "feature-gates=InPlacePodVerticalScaling=true"
 
+      node-label:
+        - "suncoast.systems/gpu=t4"
+
       kubelet-arg:
         - "--max-pods=${WORK_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
