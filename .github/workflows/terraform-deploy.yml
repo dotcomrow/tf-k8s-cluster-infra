@@ -207,11 +207,11 @@ jobs:
             "proxmox_virtual_environment_vm.ctrl_rancher_vm",
             "proxmox_virtual_environment_vm.etcd_rancher_vm",
             "proxmox_virtual_environment_vm.work_t4_gpu_rancher_vm",
-            "proxmox_virtual_environment_vm.work_no_gpu_rancher_vm",
+            "proxmox_virtual_environment_vm.work_l4_gpu_rancher_vm",
             "proxmox_virtual_environment_vm.srvr_rancher_vm",
             "proxmox_virtual_environment_file.ctrl_cloud_init_config",
             "proxmox_virtual_environment_file.etcd_cloud_init_config",
-            "proxmox_virtual_environment_file.work_no_gpu_cloud_init_config",
+            "proxmox_virtual_environment_file.work_l4_gpu_cloud_init_config",
             "proxmox_virtual_environment_file.work_t4_gpu_cloud_init_config",
             "proxmox_virtual_environment_file.srvr_cloud_init_config"
           ]'

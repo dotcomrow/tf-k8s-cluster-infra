@@ -1,24 +1,24 @@
-variable "work_no_gpu_cpu_cores" {
+variable "work_l4_gpu_cpu_cores" {
   type    = number
   default = 20
 }
 
-variable "work_no_gpu_cpu_sockets" {
+variable "work_l4_gpu_cpu_sockets" {
   type    = number
   default = 1
 }
 
-# variable "work_no_gpu_memory_gb_node0" {
+# variable "work_l4_gpu_memory_gb_node0" {
 #   type    = number
 #   default = 123
 # }
 
-variable "work_no_gpu_memory_gb_node1" {
+variable "work_l4_gpu_memory_gb_node1" {
   type    = number
   default = 123
 }
 
-resource "random_integer" "delay_seconds_work_no_gpu" {
+resource "random_integer" "delay_seconds_work_l4_gpu" {
   min = 181
   max = 240
 
@@ -29,14 +29,14 @@ resource "random_integer" "delay_seconds_work_no_gpu" {
   depends_on = [proxmox_virtual_environment_vm.srvr_rancher_vm]
 }
 
-resource "null_resource" "delay_before_vm_work_no_gpu" {
+resource "null_resource" "delay_before_vm_work_l4_gpu" {
   # Only changes if the random value changes (it won't) or srvr-node is replaced
   triggers = {
-    delay_val = random_integer.delay_seconds_work_no_gpu.result
+    delay_val = random_integer.delay_seconds_work_l4_gpu.result
   }
 
   provisioner "local-exec" {
-    command = "echo Sleeping for ${random_integer.delay_seconds_work_no_gpu.result} seconds... && sleep ${random_integer.delay_seconds_work_no_gpu.result}"
+    command = "echo Sleeping for ${random_integer.delay_seconds_work_l4_gpu.result} seconds... && sleep ${random_integer.delay_seconds_work_l4_gpu.result}"
   }
 
   # Recreate this delay only when srvr-node VM is replaced
@@ -50,7 +50,7 @@ resource "null_resource" "delay_before_vm_work_no_gpu" {
 }
 
 # Upload cloud-init configuration to Proxmox as a snippet
-resource "proxmox_virtual_environment_file" "work_no_gpu_cloud_init_config" {
+resource "proxmox_virtual_environment_file" "work_l4_gpu_cloud_init_config" {
   content_type = "snippets"
   datastore_id = "local"
   node_name    = var.node_name
@@ -58,8 +58,8 @@ resource "proxmox_virtual_environment_file" "work_no_gpu_cloud_init_config" {
 
   source_raw {
     # path = local_file.ctrl_processed_cloud_init.filename
-    data  = templatefile("${path.module}/config/cloud_init_work_no_gpu.tftpl", {
-        hostname   = var.work_no_gpu_hostname
+    data  = templatefile("${path.module}/config/cloud_init_work_l4_gpu.tftpl", {
+        hostname   = var.work_l4_gpu_hostname
         k8s_version = var.RKE2_VERSION
         ssh_keys = join("\n      - ", [trimspace(var.admin_ssh_public_key)])
         proxmox_host_ip = var.proxmox_host_ip
@@ -68,22 +68,22 @@ resource "proxmox_virtual_environment_file" "work_no_gpu_cloud_init_config" {
         MONITORED_RESOURCE_TYPE = var.MONITORED_RESOURCE_TYPE
         MONITORED_RESOURCE_LOCATION = var.REGION
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE
-        MONITORED_RESOURCE_NODE_ID = var.work_no_gpu_hostname
+        MONITORED_RESOURCE_NODE_ID = var.work_l4_gpu_hostname
         UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
         NVIDIA_DRIVER = var.NVIDIA_DRIVER
-        WORK_NODE_MAX_PODS = var.WORK_NO_GPU_NODE_MAX_PODS
+        WORK_NODE_MAX_PODS = var.WORK_L4_GPU_NODE_MAX_PODS
       })
-    file_name = "cloud_init_work_no_gpu.yaml"
+    file_name = "cloud_init_work_l4_gpu.yaml"
   }
 }
 
 # Define the Proxmox Virtual Machine using BGP Proxmox Provider
-resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
-  name      = var.work_no_gpu_hostname
+resource "proxmox_virtual_environment_vm" "work_l4_gpu_rancher_vm" {
+  name      = var.work_l4_gpu_hostname
   node_name = var.node_name
   stop_on_destroy = false
   on_boot = true
-  vm_id  = var.work_no_gpu_vmid
+  vm_id  = var.work_l4_gpu_vmid
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
@@ -94,8 +94,8 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
   }
 
   cpu {
-    cores   = var.work_no_gpu_cpu_cores
-    sockets = var.work_no_gpu_cpu_sockets
+    cores   = var.work_l4_gpu_cpu_cores
+    sockets = var.work_l4_gpu_cpu_sockets
     type    = "host"     # ✅ Best performance
     numa    = true       # ✅ Enable NUMA for >1 socket
     flags   = ["+aes", "+pdpe1gb", "+pcid"]
@@ -105,7 +105,7 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
   # numa {
   #   device = "numa0"
   #   cpus   = "0-19"
-  #   memory = var.work_no_gpu_memory_gb_node0 * 1024  # 122 GiB in MiB
+  #   memory = var.work_l4_gpu_memory_gb_node0 * 1024  # 122 GiB in MiB
   #   hostnodes = "0"
   #   policy    = "bind"
   # }
@@ -113,14 +113,14 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
   numa {
     device = "numa0"
     cpus   = "0-19"
-    memory = var.work_no_gpu_memory_gb_node1 * 1024  # 124 GiB in MiB
+    memory = var.work_l4_gpu_memory_gb_node1 * 1024  # 124 GiB in MiB
     hostnodes = "1"
     policy    = "bind"
   }
 
   memory {
-    # dedicated = var.work_no_gpu_memory_gb_node0 * 1024 + var.work_no_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
-    dedicated = var.work_no_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
+    # dedicated = var.work_l4_gpu_memory_gb_node0 * 1024 + var.work_l4_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
+    dedicated = var.work_l4_gpu_memory_gb_node1 * 1024  # fixed RAM allocation in MiB
     hugepages = var.enable_hugepages ? var.hugepages_value : null
   }
   
@@ -158,7 +158,7 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
     bridge = "vmbr1"
     model  = "virtio"                # ✅ Fastest virtual NIC
     firewall = false                 # ✅ Optional: skip Proxmox firewall overhead
-    queues   = var.work_no_gpu_cpu_cores * var.work_no_gpu_cpu_sockets   # match the number of vCPUs you assigned, e.g. 10
+    queues   = var.work_l4_gpu_cpu_cores * var.work_l4_gpu_cpu_sockets   # match the number of vCPUs you assigned, e.g. 10
     mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
@@ -178,13 +178,13 @@ resource "proxmox_virtual_environment_vm" "work_no_gpu_rancher_vm" {
       }
     }
 
-    user_data_file_id = proxmox_virtual_environment_file.work_no_gpu_cloud_init_config.id
+    user_data_file_id = proxmox_virtual_environment_file.work_l4_gpu_cloud_init_config.id
   }
 
   depends_on = [
     null_resource.download_iso,
     null_resource.gate_after_etcd,
     proxmox_virtual_environment_vm.srvr_rancher_vm,
-    null_resource.delay_before_vm_work_no_gpu
+    null_resource.delay_before_vm_work_l4_gpu
   ]
 }

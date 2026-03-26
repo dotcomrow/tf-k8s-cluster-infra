@@ -97,10 +97,10 @@ variable "work_t4_gpu_hostname" {
   default     = "work-node-t4-gpu"
 }
 
-variable "work_no_gpu_hostname" {
+variable "work_l4_gpu_hostname" {
   description = "Hostname for the non-GPU worker node VM."
   type        = string
-  default     = "work-node-no-gpu"
+  default     = "work-node-l4-gpu"
 }
 
 ###############################################################################
@@ -466,7 +466,7 @@ variable "WORK_T4_GPU_NODE_MAX_PODS" {
   default     = 180
 }
 
-variable "WORK_NO_GPU_NODE_MAX_PODS" {
+variable "WORK_L4_GPU_NODE_MAX_PODS" {
   description = "Maximum number of pods for the non-GPU worker node."
   type        = number
   default     = 180
@@ -667,7 +667,7 @@ variable "work_t4_gpu_vmid" {
   default     = 104
 }
 
-variable "work_no_gpu_vmid" {
+variable "work_l4_gpu_vmid" {
   description = "Proxmox VMID for the non-GPU worker node VM."
   type        = number
   default     = 106
