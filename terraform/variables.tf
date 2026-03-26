@@ -54,7 +54,7 @@ variable "node_name" {
 variable "VM_DISK_STORAGE" {
   description = "Proxmox datastore_id used for VM disks/EFI disks (e.g. 'local-lvm' or 'Cluster')."
   type        = string
-  default     = "Cluster"
+  default     = "ClusterStorage"
 }
 
 variable "vm_img" {
