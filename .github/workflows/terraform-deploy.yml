@@ -171,7 +171,7 @@ jobs:
           sudo --preserve-env=PATH bash -c '
             export PATH=$PATH:/usr/sbin:/sbin:/usr/bin:/bin
 
-            for vm in ctrl-node etcd-node work-node-no-gpu work-node-t4-gpu srvr-node; do
+            for vm in ctrl-node etcd-node work-node-l4-gpu work-node-t4-gpu srvr-node; do
               echo "🔌 Stopping $vm"
               vmid=$(qm list | awk -v name="$vm" '\''$0 ~ name {print $1}'\'')
               if [[ -n "$vmid" ]]; then
@@ -185,7 +185,7 @@ jobs:
             echo "🧼 Cleaning up cloud-init snippets..."
             rm -f /var/lib/vz/snippets/cloud_init_srvr_node.yaml || true
             rm -f /var/lib/vz/snippets/cloud_init_work_node_t4_gpu.yaml || true
-            rm -f /var/lib/vz/snippets/cloud_init_work_node_no_gpu.yaml || true
+            rm -f /var/lib/vz/snippets/cloud_init_work_node_l4_gpu.yaml || true
             rm -f /var/lib/vz/snippets/cloud_init_etcd_node.yaml || true
             rm -f /var/lib/vz/snippets/cloud_init_ctrl_node.yaml || true
           '
