@@ -6267,7 +6267,18 @@ write_files:
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
         --set-string config.ZO_IGNORE_FILE_RETENTION_BY_STREAM="true" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
+        --set-string config.ZO_META_STORE=postgres \
+        --set-string config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+        --set-string config.ZO_META_TRANSACTION_LOCK_TIMEOUT=1800 \
+        --set-string config.ZO_META_TRANSACTION_RETRIES=10 \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
+        --set probes.router.enabled=true \
+        --set probes.router.config.startupProbe.initialDelaySeconds=30 \
+        --set probes.router.config.startupProbe.periodSeconds=10 \
+        --set probes.router.config.startupProbe.failureThreshold=90 \
+        --set probes.router.config.readinessProbe.initialDelaySeconds=30 \
+        --set probes.router.config.livenessProbe.initialDelaySeconds=120 \
         --set replicaCount.ingester=0 \
         --set replicaCount.querier=0 \
         --set replicaCount.router=0 \
@@ -6388,6 +6399,11 @@ write_files:
         --set replicaCount.querier=0 \
         --set replicaCount.compactor=0 \
         --set replicaCount.alertmanager=0
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
+        {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
+      ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
+        {"op":"add","path":"/spec/strategy","value":{"type":"Recreate"}}
+      ]'
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=900s
 
       echo "🚀 Scaling remaining OpenObserve workloads..."
@@ -6399,7 +6415,18 @@ write_files:
         --set replicaCount.querier=1 \
         --set replicaCount.compactor=1 \
         --set replicaCount.alertmanager=1 \
+        --set probes.router.enabled=true \
+        --set probes.router.config.startupProbe.initialDelaySeconds=30 \
+        --set probes.router.config.startupProbe.periodSeconds=10 \
+        --set probes.router.config.startupProbe.failureThreshold=90 \
+        --set probes.router.config.readinessProbe.initialDelaySeconds=30 \
+        --set probes.router.config.livenessProbe.initialDelaySeconds=120 \
         --set replicaCount.router=1
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
+        {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
+      ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
+        {"op":"add","path":"/spec/strategy","value":{"type":"Recreate"}}
+      ]'
 
       # now wait for the main OpenObserve workloads after scaling up
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-ingester --timeout=600s
