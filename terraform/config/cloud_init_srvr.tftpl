@@ -4430,7 +4430,13 @@ write_files:
                     valueFrom:
                       fieldRef:
                         fieldPath: metadata.namespace
-                args: ["--v=4", "--stderrthreshold=info", "--reload-cert"]
+                args:
+                  - --v=4
+                  - --stderrthreshold=info
+                  - --reload-cert
+                  - --client-ca-file=/etc/tls-certs/ca.crt
+                  - --tls-cert-file=/etc/tls-certs/tls.crt
+                  - --tls-private-key=/etc/tls-certs/tls.key
                 volumeMounts:
                   - name: tls-certs
                     mountPath: "/etc/tls-certs"
@@ -4465,25 +4471,6 @@ write_files:
               - name: tls-certs
                 secret:
                   secretName: vpa-tls-certs
-      
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: vpa-admission-controller
-        namespace: kube-system
-      spec:
-        template:
-          spec:
-            containers:
-              - name: admission-controller
-                args:
-                  - --v=4
-                  - --stderrthreshold=info
-                  - --reload-cert
-                  - --client-ca-file=/etc/tls-certs/ca.crt
-                  - --tls-cert-file=/etc/tls-certs/tls.crt
-                  - --tls-private-key=/etc/tls-certs/tls.key
       
       ---
       apiVersion: apps/v1
@@ -4762,12 +4749,20 @@ write_files:
       metadata:
         name: goldilocks-dashboard
         namespace: goldilocks
+        annotations:
+          teleport.dev/name: "goldilocks-gui"
+          teleport.dev/protocol: "http"
+          teleport.dev/public_addr: "goldilocks-gui.app.suncoast.systems"
+          teleport.dev/labels: "environment=production,service=goldilocks"
+          teleport.dev/description: "Goldilocks dashboard for Kubernetes resource recommendations"
         labels:
           app.kubernetes.io/name: goldilocks
           helm.sh/chart: goldilocks-10.2.0
           app.kubernetes.io/instance: goldilocks
           app.kubernetes.io/managed-by: Helm
           app.kubernetes.io/component: dashboard
+          teleport.dev/enroll: "true"
+          teleport.dev/app: "goldilocks-gui"
       spec:
         type: ClusterIP
         ports:
@@ -4793,7 +4788,7 @@ write_files:
           app.kubernetes.io/managed-by: Helm
           app.kubernetes.io/component: controller
       spec:
-        replicas: 1
+        replicas: 0
         revisionHistoryLimit: 10
         selector:
           matchLabels:
@@ -4888,34 +4883,6 @@ write_files:
                   httpGet:
                     path: /health
                     port: http
-      
-      ---
-      apiVersion: apps/v1
-      kind: Deployment
-      metadata:
-        name: goldilocks-controller
-        namespace: goldilocks
-      spec:
-        replicas: 0
-      
-      ---
-      apiVersion: v1
-      kind: Service
-      metadata:
-        name: goldilocks-dashboard
-        namespace: goldilocks
-        annotations:
-          argocd.argoproj.io/sync-wave: "46"
-          teleport.dev/name: "goldilocks-gui"
-          teleport.dev/protocol: "http"
-          teleport.dev/public_addr: "goldilocks-gui.app.suncoast.systems"
-          teleport.dev/labels: "environment=production,service=goldilocks"
-          teleport.dev/description: "Goldilocks dashboard for Kubernetes resource recommendations"
-        labels:
-          teleport.dev/enroll: "true"
-          app.kubernetes.io/name: goldilocks
-          app.kubernetes.io/component: dashboard
-          teleport.dev/app: "goldilocks-gui"
       
       ---
       apiVersion: rbac.authorization.k8s.io/v1
@@ -5092,21 +5059,18 @@ write_files:
                     - applications
                     - local:infrastructure
                     - local:applications
-            exclude:
-              any:
-                - resources:
-                    names:
-                      - argocd
-                      - kyverno
-                      - nvidia
-                - resources:
-                    selector:
-                      matchLabels:
-                        platform.suncoast.systems/goldilocks: "disabled"
-                - resources:
-                    selector:
-                      matchLabels:
-                        platform.suncoast.systems/vpa-exclude: "true"
+                - key: "{{ request.object.metadata.name }}"
+                  operator: NotIn
+                  value:
+                    - argocd
+                    - kyverno
+                    - nvidia
+                - key: "{{ request.object.metadata.labels.\"platform.suncoast.systems/goldilocks\" || '' }}"
+                  operator: NotEquals
+                  value: "disabled"
+                - key: "{{ request.object.metadata.labels.\"platform.suncoast.systems/vpa-exclude\" || '' }}"
+                  operator: NotEquals
+                  value: "true"
             mutate:
               targets:
                 - apiVersion: v1
@@ -6346,8 +6310,8 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{
         "metadata": { "annotations": { "linkerd.io/inject": "disabled" }},
         "spec": {
-          "podTemplate": {
-            "metadata": { "annotations": { "linkerd.io/inject": "disabled" }}
+          "inheritedMetadata": {
+            "annotations": { "linkerd.io/inject": "disabled" }
           }
         }
       }' || true
@@ -6362,6 +6326,7 @@ write_files:
 
       # create bucket using mc image (idempotent with -p)
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run minio-mc --rm -i --restart=Never \
+          --overrides='{"spec":{"priorityClassName":""}}' \
           --image quay.io/minio/mc --command -- /bin/sh -c "
             mc alias set local http://openobserve-minio:9000 \"$MINIO_USER\" \"$MINIO_PASS\" >/dev/null &&
             mc mb -p local/openobserve &&
@@ -6489,6 +6454,7 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT64=$(printf '%s' "$OO_SCHEMA_SEED_SCRIPT" | base64 | tr -d '\r\n')
 
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-seed --rm -i --restart=Never \
+            --overrides='{"spec":{"priorityClassName":""}}' \
             --image=python:3-alpine \
             --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
             --env OO_ORG="default" \
@@ -6611,6 +6577,7 @@ write_files:
           OO_STREAM_SETTINGS_SCRIPT64=$(printf '%s' "$OO_STREAM_SETTINGS_SCRIPT" | base64 | tr -d '\r\n')
 
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-settings --rm -i --restart=Never \
+            --overrides='{"spec":{"priorityClassName":""}}' \
             --image=python:3-alpine \
             --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
             --env OO_ORG="default" \
@@ -7676,6 +7643,7 @@ write_files:
 
           # Run inside cluster (no heredocs)
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
+            --overrides='{"spec":{"priorityClassName":""}}' \
             --image=python:3-alpine \
             --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
             --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
