@@ -6186,6 +6186,7 @@ write_files:
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/affinity='{"nodeAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"preference":{"matchExpressions":[{"key":"dedicated","operator":"In","values":["work-node"]}]}}]}}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl label namespace openobserve platform.suncoast.systems/system- --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
@@ -6334,7 +6335,7 @@ write_files:
         name: minio-mc
         namespace: openobserve
       spec:
-        priorityClassName: ""
+        priorityClassName: platform-system-high
         restartPolicy: Never
         containers:
           - name: mc
@@ -6478,7 +6479,7 @@ write_files:
             name: oo-stream-seed
             namespace: openobserve
           spec:
-            priorityClassName: ""
+            priorityClassName: platform-system-high
             restartPolicy: Never
             containers:
               - name: runner
@@ -6623,7 +6624,7 @@ write_files:
             name: oo-stream-settings
             namespace: openobserve
           spec:
-            priorityClassName: ""
+            priorityClassName: platform-system-high
             restartPolicy: Never
             containers:
               - name: runner
@@ -7712,7 +7713,7 @@ write_files:
             name: oo-dash-import
             namespace: openobserve
           spec:
-            priorityClassName: ""
+            priorityClassName: platform-system-high
             restartPolicy: Never
             containers:
               - name: runner
