@@ -6242,6 +6242,7 @@ write_files:
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
+        --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set-string image.oss.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=false \
         --set enterprise.openfga.enabled=false \
@@ -6394,6 +6395,7 @@ write_files:
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
         --reuse-values \
+        --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set replicaCount.router=1 \
         --set replicaCount.ingester=0 \
         --set replicaCount.querier=0 \
@@ -6411,6 +6413,7 @@ write_files:
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
         --reuse-values \
+        --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set replicaCount.ingester=1 \
         --set replicaCount.querier=1 \
         --set replicaCount.compactor=1 \
