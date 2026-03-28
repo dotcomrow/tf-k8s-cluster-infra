@@ -6193,7 +6193,7 @@ write_files:
       for i in {1..60}; do
         ns_system_label=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get namespace openobserve -o jsonpath='{.metadata.labels.platform\.suncoast\.systems/system}' 2>/dev/null || true)
         if [[ "$ns_system_label" != "true" ]]; then
-          echo "✅ openobserve namespace system label is '${ns_system_label:-<unset>}'"
+          echo "✅ openobserve namespace system label is '$${ns_system_label:-<unset>}'"
           break
         fi
         echo "🔄 openobserve namespace still labeled system=true ($i/60); waiting..."
