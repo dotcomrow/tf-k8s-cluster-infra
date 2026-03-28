@@ -2598,6 +2598,7 @@ write_files:
         name: longhorn-smoke-pod
         namespace: longhorn-smoke
       spec:
+        priorityClassName: ""
         nodeSelector:
           work-node: "true"
         containers:
