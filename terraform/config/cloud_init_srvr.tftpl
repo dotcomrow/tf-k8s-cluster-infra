@@ -5032,6 +5032,11 @@ write_files:
                     namespaceSelector:
                       matchLabels:
                         platform.suncoast.systems/system: "true"
+            preconditions:
+              all:
+                - key: "{{ request.namespace || '' }}"
+                  operator: NotEquals
+                  value: openobserve
             mutate:
               patchStrategicMerge:
                 spec:
@@ -6370,6 +6375,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
 
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label namespace openobserve platform.suncoast.systems/system=false --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=600s
 
       echo "🚀 Scaling OpenObserve workloads up (app runs migrations on startup)..."
@@ -10108,6 +10114,10 @@ write_files:
             project_id="$proj_label"
             if [[ -z "$project_id" ]]; then
               project_id="$proj_ann"
+            fi
+            if [[ "$ns" == "openobserve" ]]; then
+              sudo kubectl --kubeconfig="$KUBECONFIG_PATH" label ns "$ns" platform.suncoast.systems/system=false --overwrite
+              continue
             fi
             if [[ -z "$project_id" || -z "$${allowed_project_ids[$project_id]:-}" ]]; then
               sudo kubectl --kubeconfig="$KUBECONFIG_PATH" label ns "$ns" platform.suncoast.systems/vpa-exclude=true --overwrite
