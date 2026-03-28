@@ -2056,12 +2056,12 @@ write_files:
       echo "✅ All nodes are Ready!"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node dedicated=srvr-node system=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node dedicated=etcd-node system=true --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu dedicated=work-node --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-l4-gpu dedicated=work-node --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu dedicated=work-node-gpu --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu work-node=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-l4-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu work-node=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node ctrl-node dedicated=ctrl-node system=true --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-no-gpu node.longhorn.io/create-default-disk=true --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-l4-gpu node.longhorn.io/create-default-disk=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node work-node-t4-gpu node.longhorn.io/create-default-disk=true --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node srvr-node node.longhorn.io/create-default-disk=false --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label node etcd-node node.longhorn.io/create-default-disk=false --overwrite
