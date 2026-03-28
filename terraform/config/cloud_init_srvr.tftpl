@@ -6186,7 +6186,23 @@ write_files:
       sudo kubectl annotate namespace openobserve field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve scheduler.alpha.kubernetes.io/affinity='{"nodeAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"preference":{"matchExpressions":[{"key":"dedicated","operator":"In","values":["work-node"]}]}}]}}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace openobserve linkerd.io/inject=disabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl label namespace openobserve platform.suncoast.systems/system- --kubeconfig=/etc/rancher/rke2/rke2.yaml || true
+      sudo kubectl label namespace openobserve platform.suncoast.systems/system=false --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
+
+      echo "⏳ Waiting for openobserve namespace to be outside system-priority policy..."
+      ns_system_label=""
+      for i in {1..60}; do
+        ns_system_label=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get namespace openobserve -o jsonpath='{.metadata.labels.platform\.suncoast\.systems/system}' 2>/dev/null || true)
+        if [[ "$ns_system_label" != "true" ]]; then
+          echo "✅ openobserve namespace system label is '${ns_system_label:-<unset>}'"
+          break
+        fi
+        echo "🔄 openobserve namespace still labeled system=true ($i/60); waiting..."
+        sleep 2
+      done
+      if [[ "$ns_system_label" == "true" ]]; then
+        echo "❌ openobserve namespace still labeled system=true; aborting OpenObserve bootstrap."
+        exit 1
+      fi
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
@@ -6240,6 +6256,7 @@ write_files:
         --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-ro.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
+        --set postgres.spec.instances=1 \
         --set-string postgres.spec.storage.size=10Gi \
         --set-string postgres.spec.storage.storageClass=longhorn \
         --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
@@ -6317,6 +6334,7 @@ write_files:
           }
         }
       }' || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch cluster.postgresql.cnpg.io openobserve-postgres --type merge -p '{"spec":{"instances":1}}' || true
 
       # wait for minio to be ready
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deploy/openobserve-minio --timeout=120s
@@ -6352,7 +6370,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
 
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=300s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=600s
 
       echo "🚀 Scaling OpenObserve workloads up (app runs migrations on startup)..."
       sudo helm upgrade openobserve openobserve/openobserve \
