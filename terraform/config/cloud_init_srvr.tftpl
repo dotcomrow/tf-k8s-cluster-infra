@@ -6273,6 +6273,16 @@ write_files:
         --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
         --set-string config.ZO_META_TRANSACTION_LOCK_TIMEOUT=1800 \
         --set-string config.ZO_META_TRANSACTION_RETRIES=10 \
+        --set-string router.config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string router.config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+        --set-string ingester.config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string ingester.config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+        --set-string querier.config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string querier.config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+        --set-string compactor.config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string compactor.config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+        --set-string alertmanager.config.ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+        --set-string alertmanager.config.ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
         --set probes.router.enabled=true \
         --set probes.router.config.startupProbe.initialDelaySeconds=30 \
