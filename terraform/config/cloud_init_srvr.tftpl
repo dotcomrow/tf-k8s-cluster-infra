@@ -6326,13 +6326,29 @@ write_files:
         get secret openobserve-minio -o jsonpath='{.data.rootPassword}' | base64 -d)
 
       # create bucket using mc image (idempotent with -p)
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run minio-mc --rm -i --restart=Never \
-          --overrides='{"spec":{"priorityClassName":""}}' \
-          --image quay.io/minio/mc --command -- /bin/sh -c "
-            mc alias set local http://openobserve-minio:9000 \"$MINIO_USER\" \"$MINIO_PASS\" >/dev/null &&
-            mc mb -p local/openobserve &&
-            mc ls local
-          "
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: minio-mc
+        namespace: openobserve
+      spec:
+        priorityClassName: ""
+        restartPolicy: Never
+        containers:
+          - name: mc
+            image: quay.io/minio/mc
+            command: ["/bin/sh","-c"]
+            args:
+              - |
+                mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null &&
+                mc mb -p local/openobserve &&
+                mc ls local
+      EOF
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/minio-mc --timeout=180s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/minio-mc || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
 
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=300s
@@ -6454,14 +6470,36 @@ write_files:
 
           OO_SCHEMA_SEED_SCRIPT64=$(printf '%s' "$OO_SCHEMA_SEED_SCRIPT" | base64 | tr -d '\r\n')
 
-          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-seed --rm -i --restart=Never \
-            --overrides='{"spec":{"priorityClassName":""}}' \
-            --image=python:3-alpine \
-            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
-            --env OO_ORG="default" \
-            --env OO_STREAMS_B64="$OO_STREAMS_B64" \
-            --env OO_SCHEMA_SEED_SCRIPT64="$OO_SCHEMA_SEED_SCRIPT64" \
-            -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"OO_SCHEMA_SEED_SCRIPT64\"]).decode())"'
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-seed --ignore-not-found >/dev/null 2>&1 || true
+          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: oo-stream-seed
+            namespace: openobserve
+          spec:
+            priorityClassName: ""
+            restartPolicy: Never
+            containers:
+              - name: runner
+                image: python:3-alpine
+                command: ["/bin/sh","-c"]
+                args:
+                  - |
+                    python -c 'import os,base64;exec(base64.b64decode(os.environ["OO_SCHEMA_SEED_SCRIPT64"]).decode())'
+                env:
+                  - name: OO_AUTH_HEADER
+                    value: "$OO_AUTH_HEADER"
+                  - name: OO_ORG
+                    value: "default"
+                  - name: OO_STREAMS_B64
+                    value: "$OO_STREAMS_B64"
+                  - name: OO_SCHEMA_SEED_SCRIPT64
+                    value: "$OO_SCHEMA_SEED_SCRIPT64"
+          EOF
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-stream-seed --timeout=300s
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-stream-seed || true
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-seed --ignore-not-found >/dev/null 2>&1 || true
       fi
 
       echo "Ensuring OpenObserve log stream indexes include trace_id and span_id..."
@@ -6577,15 +6615,38 @@ write_files:
 
           OO_STREAM_SETTINGS_SCRIPT64=$(printf '%s' "$OO_STREAM_SETTINGS_SCRIPT" | base64 | tr -d '\r\n')
 
-          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-stream-settings --rm -i --restart=Never \
-            --overrides='{"spec":{"priorityClassName":""}}' \
-            --image=python:3-alpine \
-            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
-            --env OO_ORG="default" \
-            --env OO_STREAMS_B64="$OO_STREAMS_B64" \
-            --env OO_STREAM_INDEX_FIELDS_B64="$OO_STREAM_INDEX_FIELDS_B64" \
-            --env OO_STREAM_SETTINGS_SCRIPT64="$OO_STREAM_SETTINGS_SCRIPT64" \
-            -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"OO_STREAM_SETTINGS_SCRIPT64\"]).decode())"'
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-settings --ignore-not-found >/dev/null 2>&1 || true
+          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: oo-stream-settings
+            namespace: openobserve
+          spec:
+            priorityClassName: ""
+            restartPolicy: Never
+            containers:
+              - name: runner
+                image: python:3-alpine
+                command: ["/bin/sh","-c"]
+                args:
+                  - |
+                    python -c 'import os,base64;exec(base64.b64decode(os.environ["OO_STREAM_SETTINGS_SCRIPT64"]).decode())'
+                env:
+                  - name: OO_AUTH_HEADER
+                    value: "$OO_AUTH_HEADER"
+                  - name: OO_ORG
+                    value: "default"
+                  - name: OO_STREAMS_B64
+                    value: "$OO_STREAMS_B64"
+                  - name: OO_STREAM_INDEX_FIELDS_B64
+                    value: "$OO_STREAM_INDEX_FIELDS_B64"
+                  - name: OO_STREAM_SETTINGS_SCRIPT64
+                    value: "$OO_STREAM_SETTINGS_SCRIPT64"
+          EOF
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-stream-settings --timeout=300s
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-stream-settings || true
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-settings --ignore-not-found >/dev/null 2>&1 || true
       fi
 
       echo "🔐 Installing GitHub auth proxy for OpenObserve (Dex + oauth2-proxy + NGINX + cookie bootstrap)..."
@@ -7643,13 +7704,34 @@ write_files:
           DASHBOARD_SCRIPT64=$(printf '%s' "$DASHBOARD_SCRIPT" | base64 | tr -d '\r\n')
 
           # Run inside cluster (no heredocs)
-          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve run oo-dash-import --rm -i --restart=Never \
-            --overrides='{"spec":{"priorityClassName":""}}' \
-            --image=python:3-alpine \
-            --env OO_AUTH_HEADER="$OO_AUTH_HEADER" \
-            --env OO_DASHBOARD_FOLDERS_B64="$DASHBOARD_FOLDERS_B64" \
-            --env DASHBOARD_SCRIPT64="$DASHBOARD_SCRIPT64" \
-            -- /bin/sh -c 'python -c "import os,base64;exec(base64.b64decode(os.environ[\"DASHBOARD_SCRIPT64\"]).decode())"'
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
+          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: oo-dash-import
+            namespace: openobserve
+          spec:
+            priorityClassName: ""
+            restartPolicy: Never
+            containers:
+              - name: runner
+                image: python:3-alpine
+                command: ["/bin/sh","-c"]
+                args:
+                  - |
+                    python -c 'import os,base64;exec(base64.b64decode(os.environ["DASHBOARD_SCRIPT64"]).decode())'
+                env:
+                  - name: OO_AUTH_HEADER
+                    value: "$OO_AUTH_HEADER"
+                  - name: OO_DASHBOARD_FOLDERS_B64
+                    value: "$OO_DASHBOARD_FOLDERS_B64"
+                  - name: DASHBOARD_SCRIPT64
+                    value: "$DASHBOARD_SCRIPT64"
+          EOF
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-dash-import --timeout=300s
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-dash-import || true
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
       fi
 
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
