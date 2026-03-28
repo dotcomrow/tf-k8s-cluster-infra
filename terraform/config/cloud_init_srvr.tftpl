@@ -6378,23 +6378,35 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label namespace openobserve platform.suncoast.systems/system=false --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=600s
 
-      echo "🚀 Scaling OpenObserve workloads up (app runs migrations on startup)..."
+      echo "🚀 Starting OpenObserve router first so DB migrations run once..."
+      sudo helm upgrade openobserve openobserve/openobserve \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        -n openobserve \
+        --reuse-values \
+        --set replicaCount.router=1 \
+        --set replicaCount.ingester=0 \
+        --set replicaCount.querier=0 \
+        --set replicaCount.compactor=0 \
+        --set replicaCount.alertmanager=0
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=900s
+
+      echo "🚀 Scaling remaining OpenObserve workloads..."
       sudo helm upgrade openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
         --reuse-values \
         --set replicaCount.ingester=1 \
         --set replicaCount.querier=1 \
-        --set replicaCount.router=1 \
         --set replicaCount.compactor=1 \
-        --set replicaCount.alertmanager=1
+        --set replicaCount.alertmanager=1 \
+        --set replicaCount.router=1
 
       # now wait for the main OpenObserve workloads after scaling up
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-ingester --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-querier --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-compactor --timeout=600s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-alertmanager --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=600s
       echo "✔️ OpenObserve installed."
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
