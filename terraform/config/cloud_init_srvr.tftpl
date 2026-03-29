@@ -6410,10 +6410,12 @@ write_files:
       fi
 
       # Safety: pre-mark known problematic migration so router bootstrap does not crash-loop.
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve exec openobserve-postgres-1 -- \
-        psql -v ON_ERROR_STOP=1 -U postgres -d app -c "DO \$\$
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve exec openobserve-postgres-1 -- sh -lc "psql -U postgres -d app <<'SQL'
+      DO \$\$
       BEGIN
-        IF EXISTS (
+        IF to_regclass('public.seaql_migrations') IS NULL THEN
+          RAISE NOTICE 'seaql_migrations not present yet; skipping pre-mark migration';
+        ELSIF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema='public' AND table_name='seaql_migrations' AND column_name='checksum'
         ) THEN
@@ -6425,8 +6427,9 @@ write_files:
           VALUES ('m20260107_000001_sync_distinct_stream_retention', (extract(epoch from now())*1000)::bigint)
           ON CONFLICT (version) DO NOTHING;
         END IF;
-      END
-      \$\$;" 
+      END;
+      \$\$;
+      SQL" || true
 
       echo "🚀 Starting OpenObserve router first so DB migrations run once..."
       sudo helm upgrade openobserve openobserve/openobserve \
