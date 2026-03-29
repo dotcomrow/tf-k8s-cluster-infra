@@ -6633,7 +6633,7 @@ write_files:
                     value: "$OO_STREAMS_B64"
                   - name: OO_SCHEMA_SEED_SCRIPT64
                     value: "$OO_SCHEMA_SEED_SCRIPT64"
-          EOF
+      EOF
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-stream-seed --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-stream-seed || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-seed --ignore-not-found >/dev/null 2>&1 || true
@@ -6780,7 +6780,7 @@ write_files:
                     value: "$OO_STREAM_INDEX_FIELDS_B64"
                   - name: OO_STREAM_SETTINGS_SCRIPT64
                     value: "$OO_STREAM_SETTINGS_SCRIPT64"
-          EOF
+      EOF
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-stream-settings --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-stream-settings || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-settings --ignore-not-found >/dev/null 2>&1 || true
@@ -7865,7 +7865,7 @@ write_files:
                     value: "$OO_DASHBOARD_FOLDERS_B64"
                   - name: DASHBOARD_SCRIPT64
                     value: "$DASHBOARD_SCRIPT64"
-          EOF
+      EOF
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-dash-import --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-dash-import || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
@@ -8533,9 +8533,6 @@ write_files:
                 X-Tracestate: "$http_tracestate"
                 X-Baggage: "$http_baggage"
       EOF
-
-      fi
-      fi
 
   - path: /etc/systemd/system/install-apisix-rancher.service
     permissions: '0644'
