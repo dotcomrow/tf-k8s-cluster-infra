@@ -6260,7 +6260,8 @@ write_files:
         --set-string auth.ZO_ROOT_USER_EMAIL="$OPENOBSERVE_USERNAME" \
         --set-string auth.ZO_ROOT_USER_PASSWORD="$OPENOBSERVE_PASSWORD" \
         --set-string auth.ZO_META_POSTGRES_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
-        --set-string auth.ZO_META_POSTGRES_RO_DSN="" \
+        --set-string auth.ZO_META_POSTGRES_RO_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
+        --set-string auth.ZO_META_DDL_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable" \
         --set-string postgres.spec.password="$OPENOBSERVE_PG_PASSWORD" \
         --set postgres.spec.instances=1 \
         --set-string postgres.spec.storage.size=10Gi \
