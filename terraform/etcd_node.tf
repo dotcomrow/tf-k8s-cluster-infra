@@ -89,7 +89,7 @@ resource "proxmox_virtual_environment_vm" "etcd_rancher_vm" {
     interface    = "scsi0"           # ✅ Required for iothread
     iothread     = true              # ✅ Improves disk performance
     discard      = "on"
-    size         = 200
+    size         = 100
     file_format  = "raw"             # ✅ Faster I/O
     cache     = "writeback"
   }
