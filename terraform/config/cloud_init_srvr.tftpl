@@ -7842,30 +7842,31 @@ write_files:
 
           # Run inside cluster (no heredocs)
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
-          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: oo-dash-import
-            namespace: openobserve
-          spec:
-            priorityClassName: platform-system-high
-            restartPolicy: Never
-            containers:
-              - name: runner
-                image: python:3-alpine
-                command: ["/bin/sh","-c"]
-                args:
-                  - |
-                    python -c 'import os,base64;exec(base64.b64decode(os.environ["DASHBOARD_SCRIPT64"]).decode())'
-                env:
-                  - name: OO_AUTH_HEADER
-                    value: "$OO_AUTH_HEADER"
-                  - name: OO_DASHBOARD_FOLDERS_B64
-                    value: "$OO_DASHBOARD_FOLDERS_B64"
-                  - name: DASHBOARD_SCRIPT64
-                    value: "$DASHBOARD_SCRIPT64"
-        EOF
+          {
+            printf '%s\n' \
+              "apiVersion: v1" \
+              "kind: Pod" \
+              "metadata:" \
+              "  name: oo-dash-import" \
+              "  namespace: openobserve" \
+              "spec:" \
+              "  priorityClassName: platform-system-high" \
+              "  restartPolicy: Never" \
+              "  containers:" \
+              "    - name: runner" \
+              "      image: python:3-alpine" \
+              "      command: [\"/bin/sh\",\"-c\"]" \
+              "      args:" \
+              "        - |" \
+              "          python -c 'import os,base64;exec(base64.b64decode(os.environ[\"DASHBOARD_SCRIPT64\"]).decode())'" \
+              "      env:" \
+              "        - name: OO_AUTH_HEADER" \
+              "          value: \"$OO_AUTH_HEADER\"" \
+              "        - name: OO_DASHBOARD_FOLDERS_B64" \
+              "          value: \"$OO_DASHBOARD_FOLDERS_B64\"" \
+              "        - name: DASHBOARD_SCRIPT64" \
+              "          value: \"$DASHBOARD_SCRIPT64\""
+          } | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-dash-import --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-dash-import || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
