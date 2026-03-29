@@ -7885,30 +7885,30 @@ write_files:
 
           # Write manifest to disk, validate, then apply from file
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
-          cat <<EOF >/root/oo-dash-import.yaml
-          apiVersion: v1
-          kind: Pod
-          metadata:
-            name: oo-dash-import
-            namespace: openobserve
-          spec:
-            priorityClassName: platform-system-high
-            restartPolicy: Never
-            containers:
-              - name: runner
-                image: python:3-alpine
-                command: ["/bin/sh","-c"]
-                args:
-                  - |
-                    python -c 'import os,base64;exec(base64.b64decode(os.environ["DASHBOARD_SCRIPT64"]).decode())'
-                env:
-                  - name: OO_AUTH_HEADER
-                    value: "$OO_AUTH_HEADER"
-                  - name: OO_DASHBOARD_FOLDERS_B64
-                    value: "$OO_DASHBOARD_FOLDERS_B64"
-                  - name: DASHBOARD_SCRIPT64
-                    value: "$DASHBOARD_SCRIPT64"
-          EOF
+          OO_DASH_IMPORT_FILE="/root/oo-dash-import.yaml"
+          : > "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' 'apiVersion: v1' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' 'kind: Pod' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' 'metadata:' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '  name: oo-dash-import' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '  namespace: openobserve' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' 'spec:' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '  priorityClassName: platform-system-high' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '  restartPolicy: Never' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '  containers:' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '    - name: runner' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '      image: python:3-alpine' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '      command: ["/bin/sh","-c"]' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '      args:' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '        - |' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '          python -c '\''import os,base64;exec(base64.b64decode(os.environ["DASHBOARD_SCRIPT64"]).decode())'\''' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '      env:' >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '        - name: OO_AUTH_HEADER' >> "$OO_DASH_IMPORT_FILE"
+          printf '          value: "%s"\n' "$OO_AUTH_HEADER" >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '        - name: OO_DASHBOARD_FOLDERS_B64' >> "$OO_DASH_IMPORT_FILE"
+          printf '          value: "%s"\n' "$OO_DASHBOARD_FOLDERS_B64" >> "$OO_DASH_IMPORT_FILE"
+          printf '%s\n' '        - name: DASHBOARD_SCRIPT64' >> "$OO_DASH_IMPORT_FILE"
+          printf '          value: "%s"\n' "$DASHBOARD_SCRIPT64" >> "$OO_DASH_IMPORT_FILE"
           echo "📝 OpenObserve dashboard import manifest written to /root/oo-dash-import.yaml"
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --dry-run=client -f /root/oo-dash-import.yaml >/dev/null
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f /root/oo-dash-import.yaml
