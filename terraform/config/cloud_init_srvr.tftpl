@@ -6400,6 +6400,33 @@ write_files:
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label namespace openobserve platform.suncoast.systems/system=false --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=600s
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/openobserve-postgres-1 --timeout=300s || true
+
+      # Safety: force RO/DDL DSNs to the same RW DSN in the generated OpenObserve secret.
+      OO_RW_DSN=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}' 2>/dev/null | base64 -d || true)
+      if [ -n "$OO_RW_DSN" ]; then
+        OO_RW_DSN_B64=$(printf '%s' "$OO_RW_DSN" | base64 | tr -d '\n')
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch secret openobserve --type=merge -p "{\"data\":{\"ZO_META_POSTGRES_RO_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_DDL_DSN\":\"$OO_RW_DSN_B64\"}}" || true
+      fi
+
+      # Safety: pre-mark known problematic migration so router bootstrap does not crash-loop.
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve exec openobserve-postgres-1 -- \
+        psql -v ON_ERROR_STOP=1 -U postgres -d app -c "DO \$\$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema='public' AND table_name='seaql_migrations' AND column_name='checksum'
+        ) THEN
+          INSERT INTO seaql_migrations(version, applied_at, checksum)
+          VALUES ('m20260107_000001_sync_distinct_stream_retention', (extract(epoch from now())*1000)::bigint, '')
+          ON CONFLICT (version) DO NOTHING;
+        ELSE
+          INSERT INTO seaql_migrations(version, applied_at)
+          VALUES ('m20260107_000001_sync_distinct_stream_retention', (extract(epoch from now())*1000)::bigint)
+          ON CONFLICT (version) DO NOTHING;
+        END IF;
+      END
+      \$\$;" 
 
       echo "🚀 Starting OpenObserve router first so DB migrations run once..."
       sudo helm upgrade openobserve openobserve/openobserve \
