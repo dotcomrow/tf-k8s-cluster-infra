@@ -6404,9 +6404,12 @@ write_files:
 
       # Safety: force RO/DDL DSNs to the same RW DSN in the generated OpenObserve secret.
       OO_RW_DSN=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}' 2>/dev/null | base64 -d || true)
+      if [ -z "$OO_RW_DSN" ]; then
+        OO_RW_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable"
+      fi
       if [ -n "$OO_RW_DSN" ]; then
         OO_RW_DSN_B64=$(printf '%s' "$OO_RW_DSN" | base64 | tr -d '\n')
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch secret openobserve --type=merge -p "{\"data\":{\"ZO_META_POSTGRES_RO_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_DDL_DSN\":\"$OO_RW_DSN_B64\"}}" || true
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch secret openobserve --type=merge -p "{\"data\":{\"ZO_META_POSTGRES_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_POSTGRES_RO_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_DDL_DSN\":\"$OO_RW_DSN_B64\"}}" || true
       fi
 
       # Safety: pre-mark known problematic migration so router bootstrap does not crash-loop.
@@ -6444,6 +6447,18 @@ write_files:
         --set replicaCount.querier=0 \
         --set replicaCount.compactor=0 \
         --set replicaCount.alertmanager=0
+      if [ -n "$OO_RW_DSN" ]; then
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env deploy/openobserve-router \
+          ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
+          ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
+          ZO_META_DDL_DSN="$OO_RW_DSN" \
+          ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+          ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+          ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
+          ZO_META_TRANSACTION_RETRIES=30 \
+          ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
+          RUST_BACKTRACE=1
+      fi
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
@@ -6468,6 +6483,18 @@ write_files:
         --set probes.router.config.readinessProbe.initialDelaySeconds=30 \
         --set probes.router.config.livenessProbe.initialDelaySeconds=120 \
         --set replicaCount.router=1
+      if [ -n "$OO_RW_DSN" ]; then
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env deploy/openobserve-router \
+          ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
+          ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
+          ZO_META_DDL_DSN="$OO_RW_DSN" \
+          ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+          ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+          ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
+          ZO_META_TRANSACTION_RETRIES=30 \
+          ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
+          RUST_BACKTRACE=1
+      fi
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
