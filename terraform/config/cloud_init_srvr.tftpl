@@ -7883,9 +7883,9 @@ write_files:
 
           DASHBOARD_SCRIPT64=$(printf '%s' "$DASHBOARD_SCRIPT" | base64 | tr -d '\r\n')
 
-          # Run inside cluster (no heredocs)
+          # Write manifest to disk, validate, then apply from file
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
-          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+          cat <<EOF >/root/oo-dash-import.yaml
           apiVersion: v1
           kind: Pod
           metadata:
@@ -7909,6 +7909,9 @@ write_files:
                   - name: DASHBOARD_SCRIPT64
                     value: "$DASHBOARD_SCRIPT64"
           EOF
+          echo "📝 OpenObserve dashboard import manifest written to /root/oo-dash-import.yaml"
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --dry-run=client -f /root/oo-dash-import.yaml >/dev/null
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f /root/oo-dash-import.yaml
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-dash-import --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-dash-import || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-dash-import --ignore-not-found >/dev/null 2>&1 || true
