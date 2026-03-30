@@ -815,7 +815,7 @@ write_files:
           linux-modules-extra-$(uname -r) \
           build-essential \
           dkms
-      ubuntu-drivers autoinstall
+      # Keep driver selection deterministic across T4/L4 nodes.
       ubuntu-drivers install --gpgpu nvidia:${NVIDIA_DRIVER}-server
       sudo apt-get install -y \
         nvidia-utils-${NVIDIA_DRIVER}-server \
