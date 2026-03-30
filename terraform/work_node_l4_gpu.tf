@@ -87,8 +87,9 @@ resource "proxmox_virtual_environment_vm" "work_l4_gpu_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  # Increase 64-bit MMIO space for large-BAR GPU passthrough.
-  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072"
+  # Increase 64-bit MMIO space and work around vfio startup failure on this host:
+  # "MSIX PBA outside of specified BAR"
+  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072 -set device.hostpci0.x-msix-relocation=bar2"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
