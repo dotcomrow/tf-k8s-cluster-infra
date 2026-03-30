@@ -8048,8 +8048,68 @@ write_files:
       
       sudo helm repo update
 
-      sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      wait_for_kyverno_webhook_service() {
+        local webhook_name="$1"
+        local retries="${2:-60}"
+        local delay="${3:-5}"
+        local svc_name svc_ns ep_addrs
+
+        for i in $(seq 1 "$retries"); do
+          svc_name="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get validatingwebhookconfigurations.admissionregistration.k8s.io -o json 2>/dev/null | jq -r --arg w "$webhook_name" '[.items[]?.webhooks[]? | select(.name==$w) | .clientConfig.service.name][0] // empty' 2>/dev/null || true)"
+          svc_ns="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml get validatingwebhookconfigurations.admissionregistration.k8s.io -o json 2>/dev/null | jq -r --arg w "$webhook_name" '[.items[]?.webhooks[]? | select(.name==$w) | .clientConfig.service.namespace][0] // empty' 2>/dev/null || true)"
+
+          if [[ -n "$svc_name" && -n "$svc_ns" ]]; then
+            ep_addrs="$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n "$svc_ns" get endpoints "$svc_name" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)"
+            if [[ -n "$ep_addrs" ]]; then
+              echo "✅ Webhook '$webhook_name' is ready via $svc_ns/$svc_name"
+              return 0
+            fi
+          fi
+
+          echo "⏳ Waiting for webhook '$webhook_name' endpoints ($i/$retries)..."
+          sleep "$delay"
+        done
+
+        echo "⚠️ Webhook '$webhook_name' did not report ready endpoints in time."
+        return 1
+      }
+
+      create_namespace_with_retry() {
+        local ns="$1"
+        local retries="${2:-30}"
+        local delay="${3:-5}"
+        local out=""
+
+        for i in $(seq 1 "$retries"); do
+          if out="$(sudo kubectl create namespace "$ns" --kubeconfig=/etc/rancher/rke2/rke2.yaml 2>&1)"; then
+            echo "$out"
+            return 0
+          fi
+
+          if grep -qi "AlreadyExists" <<< "$out"; then
+            echo "namespace/$ns already exists"
+            return 0
+          fi
+
+          if grep -qi "failed calling webhook" <<< "$out"; then
+            echo "⏳ Namespace '$ns' blocked by admission webhook ($i/$retries); waiting and retrying..."
+            sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno rollout status deploy/kyverno-admission-controller --timeout=180s >/dev/null 2>&1 || true
+            wait_for_kyverno_webhook_service "validate.kyverno.svc-fail" 1 0 || true
+            sleep "$delay"
+            continue
+          fi
+
+          echo "$out" >&2
+          return 1
+        done
+
+        echo "❌ Failed to create namespace '$ns' after $retries attempts." >&2
+        return 1
+      }
+
+      wait_for_kyverno_webhook_service "validate.kyverno.svc-fail" 60 5 || true
+      create_namespace_with_retry etcd 30 5
+      create_namespace_with_retry apisix 30 5
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace etcd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml

@@ -168,7 +168,7 @@ variable "OPENOBSERVE_IMAGE_TAG" {
 variable "NVIDIA_DRIVER" {
   description = "NVIDIA driver major version to install on worker nodes (Ubuntu 'nvidia-<ver>-server' packages)."
   type        = string
-  default     = "550"
+  default     = "580"
 }
 
 variable "NVIDIA_HELM_CHART_VERSION" {
