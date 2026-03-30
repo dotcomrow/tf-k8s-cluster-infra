@@ -9475,8 +9475,12 @@ write_files:
             kubernetes_ca_cert=@/vault/data/k8s-ca.crt \
             disable_iss_validation=true
 
-          # Enable KV v2
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv || true
+          # Enable KV v2 if not already mounted
+          if VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets list -format=json | jq -e '."secret/"' >/dev/null 2>&1; then
+            echo "secret/ mount already exists; skipping enable."
+          else
+            VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
+          fi
 
           # Policies
           cat <<EOF > /vault/data/avp-policy.hcl
@@ -9500,10 +9504,10 @@ write_files:
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
           echo >> /vault/creds-data/secret_id.txt
 
-          # Store root token
-          kubectl create secret generic vault-root-token \
+          # Store root token (idempotent)
+          kubectl -n vault create secret generic vault-root-token \
             --from-literal=VAULT_TOKEN=\$(jq -r '.root_token' /vault/data/init.json) \
-            -n vault || kubectl -n vault get secret vault-root-token >/dev/null
+            --dry-run=client -o yaml | kubectl apply -f -
 
           # Push/update Vault root token into Terraform Cloud variable set for external app runs.
           if [ -n "\$TFC_API_TOKEN" ]; then
@@ -9527,7 +9531,10 @@ write_files:
                     "\$NEXT_URL" 2>/dev/null || true)"
                   [ -n "\$PAGE_JSON" ] || { echo "WARNING: failed to list variable sets for organization '\$TFC_ORGANIZATION'."; break; }
 
-                  MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg name "\$TFC_EXTERNAL_APPS_VARSET_NAME" '.data[]? | select(.attributes.name == $name) | .id')"
+                  MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg name "\$TFC_EXTERNAL_APPS_VARSET_NAME" '.data[]? | select(.attributes.name == $name) | .id' 2>/dev/null || true)"
+                  if [ -z "\$MATCH_IDS" ] && ! echo "\$PAGE_JSON" | jq -e . >/dev/null 2>&1; then
+                    echo "WARNING: could not parse Terraform variable set response JSON."
+                  fi
                   if [ -n "\$MATCH_IDS" ]; then
                     TFC_VARSET_ID="\$(echo "\$MATCH_IDS" | head -n1)"
                     MATCH_COUNT="\$(echo "\$MATCH_IDS" | wc -l | tr -d ' ')"
