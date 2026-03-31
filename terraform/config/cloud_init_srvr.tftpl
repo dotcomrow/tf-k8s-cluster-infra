@@ -1126,27 +1126,52 @@ write_files:
       mkdir -p /etc/google-cloud-ops-agent
       echo "${GCP_LOGGING_KEY}" | base64 -d > /etc/google-cloud-ops-agent/logging-key.json
 
-      mkdir -p /usr/share/keyrings
-      KEYRING_PATH="/usr/share/keyrings/fluent-bit-archive-keyring.gpg"
-
-      # Clean up any broken or partial key
-      rm -f "$KEYRING_PATH"
-
-      until curl -fsSL https://packages.fluentbit.io/fluentbit.key | gpg --dearmor --no-tty --batch -o "$KEYRING_PATH"; do
-        echo "Waiting for DNS resolution or valid key for fluentbit.key..."
-        sleep 5
-        rm -f "$KEYRING_PATH"  # ensure no corrupted key is left behind
-      done
-
       DISTRO=$(lsb_release -cs)
       if [ "$DISTRO" = "${UBUNTU_RELEASE_CODE_NAME}" ]; then
         echo "Detected codename $DISTRO unsupported, falling back to jammy"
         DISTRO="jammy"
       fi
 
-      echo "deb [signed-by=/usr/share/keyrings/fluent-bit-archive-keyring.gpg] https://packages.fluentbit.io/ubuntu/$DISTRO $DISTRO main" > /etc/apt/sources.list.d/fluent-bit.list
-      sudo apt-get update
-      sudo apt-get install -y td-agent-bit
+      mkdir -p /usr/share/keyrings
+      KEYRING_PATH="/usr/share/keyrings/fluent-bit-archive-keyring.gpg"
+      FLUENTBIT_REPO_BASE=""
+      FLUENTBIT_REPO_CANDIDATES=("https://packages.fluentbit.io" "https://s3.amazonaws.com/packages.fluentbit.io")
+
+      # Clean up any broken or partial key
+      rm -f "$KEYRING_PATH"
+
+      for candidate in "${FLUENTBIT_REPO_CANDIDATES[@]}"; do
+        key_url="$candidate/fluentbit.key"
+        release_url="$candidate/ubuntu/$DISTRO/dists/$DISTRO/Release"
+
+        for i in $(seq 1 8); do
+          if curl -fsSL "$key_url" | gpg --dearmor --no-tty --batch -o "$KEYRING_PATH" && curl -fsSI "$release_url" >/dev/null; then
+            FLUENTBIT_REPO_BASE="$candidate"
+            break 2
+          fi
+          echo "Waiting for Fluent Bit repo candidate $candidate ($i/8)..."
+          sleep 5
+          rm -f "$KEYRING_PATH"
+        done
+      done
+
+      if [ -z "$FLUENTBIT_REPO_BASE" ]; then
+        echo "❌ Fluent Bit repo and fallback are unreachable; failing provisioning."
+        exit 1
+      fi
+
+      echo "Using Fluent Bit repo: $FLUENTBIT_REPO_BASE"
+      echo "deb [signed-by=/usr/share/keyrings/fluent-bit-archive-keyring.gpg] $FLUENTBIT_REPO_BASE/ubuntu/$DISTRO $DISTRO main" > /etc/apt/sources.list.d/fluent-bit.list
+      if ! command -v td-agent-bit >/dev/null 2>&1; then
+        if ! sudo apt-get update; then
+          echo "❌ apt-get update failed for Fluent Bit repo; failing provisioning."
+          exit 1
+        fi
+        if ! sudo apt-get install -y td-agent-bit; then
+          echo "❌ td-agent-bit install failed; failing provisioning."
+          exit 1
+        fi
+      fi
 
       mkdir -p /etc/td-agent-bit/conf.d
 
