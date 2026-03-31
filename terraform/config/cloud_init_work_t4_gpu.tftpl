@@ -96,21 +96,14 @@ write_files:
       # export HTTPS_PROXY=http://10.0.0.10:3128
       # export NO_PROXY=127.0.0.1,localhost,10.0.0.0/24,10.96.0.0/12
 
-      # Keep at least one housekeeping CPU for interrupts/kernel threads.
-      CPU_COUNT="$(nproc || echo 1)"
-      if [ "$${CPU_COUNT}" -gt 1 ]; then
-        LAST_CPU="$((CPU_COUNT - 1))"
-        CPU_FLAGS="nohz_full=1-$${LAST_CPU} isolcpus=1-$${LAST_CPU} rcu_nocbs=1-$${LAST_CPU}"
-        sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"$${CPU_FLAGS}\"|" /etc/default/grub
-        update-grub
-        grub-mkconfig -o /boot/grub/grub.cfg || true
-      fi
+      # Do not apply aggressive CPU isolation flags on GPU worker VMs.
+      # Prior tuning here caused IRQ starvation and unstable GPU initialization.
+      echo "Skipping CPU isolation kernel flags on GPU worker VM."
 
       # update-ca-certificates
       systemctl daemon-reload
       /usr/local/bin/performance-tuning.sh
       sysctl --system
-      update-grub
       /usr/local/bin/disable-swap.sh
       
       systemctl enable setup-hosts-dns.service
@@ -308,24 +301,8 @@ write_files:
       TasksMax=infinity
       EOF
 
-      # Unbind kernel workqueues from specific CPUs (recommended on NUMA/multicore systems)
-      if [ -e /sys/module/workqueue/parameters/disable_bound ]; then
-        echo y > /sys/module/workqueue/parameters/disable_bound
-        echo "✅ Enabled unbound kernel workqueues for better scalability"
-      fi
-
-      # 6) Add GRUB performance kernel parameters
-      echo "✅ Adding performance kernel parameters to GRUB..."
-      GRUB_CONFIG_FILE="/etc/default/grub"
-
-      # Append only if not already present
-      if ! grep -q "workqueue.disable_bound=1" "$GRUB_CONFIG_FILE"; then
-        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="workqueue.disable_bound=1 intel_pstate=disable processor.max_cstate=1 idle=poll transparent_hugepage=never mitigations=off /' "$GRUB_CONFIG_FILE"
-        update-grub
-        echo "✅ GRUB updated. Kernel parameters will apply on next boot."
-      else
-        echo "⚠️ GRUB already configured. Skipping update."
-      fi
+      # Skip aggressive kernel/workqueue boot tuning in guests.
+      # It can reduce VM stability and is better handled on the Proxmox host.
       
       systemctl daemon-reload
 
