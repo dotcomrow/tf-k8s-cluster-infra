@@ -686,7 +686,7 @@ write_files:
       # Clean up any broken or partial key
       rm -f "$KEYRING_PATH"
 
-      for candidate in "${FLUENTBIT_REPO_CANDIDATES[@]}"; do
+      for candidate in "$${FLUENTBIT_REPO_CANDIDATES[@]}"; do
         key_url="$candidate/fluentbit.key"
         release_url="$candidate/ubuntu/$DISTRO/dists/$DISTRO/Release"
 
