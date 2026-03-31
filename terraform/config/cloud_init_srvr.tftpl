@@ -8056,8 +8056,8 @@ write_files:
 
       ensure_namespace() {
         local ns="$1"
-        local retries="${2:-30}"
-        local delay="${3:-5}"
+        local retries="$${2:-30}"
+        local delay="$${3:-5}"
         local out=""
 
         for i in $(seq 1 "$retries"); do
