@@ -8056,8 +8056,10 @@ write_files:
 
       ensure_namespace() {
         local ns="$1"
-        local retries="$${2:-30}"
-        local delay="$${3:-5}"
+        local retries=30
+        local delay=5
+        if [ "$#" -ge 2 ] && [ -n "$2" ]; then retries="$2"; fi
+        if [ "$#" -ge 3 ] && [ -n "$3" ]; then delay="$3"; fi
         local out=""
 
         for i in $(seq 1 "$retries"); do
