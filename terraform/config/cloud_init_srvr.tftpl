@@ -6232,12 +6232,33 @@ write_files:
       # End NFS install
 
       # 5) install openobserve
-      # Generate random username and password
-      export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)@suncoast.systems"
-      export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
-      export OPENOBSERVE_PG_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
-      export OPENOBSERVE_MINIO_USER="oo$(openssl rand -hex 4)"
-      export OPENOBSERVE_MINIO_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
+      # Reuse existing credentials when present so reruns are idempotent.
+      EXISTING_OO_USER=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-root-creds -o jsonpath='{.data.username}' 2>/dev/null | base64 -d || true)
+      EXISTING_OO_PASS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-root-creds -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+      if [ -n "$EXISTING_OO_USER" ] && [ -n "$EXISTING_OO_PASS" ]; then
+        export OPENOBSERVE_USERNAME="$EXISTING_OO_USER"
+        export OPENOBSERVE_PASSWORD="$EXISTING_OO_PASS"
+      else
+        export OPENOBSERVE_USERNAME="user$(openssl rand -hex 4)@suncoast.systems"
+        export OPENOBSERVE_PASSWORD="$(openssl rand -base64 24)"
+      fi
+
+      EXISTING_OO_PG_PASS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-postgres-app -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+      if [ -n "$EXISTING_OO_PG_PASS" ]; then
+        export OPENOBSERVE_PG_PASSWORD="$EXISTING_OO_PG_PASS"
+      else
+        export OPENOBSERVE_PG_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
+      fi
+
+      EXISTING_MINIO_USER=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-minio -o jsonpath='{.data.rootUser}' 2>/dev/null | base64 -d || true)
+      EXISTING_MINIO_PASS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-minio -o jsonpath='{.data.rootPassword}' 2>/dev/null | base64 -d || true)
+      if [ -n "$EXISTING_MINIO_USER" ] && [ -n "$EXISTING_MINIO_PASS" ]; then
+        export OPENOBSERVE_MINIO_USER="$EXISTING_MINIO_USER"
+        export OPENOBSERVE_MINIO_PASSWORD="$EXISTING_MINIO_PASS"
+      else
+        export OPENOBSERVE_MINIO_USER="oo$(openssl rand -hex 4)"
+        export OPENOBSERVE_MINIO_PASSWORD="$(openssl rand -base64 32 | tr -dc 'A-Za-z0-9' | head -c32)"
+      fi
 
       echo "🏗️ Installing OpenObserve..."
       RETRIES=5
@@ -6480,8 +6501,18 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready cluster.postgresql.cnpg.io/openobserve-postgres --timeout=600s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=Ready pod/openobserve-postgres-1 --timeout=300s || true
 
-      # Safety: force RO/DDL DSNs to the same RW DSN in the generated OpenObserve secret.
-      OO_RW_DSN=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}' 2>/dev/null | base64 -d || true)
+      # Safety: build DSN from CNPG app secret (authoritative source) and mirror into OpenObserve secret.
+      PG_APP_USER=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-postgres-app -o jsonpath='{.data.username}' 2>/dev/null | base64 -d || true)
+      PG_APP_PASS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-postgres-app -o jsonpath='{.data.password}' 2>/dev/null | base64 -d || true)
+      PG_APP_DB=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve-postgres-app -o jsonpath='{.data.dbname}' 2>/dev/null | base64 -d || true)
+      if [ -z "$PG_APP_DB" ]; then
+        PG_APP_DB="app"
+      fi
+      if [ -n "$PG_APP_USER" ] && [ -n "$PG_APP_PASS" ]; then
+        OO_RW_DSN="postgres://$PG_APP_USER:$PG_APP_PASS@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/$PG_APP_DB?sslmode=disable"
+      else
+        OO_RW_DSN=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}' 2>/dev/null | base64 -d || true)
+      fi
       if [ -z "$OO_RW_DSN" ]; then
         OO_RW_DSN="postgres://openobserve:$OPENOBSERVE_PG_PASSWORD@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/app?sslmode=disable"
       fi
