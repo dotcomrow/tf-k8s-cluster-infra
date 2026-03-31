@@ -89,8 +89,10 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  # Work around vfio MSI-X table placement on this host while keeping 64-bit MMIO space.
-  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072 -set device.hostpci0.x-msix-relocation=bar0"
+  # Keep 64-bit MMIO space for passthrough and disable MSI-X in the
+  # guest-facing vfio device. BAR0 relocation has repeatedly triggered NVIDIA
+  # RmInitAdapter failures on Ubuntu guests for SR-IOV-capable GPUs.
+  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072 -set device.hostpci0.x-no-msix=on"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
