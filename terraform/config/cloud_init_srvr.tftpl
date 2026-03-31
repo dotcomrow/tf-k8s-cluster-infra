@@ -7,7 +7,7 @@ users:
       - "ALL=(ALL) NOPASSWD:ALL"
     groups: users, admin
     shell: /bin/bash
-    lock_passwd: false
+    lock_passwd: ${VM_CONSOLE_LOCK_PASSWORD}
     ssh_authorized_keys:
       - ${ssh_keys}
 

@@ -42,6 +42,12 @@ variable "VM_CONSOLE_PASSWORD" {
   default     = "TempConsolePass!2026"
 }
 
+variable "VM_CONSOLE_LOGIN_ENABLED" {
+  description = "Enable password-based local console login for the ubuntu user. When false, the account password remains locked."
+  type        = bool
+  default     = false
+}
+
 ###############################################################################
 # Proxmox Host / VM Image
 ###############################################################################

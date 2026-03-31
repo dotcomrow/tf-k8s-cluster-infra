@@ -32,6 +32,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         k8s_version = var.RKE2_VERSION
         ssh_keys = join("\n      - ", [trimspace(var.admin_ssh_public_key)])
         VM_CONSOLE_PASSWORD = var.VM_CONSOLE_PASSWORD
+        VM_CONSOLE_LOCK_PASSWORD = var.VM_CONSOLE_LOGIN_ENABLED ? "false" : "true"
         proxmox_host_ip = var.proxmox_host_ip
         RANCHER_HOSTNAME = var.RANCHER_HOSTNAME
         RANCHER_DOMAIN = var.RANCHER_DOMAIN
