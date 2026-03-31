@@ -175,7 +175,7 @@ variable "VAULT_VERSION" {
 variable "OPENOBSERVE_IMAGE_TAG" {
   description = "OpenObserve image tag to deploy."
   type        = string
-  default     = "v0.70.0"
+  default     = "v0.70.1"
 }
 
 variable "NVIDIA_DRIVER" {

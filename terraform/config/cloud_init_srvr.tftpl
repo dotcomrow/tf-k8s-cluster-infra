@@ -6490,29 +6490,55 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch secret openobserve --type=merge -p "{\"data\":{\"ZO_META_POSTGRES_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_POSTGRES_RO_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_DDL_DSN\":\"$OO_RW_DSN_B64\"}}" || true
       fi
 
-      # Safety: pre-mark known problematic migration so router bootstrap does not crash-loop.
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve exec openobserve-postgres-1 -- sh -lc "psql -U postgres -d app <<'SQL'
-      DO \$\$
-      BEGIN
-        CREATE TABLE IF NOT EXISTS seaql_migrations (
-          version character varying(255) PRIMARY KEY,
-          applied_at bigint NOT NULL
-        );
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_schema='public' AND table_name='seaql_migrations' AND column_name='checksum'
-        ) THEN
-          INSERT INTO seaql_migrations(version, applied_at, checksum)
-          VALUES ('m20260107_000001_sync_distinct_stream_retention', (extract(epoch from now())*1000)::bigint, '')
-          ON CONFLICT (version) DO NOTHING;
-        ELSE
-          INSERT INTO seaql_migrations(version, applied_at)
-          VALUES ('m20260107_000001_sync_distinct_stream_retention', (extract(epoch from now())*1000)::bigint)
-          ON CONFLICT (version) DO NOTHING;
-        END IF;
-      END;
-      \$\$;
-      SQL" || true
+      set_openobserve_dsn_env() {
+        echo "🔧 Enforcing PostgreSQL DSNs on OpenObserve workloads..."
+        for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager; do
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env "$target" \
+            ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
+            ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
+            ZO_META_DDL_DSN="$OO_RW_DSN" \
+            ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+            ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+            ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
+            ZO_META_TRANSACTION_RETRIES=30 \
+            ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
+            RUST_BACKTRACE=1 >/dev/null 2>&1 || true
+        done
+      }
+
+      dump_openobserve_debug() {
+        echo "===== OpenObserve debug dump ====="
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get pods -o wide || true
+        echo "----- events -----"
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get events --sort-by=.lastTimestamp | tail -n 200 || true
+        OO_PODS=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get pods -o name 2>/dev/null || true)
+        if [ -z "$OO_PODS" ]; then
+          echo "No OpenObserve pods found."
+          return
+        fi
+        for pod_name in $OO_PODS; do
+          pod_name=$(echo "$pod_name" | sed 's#^pod/##')
+          echo "----- describe $pod_name -----"
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve describe pod "$pod_name" | tail -n 200 || true
+          echo "----- logs $pod_name (current) -----"
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs "$pod_name" --all-containers=true --tail=200 || true
+          echo "----- logs $pod_name (previous) -----"
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs "$pod_name" --all-containers=true --previous --tail=200 || true
+        done
+      }
+
+      wait_for_openobserve_rollout() {
+        target="$1"
+        timeout="$2"
+        if [ -z "$timeout" ]; then
+          timeout="600s"
+        fi
+        if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status "$target" --timeout="$timeout"; then
+          echo "❌ OpenObserve rollout failed for $target"
+          dump_openobserve_debug
+          exit 1
+        fi
+      }
 
       echo "🚀 Starting OpenObserve router first so DB migrations run once..."
       sudo helm upgrade openobserve openobserve/openobserve \
@@ -6526,23 +6552,14 @@ write_files:
         --set replicaCount.compactor=0 \
         --set replicaCount.alertmanager=0
       if [ -n "$OO_RW_DSN" ]; then
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env deploy/openobserve-router \
-          ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
-          ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
-          ZO_META_DDL_DSN="$OO_RW_DSN" \
-          ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
-          ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
-          ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
-          ZO_META_TRANSACTION_RETRIES=30 \
-          ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
-          RUST_BACKTRACE=1
+        set_openobserve_dsn_env
       fi
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"add","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]'
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=900s
+      wait_for_openobserve_rollout deployment/openobserve-router 900s
 
       echo "🚀 Scaling remaining OpenObserve workloads..."
       sudo helm upgrade openobserve openobserve/openobserve \
@@ -6562,16 +6579,7 @@ write_files:
         --set probes.router.config.livenessProbe.initialDelaySeconds=120 \
         --set replicaCount.router=1
       if [ -n "$OO_RW_DSN" ]; then
-        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env deploy/openobserve-router \
-          ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
-          ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
-          ZO_META_DDL_DSN="$OO_RW_DSN" \
-          ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
-          ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
-          ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
-          ZO_META_TRANSACTION_RETRIES=30 \
-          ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
-          RUST_BACKTRACE=1
+        set_openobserve_dsn_env
       fi
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
@@ -6580,11 +6588,11 @@ write_files:
       ]'
 
       # now wait for the main OpenObserve workloads after scaling up
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-ingester --timeout=600s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-querier --timeout=600s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-compactor --timeout=600s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status statefulset/openobserve-alertmanager --timeout=600s
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve rollout status deployment/openobserve-router --timeout=600s
+      wait_for_openobserve_rollout statefulset/openobserve-ingester 600s
+      wait_for_openobserve_rollout statefulset/openobserve-querier 600s
+      wait_for_openobserve_rollout deployment/openobserve-compactor 600s
+      wait_for_openobserve_rollout statefulset/openobserve-alertmanager 600s
+      wait_for_openobserve_rollout deployment/openobserve-router 600s
       echo "✔️ OpenObserve installed."
 
       OO_BASIC="$(printf '%s:%s' "$OPENOBSERVE_USERNAME" "$OPENOBSERVE_PASSWORD" | base64 | tr -d '\r\n')"
