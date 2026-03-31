@@ -6,8 +6,14 @@ users:
     sudo: ["ALL=(ALL) NOPASSWD:ALL"]
     groups: users, admin
     shell: /bin/bash
+    lock_passwd: false
     ssh_authorized_keys:
       - ${ssh_keys}
+
+chpasswd:
+  expire: false
+  list: |
+    ubuntu:${VM_CONSOLE_PASSWORD}
 
 bootcmd:
   - [ systemctl, stop, apt-daily.service, apt-daily-upgrade.service ]

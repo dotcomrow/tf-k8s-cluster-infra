@@ -7,8 +7,14 @@ users:
       - "ALL=(ALL) NOPASSWD:ALL"
     groups: users, admin
     shell: /bin/bash
+    lock_passwd: false
     ssh_authorized_keys:
       - ${ssh_keys}
+
+chpasswd:
+  expire: false
+  list: |
+    ubuntu:${VM_CONSOLE_PASSWORD}
 
 bootcmd:
   - [ systemctl, stop, apt-daily.service, apt-daily-upgrade.service ]
@@ -2879,7 +2885,7 @@ write_files:
       tls: true
       type: githubConfig
       logoutAllSupported: false
-      rancherUrl: 'https://${RANCHER_HOSTNAME}.{RANCHER_DOMAIN}'
+      rancherUrl: 'https://${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}'
       allowedPrincipalIds:
         - 'github_team:${GITHUB_AUTH_VAL}'
       scopes:
@@ -8048,8 +8054,39 @@ write_files:
       
       sudo helm repo update
 
-      sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
-      sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      ensure_namespace() {
+        local ns="$1"
+        local retries="${2:-30}"
+        local delay="${3:-5}"
+        local out=""
+
+        for i in $(seq 1 "$retries"); do
+          if out="$(sudo kubectl create namespace "$ns" --kubeconfig=/etc/rancher/rke2/rke2.yaml 2>&1)"; then
+            echo "$out"
+            return 0
+          fi
+
+          if printf '%s' "$out" | grep -qi "AlreadyExists"; then
+            echo "namespace/$ns already exists"
+            return 0
+          fi
+
+          if printf '%s' "$out" | grep -qi "failed calling webhook"; then
+            echo "⏳ Namespace '$ns' blocked by admission webhook ($i/$retries); retrying..."
+            sleep "$delay"
+            continue
+          fi
+
+          echo "$out" >&2
+          return 1
+        done
+
+        echo "❌ Failed to create namespace '$ns' after $retries attempts." >&2
+        return 1
+      }
+
+      ensure_namespace etcd 30 5
+      ensure_namespace apisix 30 5
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace etcd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml

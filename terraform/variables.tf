@@ -35,6 +35,13 @@ variable "admin_ssh_public_key" {
   type        = string
 }
 
+variable "VM_CONSOLE_PASSWORD" {
+  description = "Temporary local password for the ubuntu user to allow Proxmox console login. Rotate after recovery."
+  type        = string
+  sensitive   = true
+  default     = "TempConsolePass!2026"
+}
+
 ###############################################################################
 # Proxmox Host / VM Image
 ###############################################################################
