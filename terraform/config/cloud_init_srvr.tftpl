@@ -8048,34 +8048,8 @@ write_files:
       
       sudo helm repo update
 
-      create_namespace_with_retry() {
-        local ns="$1"
-        local retries=30
-        local delay=5
-        local out
-
-        for i in $(seq 1 "$retries"); do
-          if sudo kubectl get namespace "$ns" --kubeconfig=/etc/rancher/rke2/rke2.yaml >/dev/null 2>&1; then
-            echo "namespace/$ns already exists"
-            return 0
-          fi
-
-          if out="$(sudo kubectl create namespace "$ns" --kubeconfig=/etc/rancher/rke2/rke2.yaml 2>&1)"; then
-            echo "$out"
-            return 0
-          fi
-
-          echo "⏳ Failed to create namespace '$ns' ($i/$retries): $out"
-          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kyverno rollout status deploy/kyverno-admission-controller --timeout=120s >/dev/null 2>&1 || true
-          sleep "$delay"
-        done
-
-        echo "❌ Failed to create namespace '$ns' after $retries attempts." >&2
-        return 1
-      }
-
-      create_namespace_with_retry etcd
-      create_namespace_with_retry apisix
+      sudo kubectl create namespace etcd --kubeconfig=/etc/rancher/rke2/rke2.yaml
+      sudo kubectl create namespace apisix --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace apisix linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace etcd field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
