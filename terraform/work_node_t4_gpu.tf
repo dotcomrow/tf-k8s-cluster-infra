@@ -62,8 +62,6 @@ resource "proxmox_virtual_environment_file" "work_t4_gpu_cloud_init_config" {
         hostname   = var.work_t4_gpu_hostname
         k8s_version = var.RKE2_VERSION
         ssh_keys = join("\n      - ", [trimspace(var.admin_ssh_public_key)])
-        VM_CONSOLE_PASSWORD = var.VM_CONSOLE_PASSWORD
-        VM_CONSOLE_LOCK_PASSWORD = var.VM_CONSOLE_LOGIN_ENABLED ? "false" : "true"
         proxmox_host_ip = var.proxmox_host_ip
         RANCHER_DOMAIN = var.RANCHER_DOMAIN
         GCP_LOGGING_KEY = local.rancher_credentials_json
@@ -71,8 +69,8 @@ resource "proxmox_virtual_environment_file" "work_t4_gpu_cloud_init_config" {
         MONITORED_RESOURCE_LOCATION = var.REGION
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE
         MONITORED_RESOURCE_NODE_ID = var.work_t4_gpu_hostname
-        UBUNTU_RELEASE_CODE_NAME = var.GPU_UBUNTU_RELEASE_CODE_NAME
-        NVIDIA_DRIVER = var.GPU_NVIDIA_DRIVER
+        UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
+        NVIDIA_DRIVER = var.NVIDIA_DRIVER
         WORK_NODE_MAX_PODS = var.WORK_T4_GPU_NODE_MAX_PODS
       })
     file_name = "cloud_init_work_t4_gpu.yaml"
@@ -89,10 +87,6 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  # Keep 64-bit MMIO space for passthrough and relocate MSI-X PBA to BAR5.
-  # Without this relocation, QEMU can reject startup with:
-  # "MSIX PBA outside of specified BAR" on these GPUs.
-  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=262144 -set device.hostpci0.x-msix-relocation=bar5"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
@@ -136,7 +130,7 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   disk {
     datastore_id = var.VM_DISK_STORAGE
-    file_id      = "local:iso/${basename(var.gpu_vm_img)}"
+    file_id      = "local:iso/${basename(var.vm_img)}"
     interface    = "scsi0"            # ✅ More efficient than virtio0
     iothread     = true               # ✅ Enable I/O thread for this disk
     discard      = "on"              # ✅ TRIM support
@@ -188,7 +182,7 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
   }
 
   depends_on = [
-    null_resource.download_gpu_iso,
+    null_resource.download_iso,
     null_resource.gate_after_etcd,
     proxmox_virtual_environment_vm.srvr_rancher_vm,
     null_resource.delay_before_vm_work_t4_gpu
