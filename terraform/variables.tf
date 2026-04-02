@@ -76,10 +76,22 @@ variable "vm_img" {
   default     = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
 }
 
+variable "gpu_vm_img" {
+  description = "Ubuntu cloud image URL used specifically for GPU worker VMs (T4/L4)."
+  type        = string
+  default     = "https://cloud-images.ubuntu.com/releases/20.04/release/ubuntu-20.04-server-cloudimg-amd64.img"
+}
+
 variable "UBUNTU_RELEASE_CODE_NAME" {
   description = "Ubuntu release code name used by cloud-init templates (e.g. 'noble')."
   type        = string
   default     = "noble"
+}
+
+variable "GPU_UBUNTU_RELEASE_CODE_NAME" {
+  description = "Ubuntu release code name used by GPU worker cloud-init templates (e.g. 'focal')."
+  type        = string
+  default     = "focal"
 }
 
 ###############################################################################
@@ -182,6 +194,12 @@ variable "NVIDIA_DRIVER" {
   description = "NVIDIA driver major version to install on worker nodes (Ubuntu 'nvidia-<ver>-server' packages)."
   type        = string
   default     = "580"
+}
+
+variable "GPU_NVIDIA_DRIVER" {
+  description = "NVIDIA driver major version to install on GPU worker nodes (Ubuntu 'nvidia-<ver>-server' packages)."
+  type        = string
+  default     = "550"
 }
 
 variable "NVIDIA_HELM_CHART_VERSION" {
