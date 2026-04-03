@@ -119,7 +119,6 @@ write_files:
       /usr/local/bin/setup-docker.sh
       systemctl enable host-root-rbind.service
       systemctl start host-root-rbind.service
-      /usr/local/bin/setup-nvidia.sh
       /usr/local/bin/setup-fluentbit.sh
       /usr/local/bin/setup-rke2.sh
 
@@ -904,9 +903,6 @@ write_files:
 
       kube-scheduler-arg:
         - "feature-gates=InPlacePodVerticalScaling=true"
-
-      node-label:
-        - "suncoast.systems/gpu=l4"
 
       kubelet-arg:
         - "--max-pods=${WORK_NODE_MAX_PODS}"

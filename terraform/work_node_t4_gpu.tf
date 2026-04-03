@@ -89,6 +89,10 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
+  # Keep known-good passthrough args for T4 on this host/QEMU combo.
+  # Without MSI-X relocation, QEMU can fail with:
+  # "MSIX PBA outside of specified BAR".
+  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072 -set device.hostpci0.x-msix-relocation=bar5"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
