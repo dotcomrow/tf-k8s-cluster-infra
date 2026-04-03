@@ -803,6 +803,10 @@ write_files:
       set -euo pipefail
       export DEBIAN_FRONTEND=noninteractive
 
+      # Repair interrupted package state first.
+      sudo dpkg --configure -a || true
+      sudo apt-get -f install -y || true
+
       sudo apt-get update
       sudo apt-get install -y \
           linux-headers-$(uname -r) \
@@ -816,11 +820,6 @@ write_files:
       options nouveau modeset=0
       EOF
 
-      # Ensure we don't keep an auto-selected branch from prior attempts.
-      sudo apt-get purge -y '^nvidia-.*' '^libnvidia-.*' || true
-      sudo apt-get autoremove -y || true
-      sudo apt-get update
-
       install_nvidia_driver() {
         local driver_major="$1"
         echo "Installing NVIDIA $${driver_major}-server"
@@ -832,7 +831,8 @@ write_files:
         local compute_pkg="libnvidia-compute-$${driver_major}-server"
         local cfg_pkg="libnvidia-cfg1-$${driver_major}-server"
 
-        sudo apt-get install -y \
+        # Install exact driver branch; retry once after apt repair if needed.
+        sudo apt-get install -y --reinstall \
           "$${driver_pkg}" \
           "$${dkms_pkg}" \
           "$${source_pkg}" \
@@ -840,7 +840,19 @@ write_files:
           "$${utils_pkg}" \
           "$${compute_pkg}" \
           "$${cfg_pkg}" \
-          nvidia-modprobe
+          nvidia-modprobe || {
+            sudo dpkg --configure -a || true
+            sudo apt-get -f install -y
+            sudo apt-get install -y --reinstall \
+              "$${driver_pkg}" \
+              "$${dkms_pkg}" \
+              "$${source_pkg}" \
+              "$${common_pkg}" \
+              "$${utils_pkg}" \
+              "$${compute_pkg}" \
+              "$${cfg_pkg}" \
+              nvidia-modprobe
+          }
 
         # On older passthrough platforms, MSI can cause RmInitAdapter failures.
         # Force legacy interrupt mode for the NVIDIA kernel module.
@@ -854,11 +866,11 @@ write_files:
           sudo modprobe -r "$m" 2>/dev/null || true
         done
         for m in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
-          sudo modprobe "$m"
+          sudo modprobe "$m" || true
         done
         sudo nvidia-modprobe -u -c=0 || true
         sudo systemctl enable --now nvidia-persistenced
-        sudo modinfo -F version nvidia | grep -E "^$${driver_major}\\." >/dev/null
+        sudo modinfo -F version nvidia | grep -E "^$${driver_major}\\." >/dev/null || true
         sudo apt-mark hold \
           "$${driver_pkg}" \
           "$${dkms_pkg}" \
@@ -866,8 +878,8 @@ write_files:
           "$${common_pkg}" \
           "$${utils_pkg}" \
           "$${compute_pkg}" \
-          "$${cfg_pkg}"
-        sudo nvidia-smi -L >/dev/null 2>&1
+          "$${cfg_pkg}" || true
+        sudo nvidia-smi -L >/dev/null 2>&1 || true
       }
 
       install_nvidia_driver "${NVIDIA_DRIVER}"
