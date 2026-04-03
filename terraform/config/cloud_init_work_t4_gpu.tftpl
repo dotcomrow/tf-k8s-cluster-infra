@@ -324,6 +324,11 @@ write_files:
       blacklist nouveau
       options nouveau modeset=0
 
+  - path: /etc/modprobe.d/nvidia-passthrough.conf
+    permissions: '0644'
+    content: |
+      options nvidia NVreg_EnableMSI=0
+
   - path: /usr/local/bin/disable-swap.sh
     permissions: '0755'
     content: |
