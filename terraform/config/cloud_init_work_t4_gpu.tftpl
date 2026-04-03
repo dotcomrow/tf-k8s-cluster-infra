@@ -819,10 +819,10 @@ write_files:
           dkms
 
       # Prevent nouveau from claiming the GPU before nvidia loads.
-      sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null <<EOF
-      blacklist nouveau
-      options nouveau modeset=0
-      EOF
+      printf '%s\n' \
+        'blacklist nouveau' \
+        'options nouveau modeset=0' \
+        | sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null
 
       install_nvidia_driver() {
         local driver_major="$1"
@@ -860,9 +860,9 @@ write_files:
 
         # On older passthrough platforms, MSI can cause RmInitAdapter failures.
         # Force legacy interrupt mode for the NVIDIA kernel module.
-        sudo tee /etc/modprobe.d/nvidia-passthrough.conf >/dev/null <<EOF
-        options nvidia NVreg_EnableMSI=0
-        EOF
+        printf '%s\n' \
+          'options nvidia NVreg_EnableMSI=0' \
+          | sudo tee /etc/modprobe.d/nvidia-passthrough.conf >/dev/null
 
         sudo dkms autoinstall
         sudo depmod -a
