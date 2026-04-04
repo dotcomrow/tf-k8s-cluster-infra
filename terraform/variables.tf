@@ -157,13 +157,13 @@ variable "SRVR_IP_ALIAS_IFACE" {
 variable "k8s_base_version" {
   description = "Kubernetes version used for auxiliary tooling/images (e.g. kubectl)."
   type        = string
-  default     = "1.34.3"
+  default     = "1.35.2"
 }
 
 variable "RKE2_VERSION" {
   description = "RKE2 release version to install on nodes (e.g. 'v1.34.3+rke2r1')."
   type        = string
-  default     = "v1.34.3+rke2r1"
+  default     = "v1.35.2+rke2r1"
 }
 
 variable "RANCHER_CHART_REPO" {
