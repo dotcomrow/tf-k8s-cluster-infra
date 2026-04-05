@@ -900,7 +900,6 @@ write_files:
         - "--container-log-max-size=10Mi"
         - "--container-log-max-files=3"
         - "--system-reserved=cpu=500m,memory=2Gi,ephemeral-storage=2Gi"
-        - "--feature-gates=InPlacePodVerticalScaling=true"
       EOF
 
       sudo systemctl enable rke2-agent
