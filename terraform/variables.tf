@@ -163,7 +163,7 @@ variable "k8s_base_version" {
 variable "RKE2_VERSION" {
   description = "RKE2 release version to install on nodes (e.g. 'v1.34.3+rke2r1')."
   type        = string
-  default     = "v1.35.3+rke2r1"
+  default     = "v1.35.3+rke2r3"
 }
 
 variable "RANCHER_CHART_REPO" {
