@@ -79,7 +79,7 @@ variable "vm_img" {
 variable "gpu_vm_img" {
   description = "Ubuntu cloud image URL used specifically for GPU worker VMs (T4/L4)."
   type        = string
-  default     = "https://cloud-images.ubuntu.com/releases/20.04/release/ubuntu-20.04-server-cloudimg-amd64.img"
+  default     = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
 }
 
 variable "UBUNTU_RELEASE_CODE_NAME" {
@@ -89,9 +89,9 @@ variable "UBUNTU_RELEASE_CODE_NAME" {
 }
 
 variable "GPU_UBUNTU_RELEASE_CODE_NAME" {
-  description = "Ubuntu release code name used by GPU worker cloud-init templates (e.g. 'focal')."
+  description = "Ubuntu release code name used by GPU worker cloud-init templates (e.g. 'noble')."
   type        = string
-  default     = "focal"
+  default     = "noble"
 }
 
 ###############################################################################
