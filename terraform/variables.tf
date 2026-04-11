@@ -169,7 +169,13 @@ variable "RKE2_VERSION" {
 variable "RANCHER_CHART_REPO" {
   description = "Rancher Helm chart repository channel (e.g. 'stable', 'latest')."
   type        = string
-  default     = "stable"
+  default     = "latest"
+}
+
+variable "RANCHER_CHART_VERSION" {
+  description = "Pinned Rancher Helm chart version to install."
+  type        = string
+  default     = "2.14.0"
 }
 
 variable "LONGHORN_VERSION" {

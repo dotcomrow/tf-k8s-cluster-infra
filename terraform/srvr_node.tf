@@ -87,6 +87,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         VAULT_VERSION = var.VAULT_VERSION
         KUBECTL_IMAGE_VERSION = var.k8s_base_version
         RANCHER_CHART_REPO = var.RANCHER_CHART_REPO
+        RANCHER_CHART_VERSION = var.RANCHER_CHART_VERSION
         CTRL_HOSTNAME = var.ctrl_hostname
         ETCD_HOSTNAME = var.etcd_hostname
         SRVR_HOSTNAME = var.srvr_hostname

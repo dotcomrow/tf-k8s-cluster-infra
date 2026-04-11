@@ -2740,6 +2740,7 @@ write_files:
         -p '{"spec": {"type": "LoadBalancer", "loadBalancerIP": "10.0.0.110"}}'
 
       echo "🏗️ Installing Rancher..."
+      echo "Using Rancher chart repo '${RANCHER_CHART_REPO}' version '${RANCHER_CHART_VERSION}'"
       RETRIES=5
       DELAY=3
 
@@ -2768,6 +2769,7 @@ write_files:
       sudo helm upgrade --install rancher rancher-${RANCHER_CHART_REPO}/rancher \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         --namespace cattle-system \
+        --version ${RANCHER_CHART_VERSION} \
         --set hostname=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN} \
         --set bootstrapPassword=$(openssl rand -base64 18) \
         --set ingress.tls.source=rancher \
