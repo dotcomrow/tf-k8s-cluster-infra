@@ -911,10 +911,6 @@ write_files:
       kube-apiserver-arg:
         - "enable-admission-plugins=PodNodeSelector"
 
-      kube-controller-manager-arg:
-
-      kube-scheduler-arg:
-
       kubelet-arg:
         - "--max-pods=${CTRL_NODE_MAX_PODS}"
         - "--cpu-manager-policy=static"
