@@ -74,6 +74,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         SRVR_NODE_MAX_PODS = var.SRVR_NODE_MAX_PODS
         GCP_PROJECT_ID = google_project.infra.project_id
         GCP_REGION = var.REGION
+        TELEPORT_TERRAFORM_VAULT_BOT_REGISTRATION_SECRET_B64 = base64encode(var.TELEPORT_TERRAFORM_VAULT_BOT_REGISTRATION_SECRET)
         VAULT_KMS_KEY_RING = google_kms_key_ring.vault_infra_ring.name
         VAULT_KEY_ACCOUNT = local.vault_kms_key
         VAULT_OIDC_CLIENT_ID = var.VAULT_OIDC_CLIENT_ID

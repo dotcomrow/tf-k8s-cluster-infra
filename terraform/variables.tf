@@ -567,6 +567,13 @@ variable "VAULT_OIDC_CLIENT_SECRET" {
   sensitive   = true
 }
 
+variable "TELEPORT_TERRAFORM_VAULT_BOT_REGISTRATION_SECRET" {
+  description = "Registration secret for the Teleport bound_keypair bot token terraform-vault-bot-token-20260215b. Keep this stable across cluster rebuilds."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 ###############################################################################
 # Terraform Cloud / HCP Terraform
 ###############################################################################

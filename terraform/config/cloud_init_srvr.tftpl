@@ -7905,6 +7905,7 @@ write_files:
           DASHBOARD_SCRIPT+=$'try: folders_text = base64.b64decode(folders_raw).decode()\n'
           DASHBOARD_SCRIPT+=$'except Exception as exc: sys.exit(f"unable to decode folders list: {exc}")\n'
           DASHBOARD_SCRIPT+=$'folders = [f.strip() for f in folders_text.splitlines() if f.strip()]\n'
+          DASHBOARD_SCRIPT+=$'if not folders: sys.exit("no dashboard folders configured")\n'
           DASHBOARD_SCRIPT+=$'repo_base = "https://api.github.com/repos/openobserve/dashboards/contents/"\n'
           DASHBOARD_SCRIPT+=$'target_url = "http://openobserve-router:5080/api/default/dashboards?folder=default"\n'
           DASHBOARD_SCRIPT+=$'headers = {"Authorization": auth, "Content-Type": "application/json"}\n'
@@ -7931,6 +7932,7 @@ write_files:
           DASHBOARD_SCRIPT+=$'        except Exception as exc:\n'
           DASHBOARD_SCRIPT+=$'            print(f"❌ Import failed {folder}/{name}: {exc}", file=sys.stderr)\n'
           DASHBOARD_SCRIPT+=$'print(f"Total imported: {success}")\n'
+          DASHBOARD_SCRIPT+=$'if success == 0: sys.exit("no dashboards imported")\n'
 
           DASHBOARD_SCRIPT64=$(printf '%s' "$DASHBOARD_SCRIPT" | base64 | tr -d '\r\n')
 
@@ -7957,7 +7959,7 @@ write_files:
           printf '%s\n' '        - name: OO_AUTH_HEADER' >> "$OO_DASH_IMPORT_FILE"
           printf '          value: "%s"\n' "$OO_AUTH_HEADER" >> "$OO_DASH_IMPORT_FILE"
           printf '%s\n' '        - name: OO_DASHBOARD_FOLDERS_B64' >> "$OO_DASH_IMPORT_FILE"
-          printf '          value: "%s"\n' "$OO_DASHBOARD_FOLDERS_B64" >> "$OO_DASH_IMPORT_FILE"
+          printf '          value: "%s"\n' "$DASHBOARD_FOLDERS_B64" >> "$OO_DASH_IMPORT_FILE"
           printf '%s\n' '        - name: DASHBOARD_SCRIPT64' >> "$OO_DASH_IMPORT_FILE"
           printf '          value: "%s"\n' "$DASHBOARD_SCRIPT64" >> "$OO_DASH_IMPORT_FILE"
           echo "📝 OpenObserve dashboard import manifest written to /root/oo-dash-import.yaml"
@@ -9564,6 +9566,29 @@ write_files:
             echo "secret/ mount already exists; skipping enable."
           else
             VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault secrets enable -path=secret -version=2 kv
+          fi
+
+          # Seed the Teleport AVP path for the Proxmox bound_keypair bot so it
+          # remains joinable after full cluster rebuilds.
+          VAULT_ROOT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)"
+          TELEPORT_REG_SECRET_B64="${TELEPORT_TERRAFORM_VAULT_BOT_REGISTRATION_SECRET_B64}"
+          TELEPORT_REG_SECRET=""
+
+          if [ -n "\$TELEPORT_REG_SECRET_B64" ]; then
+            if command -v base64 >/dev/null 2>&1; then
+              TELEPORT_REG_SECRET="\$(printf '%s' "\$TELEPORT_REG_SECRET_B64" | base64 -d 2>/dev/null || true)"
+            elif command -v openssl >/dev/null 2>&1; then
+              TELEPORT_REG_SECRET="\$(printf '%s' "\$TELEPORT_REG_SECRET_B64" | openssl base64 -d 2>/dev/null || true)"
+            fi
+          fi
+
+          if [ -n "\$TELEPORT_REG_SECRET" ]; then
+            VAULT_TOKEN="\$VAULT_ROOT_TOKEN" vault kv put -mount=secret \
+              k8s-teleport-terraform-vault-bot-registration-secret value="\$TELEPORT_REG_SECRET" >/dev/null
+            echo "Seeded Vault path secret/data/k8s-teleport-terraform-vault-bot-registration-secret."
+          else
+            echo "WARNING: TELEPORT_TERRAFORM_VAULT_BOT_REGISTRATION_SECRET is empty."
+            echo "WARNING: bound_keypair bot token terraform-vault-bot-token-20260215b may fail to rejoin."
           fi
 
           # Policies
