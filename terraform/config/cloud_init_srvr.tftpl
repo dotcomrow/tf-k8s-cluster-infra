@@ -10074,28 +10074,36 @@ write_files:
           namespaceSelector: {}
       EOF
 
-      echo "🏗️ Installing Stakater..."
+      echo "🏗️ Installing Stakater Reloader..."
       RETRIES=5
       DELAY=3
 
-      for i in $(seq 1 $RETRIES); do
-        echo "Attempt $i to add Helm repo..."
-        sudo helm repo add stakater https://stakater.github.io/stakater-charts --kubeconfig=/etc/rancher/rke2/rke2.yaml && break
-        echo "Failed to add repo, retrying in $DELAY seconds..."
-        sleep $DELAY
-      done
+      if sudo helm repo list | awk 'NR>1 {print $1}' | grep -qx "stakater"; then
+        echo "Helm repo 'stakater' already exists; skipping add."
+      else
+        for i in $(seq 1 $RETRIES); do
+          echo "Attempt $i to add Helm repo..."
+          if sudo helm repo add stakater https://stakater.github.io/stakater-charts --kubeconfig=/etc/rancher/rke2/rke2.yaml; then
+            break
+          fi
+          echo "Failed to add repo, retrying in $DELAY seconds..."
+          sleep $DELAY
+        done
 
-      # Optionally fail hard if all retries exhausted
-      if [[ $i -eq $RETRIES ]]; then
-        echo "Failed to add Helm repo after $RETRIES attempts" >&2
-        exit 1
+        if ! sudo helm repo list | awk 'NR>1 {print $1}' | grep -qx "stakater"; then
+          echo "Failed to add Helm repo after $RETRIES attempts" >&2
+          exit 1
+        fi
       fi
 
-      sudo helm repo update
+      sudo helm repo update stakater
 
-      sudo helm --kubeconfig=/etc/rancher/rke2/rke2.yaml install reloader stakater/reloader \
+      sudo helm --kubeconfig=/etc/rancher/rke2/rke2.yaml upgrade --install reloader stakater/reloader \
         --namespace reloader \
-        --create-namespace
+        --create-namespace \
+        --set reloader.deployment.priorityClassName=platform-system-high \
+        --wait \
+        --timeout 300s
 
       sudo kubectl annotate namespace reloader field.cattle.io/projectId=local:infrastructure --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate namespace reloader scheduler.alpha.kubernetes.io/affinity='{"nodeAffinity":{"preferredDuringSchedulingIgnoredDuringExecution":[{"weight":100,"preference":{"matchExpressions":[{"key":"dedicated","operator":"In","values":["srvr-node"]}]}}]}}' --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
