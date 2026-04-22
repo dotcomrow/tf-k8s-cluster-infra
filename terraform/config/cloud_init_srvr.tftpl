@@ -2032,7 +2032,6 @@ write_files:
 
       kubelet-arg:
         - "--max-pods=${SRVR_NODE_MAX_PODS}"
-        - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--kube-reserved=cpu=500m,memory=1Gi,ephemeral-storage=1Gi"
         - "--container-log-max-size=10Mi"
@@ -4475,7 +4474,7 @@ write_files:
               runAsUser: 65534 # nobody
             containers:
               - name: admission-controller
-                image: registry.k8s.io/autoscaling/vpa-admission-controller:1.5.1
+                image: registry.k8s.io/autoscaling/vpa-admission-controller:1.6.0
                 imagePullPolicy: IfNotPresent
                 env:
                   - name: NAMESPACE
@@ -4546,7 +4545,7 @@ write_files:
               runAsUser: 65534 # nobody
             containers:
             - name: recommender
-              image: registry.k8s.io/autoscaling/vpa-recommender:1.5.1
+              image: registry.k8s.io/autoscaling/vpa-recommender:1.6.0
               imagePullPolicy: IfNotPresent
               resources:
                 limits:
@@ -4596,7 +4595,7 @@ write_files:
               runAsUser: 65534 # nobody
             containers:
               - name: updater
-                image: registry.k8s.io/autoscaling/vpa-updater:1.5.1
+                image: registry.k8s.io/autoscaling/vpa-updater:1.6.0
                 imagePullPolicy: IfNotPresent
                 env:
                   - name: NAMESPACE

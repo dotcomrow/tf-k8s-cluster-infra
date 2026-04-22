@@ -894,7 +894,6 @@ write_files:
       sudo tee -a /etc/rancher/rke2/config.yaml << 'EOF'
       kubelet-arg:
         - "--max-pods=${WORK_NODE_MAX_PODS}"
-        - "--cpu-manager-policy=static"
         - "--topology-manager-policy=restricted"
         - "--kube-reserved=cpu=500m,memory=1Gi,ephemeral-storage=1Gi"
         - "--container-log-max-size=10Mi"
