@@ -9633,7 +9633,7 @@ write_files:
                 echo "ERROR: TFC_ORGANIZATION is required to resolve variable set by name."
               else
                 echo "Resolving Terraform variable set ID for '\$TFC_EXTERNAL_APPS_VARSET_NAME' in organization '\$TFC_ORGANIZATION'..."
-                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_EXTERNAL_APPS_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub(\"\\\\s+\";\" \") | gsub(\"^\\\\s+|\\\\s+$\";\"\")')"
+                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_EXTERNAL_APPS_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub("\\s+";" ") | gsub("^\\s+|\\s+$";"")')"
                 LOOKUP_ATTEMPT=1
                 LOOKUP_MAX_ATTEMPTS=12
                 while [ -z "\$TFC_VARSET_ID" ] && [ "\$LOOKUP_ATTEMPT" -le "\$LOOKUP_MAX_ATTEMPTS" ]; do
