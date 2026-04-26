@@ -9633,7 +9633,7 @@ write_files:
                 echo "ERROR: TFC_ORGANIZATION is required to resolve variable set by name."
               else
                 echo "Resolving Terraform variable set ID for '\$TFC_EXTERNAL_APPS_VARSET_NAME' in organization '\$TFC_ORGANIZATION'..."
-                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_EXTERNAL_APPS_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub("\\s+";" ") | gsub("^\\s+|\\s+$";"")')"
+                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_EXTERNAL_APPS_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"")')"
                 LOOKUP_ATTEMPT=1
                 LOOKUP_MAX_ATTEMPTS=12
                 while [ -z "\$TFC_VARSET_ID" ] && [ "\$LOOKUP_ATTEMPT" -le "\$LOOKUP_MAX_ATTEMPTS" ]; do
@@ -9656,7 +9656,7 @@ write_files:
                         break
                       fi
 
-                      MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TARGET_NAME_NORMALIZED" '.data[]? | select((.attributes.name // "") | ascii_downcase | gsub("\\s+";" ") | gsub("^\\s+|\\s+$";"") == $target) | .id' 2>/dev/null || true)"
+                      MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TARGET_NAME_NORMALIZED" '.data[]? | select((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"") == $target) | .id' 2>/dev/null || true)"
                       if [ -n "\$MATCH_IDS" ]; then
                         TFC_VARSET_ID="\$(echo "\$MATCH_IDS" | head -n1)"
                         MATCH_COUNT="\$(echo "\$MATCH_IDS" | wc -l | tr -d ' ')"
