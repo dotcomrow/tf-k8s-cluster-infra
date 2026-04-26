@@ -92,7 +92,7 @@ resource "proxmox_virtual_environment_vm" "work_l4_gpu_rancher_vm" {
   # Keep 64-bit MMIO space for large-BAR passthrough and relocate MSI-X PBA to
   # BAR5. Without this relocation, QEMU can reject startup with:
   # "MSIX PBA outside of specified BAR" on these GPUs.
-  kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=262144 -set device.hostpci0.x-msix-relocation=bar5"
+  # kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=262144 -set device.hostpci0.x-msix-relocation=bar5"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
@@ -168,12 +168,12 @@ resource "proxmox_virtual_environment_vm" "work_l4_gpu_rancher_vm" {
     mtu      = 9000                    # if your internal network supports jumbo frames
   }
 
-  hostpci {
-    device  = "hostpci0"
-    mapping = "nvidia_l4"               # ✅ GPU passthrough
-    rombar  = true                      # ✅ Match T4 known-good passthrough baseline
-    pcie    = true                      # ✅ Enables PCIe mode (needed for modern GPUs)
-  }
+  # hostpci {
+  #   device  = "hostpci0"
+  #   mapping = "nvidia_l4"               # ✅ GPU passthrough
+  #   rombar  = true                      # ✅ Match T4 known-good passthrough baseline
+  #   pcie    = true                      # ✅ Enables PCIe mode (needed for modern GPUs)
+  # }
 
   initialization {
     datastore_id = "local"
