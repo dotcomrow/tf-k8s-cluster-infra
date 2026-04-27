@@ -9675,11 +9675,27 @@ write_files:
                       echo "Terraform variable-set names on this page:"
                       echo "\$PAGE_JSON" | jq -r '.data[]? | "  id=\(.id) name=\(.attributes.name // "<missing>") normalized=\((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";""))"' 2>/dev/null || true
 
-                      MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TFC_EXTERNAL_APPS_VARSET_NAME" '.data[]? | select((.attributes.name // "") == $target) | .id' 2>/dev/null || true)"
-                      if [ -z "\$MATCH_IDS" ]; then
-                        echo "Terraform variable-set exact-name lookup found no match; trying normalized-name lookup."
-                        MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TARGET_NAME_NORMALIZED" '.data[]? | ((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"")) as $normalized_name | select($normalized_name == $target) | .id' 2>/dev/null || true)"
+                      MATCH_IDS=""
+                      CANDIDATES_FILE="/tmp/tfc-varset-candidates-\$\$.tsv"
+                      echo "\$PAGE_JSON" | jq -r '.data[]? | [.id, (.attributes.name // ""), ((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";""))] | @tsv' > "\$CANDIDATES_FILE" 2>/tmp/tfc-varset-candidates-\$\$.err || true
+                      if [ ! -s "\$CANDIDATES_FILE" ]; then
+                        echo "WARNING: failed to build Terraform variable-set candidate list."
+                        echo "Terraform variable-set candidate jq error:"
+                        head -c 1000 /tmp/tfc-varset-candidates-\$\$.err 2>/dev/null || true
+                        echo
                       fi
+                      while IFS="$(printf '\t')" read -r CANDIDATE_ID CANDIDATE_NAME CANDIDATE_NORMALIZED; do
+                        [ -n "\$CANDIDATE_ID" ] || continue
+                        echo "Terraform variable-set compare: candidate_id=\$CANDIDATE_ID exact_match_name='\$CANDIDATE_NAME' normalized_match_name='\$CANDIDATE_NORMALIZED' target_name='\$TFC_EXTERNAL_APPS_VARSET_NAME' target_normalized='\$TARGET_NAME_NORMALIZED'"
+                        if [ "\$CANDIDATE_NAME" = "\$TFC_EXTERNAL_APPS_VARSET_NAME" ] || [ "\$CANDIDATE_NORMALIZED" = "\$TARGET_NAME_NORMALIZED" ]; then
+                          if [ -n "\$MATCH_IDS" ]; then
+                            MATCH_IDS="\$MATCH_IDS
+\$CANDIDATE_ID"
+                          else
+                            MATCH_IDS="\$CANDIDATE_ID"
+                          fi
+                        fi
+                      done < "\$CANDIDATES_FILE"
                       if [ -n "\$MATCH_IDS" ]; then
                         TFC_VARSET_ID="\$(echo "\$MATCH_IDS" | head -n1)"
                         MATCH_COUNT="\$(echo "\$MATCH_IDS" | wc -l | tr -d ' ')"
