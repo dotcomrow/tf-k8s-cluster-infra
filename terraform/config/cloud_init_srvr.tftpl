@@ -9689,8 +9689,7 @@ write_files:
                         echo "Terraform variable-set compare: candidate_id=\$CANDIDATE_ID exact_match_name='\$CANDIDATE_NAME' normalized_match_name='\$CANDIDATE_NORMALIZED' target_name='\$TFC_EXTERNAL_APPS_VARSET_NAME' target_normalized='\$TARGET_NAME_NORMALIZED'"
                         if [ "\$CANDIDATE_NAME" = "\$TFC_EXTERNAL_APPS_VARSET_NAME" ] || [ "\$CANDIDATE_NORMALIZED" = "\$TARGET_NAME_NORMALIZED" ]; then
                           if [ -n "\$MATCH_IDS" ]; then
-                            MATCH_IDS="\$MATCH_IDS
-\$CANDIDATE_ID"
+                            MATCH_IDS="\$(printf '%s\n%s' "\$MATCH_IDS" "\$CANDIDATE_ID")"
                           else
                             MATCH_IDS="\$CANDIDATE_ID"
                           fi
