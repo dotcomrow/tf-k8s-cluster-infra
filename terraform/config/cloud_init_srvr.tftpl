@@ -9775,7 +9775,7 @@ write_files:
               done
 
               if [ -n "\$VARS_JSON" ] && echo "\$VARS_JSON" | jq -e . >/dev/null 2>&1; then
-                VAR_ID="\$(echo "\$VARS_JSON" | jq -r --arg key "\$TFC_VAR_KEY" '.data[]? | select(.attributes.key == $key and .attributes.category == "terraform") | .id' | head -n1)"
+                VAR_ID="\$(echo "\$VARS_JSON" | jq -r --arg key "\$TFC_VAR_KEY" '.data[]? | select(.attributes.key == \$key and .attributes.category == "terraform") | .id' | head -n1)"
                 if [ -n "\$VAR_ID" ]; then
                   echo "Terraform variable '\$TFC_VAR_KEY' exists in variable set \$TFC_VARSET_ID as id \$VAR_ID; updating value."
                 else
@@ -9784,7 +9784,7 @@ write_files:
 
                 if [ -n "\$VAR_ID" ]; then
                   PAYLOAD="\$(jq -cn --arg id "\$VAR_ID" --arg value "\$VAULT_ROOT_TOKEN" --arg description "Vault root token managed by srvr bootstrap." \
-                    '{data:{id:$id,type:"vars",attributes:{value:$value,sensitive:true,hcl:false,description:$description}}}')"
+                    '{data:{id:\$id,type:"vars",attributes:{value:\$value,sensitive:true,hcl:false,description:\$description}}}')"
                   PATCH_ATTEMPT=1
                   PATCH_MAX_ATTEMPTS=8
                   while [ "\$PATCH_ATTEMPT" -le "\$PATCH_MAX_ATTEMPTS" ]; do
@@ -9811,7 +9811,7 @@ write_files:
                   done
                 else
                   PAYLOAD="\$(jq -cn --arg key "\$TFC_VAR_KEY" --arg value "\$VAULT_ROOT_TOKEN" --arg description "Vault root token managed by srvr bootstrap." \
-                    '{data:{type:"vars",attributes:{key:$key,value:$value,category:"terraform",sensitive:true,hcl:false,description:$description}}}')"
+                    '{data:{type:"vars",attributes:{key:\$key,value:\$value,category:"terraform",sensitive:true,hcl:false,description:\$description}}}')"
                   CREATE_ATTEMPT=1
                   CREATE_MAX_ATTEMPTS=8
                   while [ "\$CREATE_ATTEMPT" -le "\$CREATE_MAX_ATTEMPTS" ]; do
