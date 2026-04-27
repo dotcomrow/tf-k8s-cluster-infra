@@ -9675,7 +9675,11 @@ write_files:
                       echo "Terraform variable-set names on this page:"
                       echo "\$PAGE_JSON" | jq -r '.data[]? | "  id=\(.id) name=\(.attributes.name // "<missing>") normalized=\((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";""))"' 2>/dev/null || true
 
-                      MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TARGET_NAME_NORMALIZED" '.data[]? | select((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"") == $target) | .id' 2>/dev/null || true)"
+                      MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TFC_EXTERNAL_APPS_VARSET_NAME" '.data[]? | select((.attributes.name // "") == $target) | .id' 2>/dev/null || true)"
+                      if [ -z "\$MATCH_IDS" ]; then
+                        echo "Terraform variable-set exact-name lookup found no match; trying normalized-name lookup."
+                        MATCH_IDS="\$(echo "\$PAGE_JSON" | jq -r --arg target "\$TARGET_NAME_NORMALIZED" '.data[]? | ((.attributes.name // "") | ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"")) as $normalized_name | select($normalized_name == $target) | .id' 2>/dev/null || true)"
+                      fi
                       if [ -n "\$MATCH_IDS" ]; then
                         TFC_VARSET_ID="\$(echo "\$MATCH_IDS" | head -n1)"
                         MATCH_COUNT="\$(echo "\$MATCH_IDS" | wc -l | tr -d ' ')"
