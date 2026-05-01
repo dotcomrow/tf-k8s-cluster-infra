@@ -72,7 +72,7 @@ resource "proxmox_virtual_environment_file" "work_t4_gpu_cloud_init_config" {
         MONITORED_RESOURCE_NAMESPACE = var.MONITORED_RESOURCE_NAMESPACE
         MONITORED_RESOURCE_NODE_ID = var.work_t4_gpu_hostname
         UBUNTU_RELEASE_CODE_NAME = var.UBUNTU_RELEASE_CODE_NAME
-        NVIDIA_DRIVER = var.NVIDIA_DRIVER
+        NVIDIA_DRIVER = var.GPU_NVIDIA_DRIVER
         WORK_NODE_MAX_PODS = var.WORK_T4_GPU_NODE_MAX_PODS
       })
     file_name = "cloud_init_work_t4_gpu.yaml"
@@ -89,10 +89,6 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
 
   bios     = "ovmf"  # ✅ Required for q35
   machine  = "q35"   # ✅ Enables PCIe support
-  # Keep known-good passthrough args for T4 on this host/QEMU combo.
-  # Without MSI-X relocation, QEMU can fail with:
-  # "MSIX PBA outside of specified BAR".
-  # kvm_arguments = "-fw_cfg name=opt/ovmf/X-PciMmio64Mb,string=131072 -set device.hostpci0.x-msix-relocation=bar5"
 
   efi_disk {
     datastore_id = var.VM_DISK_STORAGE
@@ -171,7 +167,9 @@ resource "proxmox_virtual_environment_vm" "work_t4_gpu_rancher_vm" {
   hostpci {
     device  = "hostpci0"
     mapping = "nvidia_t4"               # ✅ GPU passthrough
-    rombar    = true            # ✅ Required for full NVIDIA driver compatibility
+    # Keep ROM BAR enabled as baseline here; disable only if startup logs
+    # specifically indicate a ROM/BAR mapping fault.
+    rombar    = true
     pcie      = true            # ✅ Enables PCIe mode (needed for modern GPUs)
   }
 

@@ -205,7 +205,7 @@ variable "NVIDIA_DRIVER" {
 variable "GPU_NVIDIA_DRIVER" {
   description = "NVIDIA driver major version to install on GPU worker nodes (Ubuntu 'nvidia-<ver>-server' packages)."
   type        = string
-  default     = "550"
+  default     = "580"
 }
 
 variable "NVIDIA_HELM_CHART_VERSION" {

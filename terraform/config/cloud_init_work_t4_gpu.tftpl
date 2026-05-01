@@ -824,6 +824,21 @@ write_files:
         'options nouveau modeset=0' \
         | sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null
 
+      cleanup_stale_dkms_tree() {
+        local driver_major="$1"
+        local module_name="nvidia-srv"
+        local stale_versions
+        stale_versions="$(dkms status | awk -v mod="$${module_name}" -v maj="$${driver_major}" '$0 ~ "^" mod "/" maj "\\." { split($1, parts, "/"); gsub(":", "", parts[2]); print parts[2] }')"
+        if [ -n "$${stale_versions}" ]; then
+          echo "Cleaning stale DKMS entries for $${module_name} ($${driver_major}-server): $${stale_versions}"
+          while read -r v; do
+            [ -z "$${v}" ] && continue
+            sudo dkms remove -m "$${module_name}" -v "$${v}" --all || true
+            sudo rm -rf "/var/lib/dkms/$${module_name}/$${v}" "/usr/src/$${module_name}-$${v}"
+          done <<< "$${stale_versions}"
+        fi
+      }
+
       install_nvidia_driver() {
         local driver_major="$1"
         echo "Installing NVIDIA $${driver_major}-server"
@@ -834,6 +849,8 @@ write_files:
         local utils_pkg="nvidia-utils-$${driver_major}-server"
         local compute_pkg="libnvidia-compute-$${driver_major}-server"
         local cfg_pkg="libnvidia-cfg1-$${driver_major}-server"
+
+        cleanup_stale_dkms_tree "$${driver_major}"
 
         # Install exact driver branch; retry once after apt repair if needed.
         sudo apt-get install -y --reinstall \
@@ -847,6 +864,7 @@ write_files:
           nvidia-modprobe || {
             sudo dpkg --configure -a || true
             sudo apt-get -f install -y
+            cleanup_stale_dkms_tree "$${driver_major}"
             sudo apt-get install -y --reinstall \
               "$${driver_pkg}" \
               "$${dkms_pkg}" \
