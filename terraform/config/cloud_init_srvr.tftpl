@@ -9338,8 +9338,7 @@ write_files:
                   periodSeconds: 10
                   timeoutSeconds: 5
                 readinessProbe:
-                  httpGet:
-                    path: /v1/sys/health?standbyok=true
+                  tcpSocket:
                     port: 8200
                   failureThreshold: 2
                   periodSeconds: 5
