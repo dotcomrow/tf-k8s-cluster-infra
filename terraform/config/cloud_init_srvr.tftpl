@@ -5088,8 +5088,10 @@ write_files:
             preconditions:
               all:
                 - key: "{{ request.namespace || '' }}"
-                  operator: NotEquals
-                  value: openobserve
+                  operator: NotIn
+                  value:
+                    - openobserve
+                    - nvidia
             mutate:
               patchStrategicMerge:
                 spec:
