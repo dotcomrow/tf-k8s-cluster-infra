@@ -62,6 +62,7 @@ write_files:
       Description=Post-bootstrap setup for Kubernetes node
       After=network-online.target
       Wants=network-online.target
+      ConditionPathExists=!/var/lib/node-bootstrap/initial-setup.done
 
       [Service]
       Type=oneshot
@@ -147,6 +148,8 @@ write_files:
 
       systemctl enable post-install.service
       systemctl start post-install.service
+      install -d -m 0755 /var/lib/node-bootstrap
+      touch /var/lib/node-bootstrap/initial-setup.done
       /usr/local/bin/cleanup-install-services.sh
 
   - path: /root/oo-auth-bridge.py
@@ -10612,7 +10615,6 @@ write_files:
 runcmd:
   - systemctl daemon-reexec
   - systemctl daemon-reload
-  - systemctl enable initial-setup.service
   - systemctl start initial-setup.service
   - [ systemctl, unmask, apt-daily.service, apt-daily-upgrade.service ]
   - [ systemctl, enable, --now, apt-daily.timer, apt-daily-upgrade.timer ]
