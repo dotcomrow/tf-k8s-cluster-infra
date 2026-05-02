@@ -5442,7 +5442,7 @@ write_files:
                   limits:
                     - type: Container
                       defaultRequest:
-                        cpu: "200m"
+                        cpu: "50m"
                         memory: "256Mi"
                       default:
                         cpu: "1"
@@ -5585,12 +5585,21 @@ write_files:
                     name: "{{request.object.metadata.name}}"
                   updatePolicy:
                     updateMode: "InPlaceOrRecreate"
+                    minReplicas: 1
                   resourcePolicy:
                     containerPolicies:
+                      - containerName: "linkerd-proxy"
+                        mode: "Off"
+                      - containerName: "vault-agent"
+                        mode: "Off"
+                      - containerName: "config-reloader"
+                        mode: "Off"
+                      - containerName: "alloy"
+                        mode: "Off"
                       - containerName: "*"
                         controlledValues: "RequestsAndLimits"
                         minAllowed:
-                          cpu: "200m"
+                          cpu: "50m"
                           memory: "256Mi"
                         maxAllowed:
                           cpu: "1"
@@ -5636,12 +5645,21 @@ write_files:
                     name: "{{request.object.metadata.name}}"
                   updatePolicy:
                     updateMode: "InPlaceOrRecreate"
+                    minReplicas: 1
                   resourcePolicy:
                     containerPolicies:
+                      - containerName: "linkerd-proxy"
+                        mode: "Off"
+                      - containerName: "vault-agent"
+                        mode: "Off"
+                      - containerName: "config-reloader"
+                        mode: "Off"
+                      - containerName: "alloy"
+                        mode: "Off"
                       - containerName: "*"
                         controlledValues: "RequestsAndLimits"
                         minAllowed:
-                          cpu: "200m"
+                          cpu: "50m"
                           memory: "256Mi"
                         maxAllowed:
                           cpu: "1"
@@ -10196,6 +10214,7 @@ write_files:
                   - "agent-inject"
                   - "-log-level=info"
                   - "-vault-address=http://vault.vault.svc.cluster.local:8200"
+                  - "-cpu-request=50m"
                   - "-tls-cert-file=/tls/tls.crt"
                   - "-tls-key-file=/tls/tls.key"
                 volumeMounts:
