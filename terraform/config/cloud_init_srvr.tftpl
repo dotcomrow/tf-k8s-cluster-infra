@@ -5075,13 +5075,19 @@ write_files:
         name: system-namespace-priority
       spec:
         background: true
+        mutateExistingOnPolicyUpdate: true
         rules:
-          - name: default-system-priority
+          - name: default-system-priority-workloads
             match:
               any:
                 - resources:
                     kinds:
-                      - Pod
+                      - Deployment
+                      - StatefulSet
+                      - DaemonSet
+                      - Job
+                      - ReplicaSet
+                      - ReplicationController
                     namespaceSelector:
                       matchLabels:
                         platform.suncoast.systems/system: "true"
@@ -5095,7 +5101,33 @@ write_files:
             mutate:
               patchStrategicMerge:
                 spec:
-                  +(priorityClassName): platform-system-high
+                  template:
+                    spec:
+                      +(priorityClassName): platform-system-high
+          - name: default-system-priority-cronjobs
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - CronJob
+                    namespaceSelector:
+                      matchLabels:
+                        platform.suncoast.systems/system: "true"
+            preconditions:
+              all:
+                - key: "{{ request.namespace || '' }}"
+                  operator: NotIn
+                  value:
+                    - openobserve
+                    - nvidia
+            mutate:
+              patchStrategicMerge:
+                spec:
+                  jobTemplate:
+                    spec:
+                      template:
+                        spec:
+                          +(priorityClassName): platform-system-high
       
       ---
       apiVersion: kyverno.io/v1
@@ -8758,8 +8790,8 @@ write_files:
         --wait \
         --version=${NVIDIA_HELM_CHART_VERSION} \
         --set driver.enabled=false \
-        --set validator.driver.env[0].name=HOST_ROOT \
-        --set validator.driver.env[0].value=/host \
+        --set operator.defaultRuntime=containerd \
+        --set cdi.enabled=true \
         --set toolkit.env[0].name=CONTAINERD_SOCKET \
         --set toolkit.env[0].value="/run/k3s/containerd/containerd.sock" \
         --set devicePlugin.env[0].name=HOST_ULIMIT \

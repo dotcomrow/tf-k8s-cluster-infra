@@ -825,42 +825,15 @@ write_files:
 
       sudo update-initramfs -u
 
-      curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-        | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-      curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-        | sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#" \
-        | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-      CUDA_REPO_DISTRO="ubuntu$(lsb_release -rs | tr -d '.')"
-      CUDA_KEYRING_URL="https://developer.download.nvidia.com/compute/cuda/repos/$${CUDA_REPO_DISTRO}/x86_64/cuda-keyring_1.1-1_all.deb"
-      wget -qO cuda-keyring_1.1-1_all.deb "$${CUDA_KEYRING_URL}"
-      sudo dpkg -i cuda-keyring_1.1-1_all.deb
-      sudo apt-get update -y
-      sudo apt-get install -y nvidia-container-toolkit nvidia-docker2
-
+      # GPU Operator (v25.10+) configures the NVIDIA container runtime/toolkit.
+      # Do not install or reconfigure host nvidia-container-toolkit here.
       sudo systemctl enable nvidia-persistenced
-      sudo systemctl start  nvidia-persistenced
+      sudo systemctl restart nvidia-persistenced || sudo systemctl start nvidia-persistenced
 
-      nvidia-ctk runtime configure --runtime=containerd --set-as-default
-      nvidia-ctk runtime configure --runtime=docker     --set-as-default
-
-      # 7. Finally, check:
+      # Final driver check:
       nvidia-smi
 
-      # Keep your cleanup; just remove disabled_plugins if present
-      sed -i '/^disabled_plugins/d' /etc/containerd/config.toml
-
-      # NOTE: removed the containerd runc_options/rlimits injection block on purpose.
-      # Limits are inherited via systemd overrides for containerd/rke2.
-
-      echo "🔁 Reloading containerd..."
-      sudo systemctl daemon-reexec
-      sudo systemctl daemon-reload
-      sudo systemctl restart containerd
-
-      echo "✅ NVIDIA setup complete"
-
-      sudo systemctl restart docker
-      sudo systemctl restart containerd
+      echo "✅ NVIDIA driver setup complete (runtime/toolkit managed by GPU Operator)"
 
   - path: /usr/local/bin/setup-rke2.sh
     permissions: '0755'
