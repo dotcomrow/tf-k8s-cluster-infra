@@ -175,7 +175,7 @@ variable "RANCHER_CHART_REPO" {
 variable "RANCHER_CHART_VERSION" {
   description = "Pinned Rancher Helm chart version to install."
   type        = string
-  default     = "2.14.0"
+  default     = "2.14.1"
 }
 
 variable "LONGHORN_VERSION" {
