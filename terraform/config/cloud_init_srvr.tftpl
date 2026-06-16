@@ -2491,6 +2491,31 @@ write_files:
         done
       done
 
+      echo "🔧 Ensuring work-node-t4-gpu has enough Longhorn headroom for large MinIO volumes..."
+      T4_LONGHORN_DISK=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io work-node-t4-gpu -o json | \
+        jq -r '.spec.disks | to_entries[] | select(.value.path=="/var/lib/longhorn/") | .key' | head -n1 || true)
+      if [ -n "$T4_LONGHORN_DISK" ]; then
+        cat <<EOF > /tmp/work-node-t4-gpu-longhorn-storage.yaml
+        {
+          "spec": {
+            "disks": {
+              "$T4_LONGHORN_DISK": {
+                "storageReserved": 0
+              }
+            }
+          }
+        }
+        EOF
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch nodes.longhorn.io work-node-t4-gpu --type=merge --patch-file /tmp/work-node-t4-gpu-longhorn-storage.yaml; then
+          echo "✅ storageReserved set to 0 on work-node-t4-gpu ($T4_LONGHORN_DISK)"
+        else
+          echo "⚠️  Failed to set storageReserved on work-node-t4-gpu; continuing."
+        fi
+      else
+        echo "⚠️  Could not determine Longhorn disk key for work-node-t4-gpu; skipping storageReserved adjustment."
+      fi
+      rm -f /tmp/work-node-t4-gpu-longhorn-storage.yaml
+
       echo "⏳ Waiting for schedulable Longhorn nodes with available disks..."
       for i in {1..60}; do
         SCHED_READY=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system get nodes.longhorn.io -o json | \
