@@ -5408,6 +5408,17 @@ write_files:
             - update
             - patch
             - delete
+        - apiGroups:
+            - apps
+          resources:
+            - deployments
+            - statefulsets
+          verbs:
+            - get
+            - list
+            - watch
+            - update
+            - patch
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: ClusterRoleBinding
@@ -5627,8 +5638,8 @@ write_files:
                           cpu: "50m"
                           memory: "256Mi"
                         maxAllowed:
-                          cpu: "1"
-                          memory: "3Gi"
+                          cpu: "4"
+                          memory: "12Gi"
             skipBackgroundRequests: false
           - name: generate-vpa-for-statefulsets
             match:
@@ -5687,8 +5698,8 @@ write_files:
                           cpu: "50m"
                           memory: "256Mi"
                         maxAllowed:
-                          cpu: "1"
-                          memory: "3Gi"
+                          cpu: "4"
+                          memory: "12Gi"
             skipBackgroundRequests: false
       
       ---
