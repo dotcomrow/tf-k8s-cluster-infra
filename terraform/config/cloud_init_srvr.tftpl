@@ -6283,13 +6283,6 @@ write_files:
             containers:
               - name: nfs-client-provisioner
                 image: registry.k8s.io/sig-storage/nfs-subdir-external-provisioner:v4.0.2
-                resources:
-                  requests:
-                    cpu: "100m"
-                    memory: "512Mi"
-                  limits:
-                    cpu: "250m"
-                    memory: "512Mi"
                 env:
                   - name: PROVISIONER_NAME
                     value: example.com/nfs
