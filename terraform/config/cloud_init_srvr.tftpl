@@ -6138,6 +6138,38 @@ write_files:
                   - name: statd-listen
                     containerPort: 32766
                     protocol: TCP
+                startupProbe:
+                  tcpSocket:
+                    port: nfs
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 60
+                readinessProbe:
+                  tcpSocket:
+                    port: nfs
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+                livenessProbe:
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        set -eu
+                        test -d /export
+                        touch /export/.nfs-healthcheck
+                        test -f /export/.nfs-healthcheck
+                        if [ -r /proc/fs/nfsd/threads ]; then
+                          threads="$(cat /proc/fs/nfsd/threads 2>/dev/null || true)"
+                          case "$threads" in
+                            ""|*[!0-9]*) ;;
+                            *) [ "$threads" -gt 0 ] ;;
+                          esac
+                        fi
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 4
                 volumeMounts:
                   - mountPath: /export
                     name: nfs-volume
