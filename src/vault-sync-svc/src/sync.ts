@@ -367,7 +367,11 @@ function isPlaceholderValue(value?: string | null): boolean {
 function decodeSecretPayload(data?: string | Buffer | Uint8Array | null): string | undefined {
   if (data == null) return undefined;
   if (typeof data === 'string') return data;
-  return Buffer.from(data).toString('utf8');
+
+  // Normalize Buffer/Uint8Array to a concrete Uint8Array so TS doesn't trip over
+  // the overloaded Buffer.from signatures when Buffer and Uint8Array are both present.
+  const bytes = data as Uint8Array;
+  return Buffer.from(bytes).toString('utf8');
 }
 
 async function writeToVault(dataPath: string, value: string): Promise<void> {
