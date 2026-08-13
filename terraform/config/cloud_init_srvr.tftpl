@@ -2438,6 +2438,12 @@ write_files:
       parameters:
         numberOfReplicas: '1'
         staleReplicaTimeout: '30'
+        fsType: ext4
+        dataLocality: disabled
+        unmapMarkSnapChainRemoved: ignored
+        disableRevisionCounter: "true"
+        dataEngine: v1
+        backupTargetName: default
         archiveOnDelete: "false"
       ---
       apiVersion: storage.k8s.io/v1
@@ -2452,6 +2458,8 @@ write_files:
         numberOfReplicas: '1'
         staleReplicaTimeout: '30'
         fromBackup: ''
+        fsType: ext4
+        unmapMarkSnapChainRemoved: ignored
         archiveOnDelete: "false"
       ---
       apiVersion: storage.k8s.io/v1
@@ -2463,6 +2471,37 @@ write_files:
       reclaimPolicy: Delete
       parameters:
         archiveOnDelete: "false"
+      EOF
+
+      echo "🔧 Installing Longhorn recurring snapshot delete and filesystem trim jobs..."
+      cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: longhorn.io/v1beta2
+      kind: RecurringJob
+      metadata:
+        name: default-snapshot-delete
+        namespace: longhorn-system
+      spec:
+        name: default-snapshot-delete
+        task: snapshot-delete
+        cron: "20 2 * * *"
+        retain: 1
+        concurrency: 1
+        groups:
+          - default
+      ---
+      apiVersion: longhorn.io/v1beta2
+      kind: RecurringJob
+      metadata:
+        name: default-filesystem-trim
+        namespace: longhorn-system
+      spec:
+        name: default-filesystem-trim
+        task: filesystem-trim
+        cron: "50 2 * * *"
+        retain: 1
+        concurrency: 1
+        groups:
+          - default
       EOF
 
       echo "⏳ Waiting for Longhorn core components to be Ready..."
@@ -6457,7 +6496,8 @@ write_files:
         --set postgres.spec.instances=1 \
         --set-string postgres.spec.storage.size=10Gi \
         --set-string postgres.spec.storage.storageClass=longhorn \
-        --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="14" \
+        --set-string config.ZO_COMPACT_DATA_RETENTION_DAYS="7" \
+        --set-string config.ZO_COMPACT_DELETE_FILES_DELAY_HOURS="1" \
         --set-string config.ZO_IGNORE_FILE_RETENTION_BY_STREAM="true" \
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_META_STORE=postgres \
