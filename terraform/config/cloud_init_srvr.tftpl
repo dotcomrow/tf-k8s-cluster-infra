@@ -6503,6 +6503,7 @@ write_files:
         --set-string image.oss.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=false \
         --set enterprise.openfga.enabled=false \
+        --set-string podSecurityContext.fsGroupChangePolicy=OnRootMismatch \
         --set minio.enabled=true \
         --set-string minio.rootUser="$OPENOBSERVE_MINIO_USER" \
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
@@ -6736,6 +6737,7 @@ write_files:
         -n openobserve \
         --reuse-values \
         --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
+        --set-string podSecurityContext.fsGroupChangePolicy=OnRootMismatch \
         --set replicaCount.router=1 \
         --set replicaCount.ingester=0 \
         --set replicaCount.querier=0 \
@@ -6757,6 +6759,7 @@ write_files:
         -n openobserve \
         --reuse-values \
         --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
+        --set-string podSecurityContext.fsGroupChangePolicy=OnRootMismatch \
         --set replicaCount.ingester=2 \
         --set replicaCount.querier=1 \
         --set replicaCount.compactor=1 \
