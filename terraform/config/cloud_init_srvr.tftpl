@@ -6650,11 +6650,296 @@ write_files:
               - |
                 mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null &&
                 mc mb -p local/openobserve &&
+                ilm_json="$(mc ilm rule export local/openobserve 2>/dev/null || true)" &&
+                case "$ilm_json" in
+                  *'"Days":7'*) true ;;
+                  *) mc ilm rule add --expire-days 7 local/openobserve ;;
+                esac &&
+                mc quota set local/openobserve --size 400Gi &&
+                mc ilm rule list local/openobserve &&
+                mc quota info local/openobserve &&
                 mc ls local
       EOF
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/minio-mc --timeout=180s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/minio-mc || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
+
+      echo "Installing OpenObserve 7-day retention cleanup jobs..."
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: openobserve-minio-retention-cleanup
+        namespace: openobserve
+      spec:
+        schedule: "15 * * * *"
+        concurrencyPolicy: Forbid
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 3
+        jobTemplate:
+          spec:
+            backoffLimit: 1
+            activeDeadlineSeconds: 7200
+            template:
+              spec:
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                containers:
+                  - name: cleanup
+                    image: quay.io/minio/mc
+                    command: ["/bin/sh", "-c"]
+                    env:
+                      - name: MINIO_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: openobserve-minio
+                            key: rootUser
+                      - name: MINIO_PASS
+                        valueFrom:
+                          secretKeyRef:
+                            name: openobserve-minio
+                            key: rootPassword
+                    args:
+                      - |
+                        set -eu
+                        mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null
+                        ilm_json="$(mc ilm rule export local/openobserve 2>/dev/null || true)"
+                        case "$ilm_json" in
+                          *'"Days":7'*) ;;
+                          *) mc ilm rule add --expire-days 7 local/openobserve ;;
+                        esac
+                        mc quota set local/openobserve --size 400Gi
+                        mc --quiet rm --recursive --force --older-than 7d local/openobserve/
+                        mc ilm rule list local/openobserve
+                        mc quota info local/openobserve
+      ---
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: openobserve-minio-path-retention-cleanup
+        namespace: openobserve
+      spec:
+        schedule: "45 * * * *"
+        concurrencyPolicy: Forbid
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 3
+        jobTemplate:
+          spec:
+            backoffLimit: 1
+            activeDeadlineSeconds: 7200
+            template:
+              spec:
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                affinity:
+                  podAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      - labelSelector:
+                          matchLabels:
+                            app: minio
+                            release: openobserve
+                        topologyKey: kubernetes.io/hostname
+                containers:
+                  - name: cleanup
+                    image: quay.io/minio/mc
+                    command: ["/bin/sh", "-c"]
+                    env:
+                      - name: MINIO_USER
+                        valueFrom:
+                          secretKeyRef:
+                            name: openobserve-minio
+                            key: rootUser
+                      - name: MINIO_PASS
+                        valueFrom:
+                          secretKeyRef:
+                            name: openobserve-minio
+                            key: rootPassword
+                    args:
+                      - |
+                        set -eu
+                        mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null
+                        cutoff="$(date -u -d '7 days ago' +%Y%m%d)"
+                        root=/mnt/minio/openobserve/files/default
+                        removed=0
+                        for type in logs metrics metadata traces index; do
+                          for stream in "$root/$type"/*; do
+                            [ -d "$stream" ] || continue
+                            for base in "$stream" "$stream"/[0-9]*; do
+                              [ -d "$base" ] || continue
+                              for year in "$base"/[0-9][0-9][0-9][0-9]; do
+                                [ -d "$year" ] || continue
+                                y="${year##*/}"
+                                for month in "$year"/[0-9][0-9]; do
+                                  [ -d "$month" ] || continue
+                                  m="${month##*/}"
+                                  for day in "$month"/[0-9][0-9]; do
+                                    [ -d "$day" ] || continue
+                                    d="${day##*/}"
+                                    key="$y$m$d"
+                                    if [ "$key" -lt "$cutoff" ]; then
+                                      prefix="${day#/mnt/minio/openobserve/}"
+                                      mc --quiet rm --recursive --force "local/openobserve/$prefix/" || true
+                                      removed=$((removed+1))
+                                    fi
+                                  done
+                                done
+                              done
+                            done
+                          done
+                        done
+                        echo "cutoff=$cutoff removed_prefixes=$removed"
+                        df -h /mnt/minio
+                        df -ih /mnt/minio
+                    volumeMounts:
+                      - name: minio-data
+                        mountPath: /mnt/minio
+                        readOnly: true
+                volumes:
+                  - name: minio-data
+                    persistentVolumeClaim:
+                      claimName: openobserve-minio
+                      readOnly: true
+      ---
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: openobserve-wal-retention-cleanup-ingester-0
+        namespace: openobserve
+      spec:
+        schedule: "25 * * * *"
+        concurrencyPolicy: Forbid
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 3
+        jobTemplate:
+          spec:
+            backoffLimit: 1
+            activeDeadlineSeconds: 7200
+            template:
+              spec:
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                affinity:
+                  podAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      - labelSelector:
+                          matchLabels:
+                            statefulset.kubernetes.io/pod-name: openobserve-ingester-0
+                        topologyKey: kubernetes.io/hostname
+                containers:
+                  - name: cleanup
+                    image: quay.io/minio/mc
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -eu
+                        cutoff="$(date -u -d '7 days ago' +%Y%m%d)"
+                        root=/mnt/data/wal/files/default
+                        removed=0
+                        for type in logs metrics metadata traces; do
+                          for stream in "$root/$type"/*; do
+                            [ -d "$stream/0" ] || continue
+                            for year in "$stream/0"/[0-9][0-9][0-9][0-9]; do
+                              [ -d "$year" ] || continue
+                              y="${year##*/}"
+                              for month in "$year"/[0-9][0-9]; do
+                                [ -d "$month" ] || continue
+                                m="${month##*/}"
+                                for day in "$month"/[0-9][0-9]; do
+                                  [ -d "$day" ] || continue
+                                  d="${day##*/}"
+                                  key="$y$m$d"
+                                  if [ "$key" -lt "$cutoff" ]; then
+                                    rm -rf --one-file-system "$day"
+                                    removed=$((removed+1))
+                                  fi
+                                done
+                                rmdir "$month" 2>/dev/null || true
+                              done
+                              rmdir "$year" 2>/dev/null || true
+                            done
+                          done
+                        done
+                        echo "cutoff=$cutoff removed_day_dirs=$removed"
+                        df -h /mnt/data
+                        df -ih /mnt/data
+                    volumeMounts:
+                      - name: data
+                        mountPath: /mnt/data
+                volumes:
+                  - name: data
+                    persistentVolumeClaim:
+                      claimName: data-openobserve-ingester-0
+      ---
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: openobserve-wal-retention-cleanup-ingester-1
+        namespace: openobserve
+      spec:
+        schedule: "35 * * * *"
+        concurrencyPolicy: Forbid
+        successfulJobsHistoryLimit: 2
+        failedJobsHistoryLimit: 3
+        jobTemplate:
+          spec:
+            backoffLimit: 1
+            activeDeadlineSeconds: 7200
+            template:
+              spec:
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                affinity:
+                  podAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      - labelSelector:
+                          matchLabels:
+                            statefulset.kubernetes.io/pod-name: openobserve-ingester-1
+                        topologyKey: kubernetes.io/hostname
+                containers:
+                  - name: cleanup
+                    image: quay.io/minio/mc
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - |
+                        set -eu
+                        cutoff="$(date -u -d '7 days ago' +%Y%m%d)"
+                        root=/mnt/data/wal/files/default
+                        removed=0
+                        for type in logs metrics metadata traces; do
+                          for stream in "$root/$type"/*; do
+                            [ -d "$stream/0" ] || continue
+                            for year in "$stream/0"/[0-9][0-9][0-9][0-9]; do
+                              [ -d "$year" ] || continue
+                              y="${year##*/}"
+                              for month in "$year"/[0-9][0-9]; do
+                                [ -d "$month" ] || continue
+                                m="${month##*/}"
+                                for day in "$month"/[0-9][0-9]; do
+                                  [ -d "$day" ] || continue
+                                  d="${day##*/}"
+                                  key="$y$m$d"
+                                  if [ "$key" -lt "$cutoff" ]; then
+                                    rm -rf --one-file-system "$day"
+                                    removed=$((removed+1))
+                                  fi
+                                done
+                                rmdir "$month" 2>/dev/null || true
+                              done
+                              rmdir "$year" 2>/dev/null || true
+                            done
+                          done
+                        done
+                        echo "cutoff=$cutoff removed_day_dirs=$removed"
+                        df -h /mnt/data
+                        df -ih /mnt/data
+                    volumeMounts:
+                      - name: data
+                        mountPath: /mnt/data
+                volumes:
+                  - name: data
+                    persistentVolumeClaim:
+                      claimName: data-openobserve-ingester-1
+      EOF
 
       echo "⏳ Waiting for OpenObserve Postgres cluster to be Ready..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml label namespace openobserve platform.suncoast.systems/system=false --overwrite
