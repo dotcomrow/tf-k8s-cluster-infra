@@ -6675,9 +6675,10 @@ write_files:
         schedule: "15 * * * *"
         concurrencyPolicy: Forbid
         successfulJobsHistoryLimit: 2
-        failedJobsHistoryLimit: 3
+        failedJobsHistoryLimit: 1
         jobTemplate:
           spec:
+            ttlSecondsAfterFinished: 3600
             backoffLimit: 1
             activeDeadlineSeconds: 7200
             template:
@@ -6722,9 +6723,10 @@ write_files:
         schedule: "45 * * * *"
         concurrencyPolicy: Forbid
         successfulJobsHistoryLimit: 2
-        failedJobsHistoryLimit: 3
+        failedJobsHistoryLimit: 1
         jobTemplate:
           spec:
+            ttlSecondsAfterFinished: 3600
             backoffLimit: 1
             activeDeadlineSeconds: 7200
             template:
@@ -6809,9 +6811,10 @@ write_files:
         schedule: "25 * * * *"
         concurrencyPolicy: Forbid
         successfulJobsHistoryLimit: 2
-        failedJobsHistoryLimit: 3
+        failedJobsHistoryLimit: 1
         jobTemplate:
           spec:
+            ttlSecondsAfterFinished: 3600
             backoffLimit: 1
             activeDeadlineSeconds: 7200
             template:
@@ -6879,9 +6882,10 @@ write_files:
         schedule: "35 * * * *"
         concurrencyPolicy: Forbid
         successfulJobsHistoryLimit: 2
-        failedJobsHistoryLimit: 3
+        failedJobsHistoryLimit: 1
         jobTemplate:
           spec:
+            ttlSecondsAfterFinished: 3600
             backoffLimit: 1
             activeDeadlineSeconds: 7200
             template:
