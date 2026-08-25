@@ -93,6 +93,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         ETCD_HOSTNAME = var.etcd_hostname
         SRVR_HOSTNAME = var.srvr_hostname
         OPENOBSERVE_IMAGE_TAG = var.OPENOBSERVE_IMAGE_TAG
+        OPENOBSERVE_CHART_VERSION = var.OPENOBSERVE_CHART_VERSION
         LONGHORN_VERSION = var.LONGHORN_VERSION
         SRVR_IP_ALIAS = var.SRVR_IP_ALIAS
         SRVR_IP_ALIAS_CIDR = var.SRVR_IP_ALIAS_CIDR

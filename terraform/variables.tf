@@ -193,7 +193,13 @@ variable "VAULT_VERSION" {
 variable "OPENOBSERVE_IMAGE_TAG" {
   description = "OpenObserve image tag to deploy."
   type        = string
-  default     = "v0.70.1"
+  default     = "v0.92.2"
+}
+
+variable "OPENOBSERVE_CHART_VERSION" {
+  description = "OpenObserve Helm chart version to deploy."
+  type        = string
+  default     = "0.92.2"
 }
 
 variable "NVIDIA_DRIVER" {

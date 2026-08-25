@@ -6496,9 +6496,11 @@ write_files:
 
       sudo helm repo update
       OO_IMAGE_TAG="${OPENOBSERVE_IMAGE_TAG}"
+      OO_CHART_VERSION="${OPENOBSERVE_CHART_VERSION}"
       sudo helm upgrade --install openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
+        --version "$OO_CHART_VERSION" \
         --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set-string image.oss.tag="$OO_IMAGE_TAG" \
         --set enterprise.enabled=false \
@@ -6530,19 +6532,23 @@ write_files:
         --set-string config.ZO_S3_BUCKET_NAME=openobserve \
         --set-string config.ZO_META_STORE=postgres \
         --set-string config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
+        --set-string extraEnv[0].name=ZO_META_CONNECTION_POOL_MIN_SIZE \
+        --set-string extraEnv[0].value=1 \
+        --set-string extraEnv[1].name=ZO_META_CONNECTION_POOL_MAX_SIZE \
+        --set-string extraEnv[1].value=20 \
         --set-string config.ZO_META_TRANSACTION_LOCK_TIMEOUT=1800 \
         --set-string config.ZO_META_TRANSACTION_RETRIES=10 \
         --set-string router.config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string router.config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string router.config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
         --set-string ingester.config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string ingester.config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string ingester.config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
         --set-string querier.config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string querier.config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string querier.config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
         --set-string compactor.config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string compactor.config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string compactor.config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
         --set-string alertmanager.config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
-        --set-string alertmanager.config.ZO_META_CONNECTION_POOL_MAX_SIZE=5 \
+        --set-string alertmanager.config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
         --set-string config.ZO_PROMETHEUS_ENABLE=true \
         --set probes.router.enabled=true \
         --set probes.router.config.startupProbe.initialDelaySeconds=30 \
@@ -6555,6 +6561,8 @@ write_files:
         --set replicaCount.router=0 \
         --set replicaCount.compactor=0 \
         --set replicaCount.alertmanager=0 \
+        --set replicaCount.scheduler=0 \
+        --set replicaCount.o2ai=0 \
         --set replicaCount.dex=0 \
         --set-string ingester.persistence.storageClass=longhorn \
         --set-string ingester.persistence.size=100Gi \
@@ -6564,6 +6572,9 @@ write_files:
         --set-string alertmanager.persistence.size=20Gi \
         --set-string alertquerier.persistence.storageClass=longhorn \
         --set-string alertquerier.persistence.size=20Gi \
+        --set-string scheduler.persistence.storageClass=longhorn \
+        --set-string scheduler.persistence.size=25Gi \
+        --set nats.promExporter.podMonitor.enabled=false \
         --set-string nats.config.jetstream.fileStore.pvc.storageClassName=longhorn \
         --set-string nats.config.jetstream.fileStore.pvc.size=10Gi \
         --set replicaCount.dex=0
@@ -6972,7 +6983,7 @@ write_files:
 
       set_openobserve_dsn_env() {
         echo "🔧 Enforcing PostgreSQL DSNs on OpenObserve workloads..."
-        for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager; do
+        for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager statefulset/openobserve-scheduler; do
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env "$target" \
             ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
             ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
@@ -7024,14 +7035,26 @@ write_files:
       sudo helm upgrade openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
+        --version "$OO_CHART_VERSION" \
         --reuse-values \
         --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set-string podSecurityContext.fsGroupChangePolicy=OnRootMismatch \
+        --set-string config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
+        --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
+        --set-string extraEnv[0].name=ZO_META_CONNECTION_POOL_MIN_SIZE \
+        --set-string extraEnv[0].value=1 \
+        --set-string extraEnv[1].name=ZO_META_CONNECTION_POOL_MAX_SIZE \
+        --set-string extraEnv[1].value=20 \
+        --set-string scheduler.persistence.storageClass=longhorn \
+        --set-string scheduler.persistence.size=25Gi \
+        --set nats.promExporter.podMonitor.enabled=false \
         --set replicaCount.router=1 \
         --set replicaCount.ingester=0 \
         --set replicaCount.querier=0 \
         --set replicaCount.compactor=0 \
-        --set replicaCount.alertmanager=0
+        --set replicaCount.alertmanager=0 \
+        --set replicaCount.scheduler=0 \
+        --set replicaCount.o2ai=0
       if [ -n "$OO_RW_DSN" ]; then
         set_openobserve_dsn_env
       fi
@@ -7046,13 +7069,25 @@ write_files:
       sudo helm upgrade openobserve openobserve/openobserve \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
+        --version "$OO_CHART_VERSION" \
         --reuse-values \
         --set-string image.oss.repository=public.ecr.aws/zinclabs/openobserve \
         --set-string podSecurityContext.fsGroupChangePolicy=OnRootMismatch \
+        --set-string config.ZO_META_CONNECTION_POOL_MIN_SIZE=1 \
+        --set-string config.ZO_META_CONNECTION_POOL_MAX_SIZE=20 \
+        --set-string extraEnv[0].name=ZO_META_CONNECTION_POOL_MIN_SIZE \
+        --set-string extraEnv[0].value=1 \
+        --set-string extraEnv[1].name=ZO_META_CONNECTION_POOL_MAX_SIZE \
+        --set-string extraEnv[1].value=20 \
+        --set-string scheduler.persistence.storageClass=longhorn \
+        --set-string scheduler.persistence.size=25Gi \
+        --set nats.promExporter.podMonitor.enabled=false \
         --set replicaCount.ingester=2 \
         --set replicaCount.querier=1 \
         --set replicaCount.compactor=1 \
         --set replicaCount.alertmanager=1 \
+        --set replicaCount.scheduler=1 \
+        --set replicaCount.o2ai=0 \
         --set probes.router.enabled=true \
         --set probes.router.config.startupProbe.initialDelaySeconds=30 \
         --set probes.router.config.startupProbe.periodSeconds=10 \
