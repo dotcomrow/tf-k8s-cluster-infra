@@ -5825,7 +5825,7 @@ write_files:
       metadata:
         name: autosize-no-explicit-resources
         annotations:
-          policies.kyverno.io/title: Autosize workloads should not set explicit resources
+          policies.kyverno.io/title: VPA-managed containers should not set explicit resources
           policies.kyverno.io/category: Autosize
           policies.kyverno.io/severity: medium
           policies.kyverno.io/subject: Deployment,StatefulSet
@@ -5857,11 +5857,11 @@ write_files:
                       matchLabels:
                         kubernetes.io/metadata.name: kyverno
             validate:
-              message: "Explicit requests/limits should be removed; VPA will manage resources."
+              message: "Explicit CPU/memory requests/limits should be removed from VPA-managed containers; VPA-excluded sidecars keep manual resources."
               deny:
                 conditions:
                   any:
-                    - key: "{{ request.object.spec.template.spec.containers[?resources.requests || resources.limits] | length(@) }}"
+                    - key: "{{ request.object.spec.template.spec.containers[?name != 'linkerd-proxy' && name != 'vault-agent' && name != 'config-reloader' && name != 'alloy' && (resources.requests.cpu || resources.requests.memory || resources.limits.cpu || resources.limits.memory)] | length(@) }}"
                       operator: GreaterThan
                       value: 0
       
