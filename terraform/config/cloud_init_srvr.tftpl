@@ -10400,6 +10400,7 @@ write_files:
             name: update-cloudrun-vault-cred
             namespace: vault
           spec:
+            ttlSecondsAfterFinished: 3600
             template:
               spec:
                 serviceAccountName: vault-auth
