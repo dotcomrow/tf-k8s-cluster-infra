@@ -5543,12 +5543,11 @@ write_files:
                 spec:
                   limits:
                     - type: Container
+                      # Keep admission defaults to scheduling requests only; broad default
+                      # limits create large VPA RequestsAndLimits ratios.
                       defaultRequest:
                         cpu: "50m"
                         memory: "256Mi"
-                      default:
-                        cpu: "1"
-                        memory: "3Gi"
       
       ---
       apiVersion: kyverno.io/v1
@@ -5699,7 +5698,9 @@ write_files:
                       - containerName: "alloy"
                         mode: "Off"
                       - containerName: "*"
-                        controlledValues: "RequestsAndLimits"
+                        # Let VPA manage requests only. Limits must come from explicit
+                        # workload profiles or VPA-excluded containers.
+                        controlledValues: "RequestsOnly"
                         minAllowed:
                           cpu: "50m"
                           memory: "256Mi"
@@ -5759,7 +5760,9 @@ write_files:
                       - containerName: "alloy"
                         mode: "Off"
                       - containerName: "*"
-                        controlledValues: "RequestsAndLimits"
+                        # Let VPA manage requests only. Limits must come from explicit
+                        # workload profiles or VPA-excluded containers.
+                        controlledValues: "RequestsOnly"
                         minAllowed:
                           cpu: "50m"
                           memory: "256Mi"
