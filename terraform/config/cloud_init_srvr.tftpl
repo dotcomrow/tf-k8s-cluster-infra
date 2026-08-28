@@ -5440,6 +5440,316 @@ write_files:
                 metadata:
                   labels:
                     platform.suncoast.systems/vpa-exclude: "true"
+
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: kyverno-default-vault-agent-resources
+        annotations:
+          argocd.argoproj.io/sync-wave: "-2"
+      rules:
+        - apiGroups:
+            - apps
+          resources:
+            - deployments
+            - statefulsets
+            - daemonsets
+          verbs:
+            - get
+            - list
+            - watch
+            - update
+            - patch
+        - apiGroups:
+            - batch
+          resources:
+            - cronjobs
+          verbs:
+            - get
+            - list
+            - watch
+            - update
+            - patch
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: kyverno-default-vault-agent-resources
+        annotations:
+          argocd.argoproj.io/sync-wave: "-2"
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: kyverno-default-vault-agent-resources
+      subjects:
+        - kind: ServiceAccount
+          name: kyverno-background-controller
+          namespace: kyverno
+
+      ---
+      apiVersion: kyverno.io/v1
+      kind: ClusterPolicy
+      metadata:
+        name: vault-agent-default-resources
+        annotations:
+          argocd.argoproj.io/sync-wave: "-1"
+          policies.kyverno.io/title: Default Vault Agent sidecar resources
+          policies.kyverno.io/category: Platform
+          policies.kyverno.io/severity: medium
+          policies.kyverno.io/subject: Deployment,StatefulSet,DaemonSet,Job,CronJob
+      spec:
+        validationFailureAction: Audit
+        background: true
+        rules:
+          - name: default-vault-agent-resources-workload-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - Deployment
+                      - StatefulSet
+                      - DaemonSet
+                    operations:
+                      - CREATE
+                      - UPDATE
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+            mutate:
+              patchStrategicMerge:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                        +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                        +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+          - name: default-vault-agent-resources-job-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - Job
+                    operations:
+                      - CREATE
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+            mutate:
+              patchStrategicMerge:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                        +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                        +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+          - name: default-vault-agent-resources-cronjob-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - CronJob
+                    operations:
+                      - CREATE
+                      - UPDATE
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+            mutate:
+              patchStrategicMerge:
+                spec:
+                  jobTemplate:
+                    spec:
+                      template:
+                        metadata:
+                          annotations:
+                            +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                            +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                            +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                            +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+          - name: backfill-vault-agent-resources-deployments
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - ClusterPolicy
+                    names:
+                      - vault-agent-default-resources
+            mutate:
+              mutateExistingOnPolicyUpdate: true
+              targets:
+                - apiVersion: apps/v1
+                  kind: Deployment
+                  preconditions:
+                    all:
+                      - key: "{{ target.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                        operator: Equals
+                        value: "true"
+              patchStrategicMerge:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                        +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                        +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+            skipBackgroundRequests: false
+          - name: backfill-vault-agent-resources-statefulsets
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - ClusterPolicy
+                    names:
+                      - vault-agent-default-resources
+            mutate:
+              mutateExistingOnPolicyUpdate: true
+              targets:
+                - apiVersion: apps/v1
+                  kind: StatefulSet
+                  preconditions:
+                    all:
+                      - key: "{{ target.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                        operator: Equals
+                        value: "true"
+              patchStrategicMerge:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                        +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                        +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+            skipBackgroundRequests: false
+          - name: backfill-vault-agent-resources-daemonsets
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - ClusterPolicy
+                    names:
+                      - vault-agent-default-resources
+            mutate:
+              mutateExistingOnPolicyUpdate: true
+              targets:
+                - apiVersion: apps/v1
+                  kind: DaemonSet
+                  preconditions:
+                    all:
+                      - key: "{{ target.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                        operator: Equals
+                        value: "true"
+              patchStrategicMerge:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                        +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                        +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+            skipBackgroundRequests: false
+          - name: backfill-vault-agent-resources-cronjobs
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - ClusterPolicy
+                    names:
+                      - vault-agent-default-resources
+            mutate:
+              mutateExistingOnPolicyUpdate: true
+              targets:
+                - apiVersion: batch/v1
+                  kind: CronJob
+                  preconditions:
+                    all:
+                      - key: "{{ target.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                        operator: Equals
+                        value: "true"
+              patchStrategicMerge:
+                spec:
+                  jobTemplate:
+                    spec:
+                      template:
+                        metadata:
+                          annotations:
+                            +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                            +(vault.hashicorp.com/agent-requests-mem): "64Mi"
+                            +(vault.hashicorp.com/agent-limits-cpu): "500m"
+                            +(vault.hashicorp.com/agent-limits-mem): "128Mi"
+            skipBackgroundRequests: false
+          - name: audit-vault-agent-resources-workload-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - Deployment
+                      - StatefulSet
+                      - DaemonSet
+                      - Job
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+            validate:
+              message: "Vault-injected workload templates should include non-empty Vault Agent resource annotations."
+              deny:
+                conditions:
+                  any:
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
+          - name: audit-vault-agent-resources-cronjob-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - CronJob
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+            validate:
+              message: "Vault-injected CronJob templates should include non-empty Vault Agent resource annotations."
+              deny:
+                conditions:
+                  any:
+                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
       
       ---
       apiVersion: rbac.authorization.k8s.io/v1
