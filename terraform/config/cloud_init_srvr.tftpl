@@ -5006,7 +5006,7 @@ write_files:
                 command:
                   - /goldilocks
                   - dashboard
-                  - --exclude-containers=linkerd-proxy,istio-proxy
+                  - --exclude-containers=linkerd-proxy,istio-proxy,vault-agent,config-reloader,alloy
                   - -v2
                 securityContext:
                   allowPrivilegeEscalation: false
