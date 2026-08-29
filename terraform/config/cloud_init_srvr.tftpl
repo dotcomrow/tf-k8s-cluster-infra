@@ -5699,7 +5699,6 @@ write_files:
                       - Deployment
                       - StatefulSet
                       - DaemonSet
-                      - Job
             preconditions:
               all:
                 - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
@@ -5707,6 +5706,37 @@ write_files:
                   value: "true"
             validate:
               message: "Vault-injected workload templates should include non-empty Vault Agent resource annotations."
+              deny:
+                conditions:
+                  any:
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
+                      operator: Equals
+                      value: ""
+                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
+                      operator: Equals
+                      value: ""
+          - name: audit-vault-agent-resources-job-templates
+            match:
+              any:
+                - resources:
+                    kinds:
+                      - Job
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
+                - key: "{{ request.object.status.succeeded || '0' }}"
+                  operator: Equals
+                  value: "0"
+            validate:
+              message: "Active Vault-injected Job templates should include non-empty Vault Agent resource annotations."
               deny:
                 conditions:
                   any:
