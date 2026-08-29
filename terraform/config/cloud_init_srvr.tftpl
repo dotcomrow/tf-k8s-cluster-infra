@@ -6856,6 +6856,8 @@ write_files:
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
+        --set-string minio.resources.requests.cpu=1000m \
+        --set-string minio.resources.requests.memory=40Gi \
         --set-string minio.deploymentUpdate.type=Recreate \
         --set-string minio.persistence.storageClass=longhorn \
         --set-string minio.persistence.size=500Gi \
