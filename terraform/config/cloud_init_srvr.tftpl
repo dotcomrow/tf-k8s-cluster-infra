@@ -7296,19 +7296,164 @@ write_files:
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch secret openobserve --type=merge -p "{\"data\":{\"ZO_META_POSTGRES_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_POSTGRES_RO_DSN\":\"$OO_RW_DSN_B64\",\"ZO_META_DDL_DSN\":\"$OO_RW_DSN_B64\"}}" || true
       fi
 
+      apply_openobserve_metadata_dsn_reconciler() {
+        echo "🔧 Applying OpenObserve metadata DSN reconciler..."
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f - <<'EOF'
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: openobserve-metadata-dsn-reconciler
+        namespace: openobserve
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: openobserve-metadata-dsn-reconciler
+        namespace: openobserve
+      rules:
+        - apiGroups: [""]
+          resources: ["secrets"]
+          resourceNames:
+            - openobserve-postgres-app
+          verbs: ["get"]
+        - apiGroups: [""]
+          resources: ["secrets"]
+          resourceNames:
+            - openobserve
+          verbs: ["get", "patch"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: openobserve-metadata-dsn-reconciler
+        namespace: openobserve
+      subjects:
+        - kind: ServiceAccount
+          name: openobserve-metadata-dsn-reconciler
+          namespace: openobserve
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: Role
+        name: openobserve-metadata-dsn-reconciler
+      ---
+      apiVersion: batch/v1
+      kind: Job
+      metadata:
+        name: openobserve-metadata-dsn-reconcile
+        namespace: openobserve
+        labels:
+          app.kubernetes.io/name: openobserve
+          app.kubernetes.io/component: metadata-dsn-reconciler
+      spec:
+        ttlSecondsAfterFinished: 3600
+        backoffLimit: 1
+        template:
+          metadata:
+            labels:
+              app.kubernetes.io/name: openobserve
+              app.kubernetes.io/component: metadata-dsn-reconciler
+          spec:
+            serviceAccountName: openobserve-metadata-dsn-reconciler
+            priorityClassName: platform-system-high
+            restartPolicy: Never
+            containers:
+              - name: reconcile
+                image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
+                imagePullPolicy: IfNotPresent
+                command: ["/bin/sh", "-ec"]
+                args:
+                  - |
+                    read_secret_key() {
+                      key="$1"
+                      kubectl -n openobserve get secret openobserve-postgres-app -o "jsonpath={.data.$key}" | base64 -d
+                    }
+
+                    PG_APP_USER="$(read_secret_key username || true)"
+                    PG_APP_PASS="$(read_secret_key password || true)"
+                    PG_APP_DB="$(read_secret_key dbname || true)"
+
+                    if [ -z "$PG_APP_DB" ]; then
+                      PG_APP_DB="app"
+                    fi
+                    if [ -z "$PG_APP_USER" ] || [ -z "$PG_APP_PASS" ]; then
+                      echo "OpenObserve Postgres app secret is missing username or password"
+                      exit 1
+                    fi
+
+                    OO_RW_DSN="postgres://$PG_APP_USER:$PG_APP_PASS@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/$PG_APP_DB?sslmode=disable"
+                    OO_RW_DSN_B64="$(printf '%s' "$OO_RW_DSN" | base64 | tr -d '\n')"
+                    PATCH='{"data":{"ZO_META_POSTGRES_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_POSTGRES_RO_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_DDL_DSN":"'"$OO_RW_DSN_B64"'"}}'
+
+                    kubectl -n openobserve patch secret openobserve --type=merge -p "$PATCH" >/dev/null
+
+                    UPDATED_POSTGRES_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}')"
+                    UPDATED_POSTGRES_RO_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}')"
+                    UPDATED_DDL_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}')"
+                    if [ "$UPDATED_POSTGRES_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_POSTGRES_RO_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_DDL_DSN" != "$OO_RW_DSN_B64" ]; then
+                      echo "OpenObserve metadata DSN reconciliation did not converge"
+                      exit 1
+                    fi
+
+                    echo "OpenObserve metadata DSNs now target the writable Postgres service"
+                resources:
+                  requests:
+                    cpu: 10m
+                    memory: 32Mi
+                  limits:
+                    cpu: 100m
+                    memory: 128Mi
+      EOF
+        if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=complete job/openobserve-metadata-dsn-reconcile --timeout=180s; then
+          echo "❌ OpenObserve metadata DSN reconciliation job failed"
+          dump_openobserve_debug
+          exit 1
+        fi
+
+        OO_SECRET_DSN_B64=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}' 2>/dev/null || true)
+        OO_SECRET_RO_DSN_B64=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}' 2>/dev/null || true)
+        OO_SECRET_DDL_DSN_B64=$(sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}' 2>/dev/null || true)
+        if [ -z "$OO_SECRET_DSN_B64" ] || [ "$OO_SECRET_DSN_B64" != "$OO_SECRET_RO_DSN_B64" ] || [ "$OO_SECRET_DSN_B64" != "$OO_SECRET_DDL_DSN_B64" ]; then
+          echo "❌ OpenObserve metadata DSN Secret keys are not reconciled"
+          dump_openobserve_debug
+          exit 1
+        fi
+        OO_SECRET_RO_DSN=$(printf '%s' "$OO_SECRET_RO_DSN_B64" | base64 -d 2>/dev/null || true)
+        case "$OO_SECRET_RO_DSN" in
+          *openobserve-postgres-rw.openobserve.svc.cluster.local*) ;;
+          *)
+            echo "❌ OpenObserve read-only metadata DSN does not target the writable Postgres service"
+            dump_openobserve_debug
+            exit 1
+            ;;
+        esac
+      }
+
       set_openobserve_dsn_env() {
+        if [ -z "$OO_RW_DSN" ]; then
+          echo "❌ OpenObserve writable metadata DSN is empty"
+          dump_openobserve_debug
+          exit 1
+        fi
         echo "🔧 Enforcing PostgreSQL DSNs on OpenObserve workloads..."
         for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager statefulset/openobserve-scheduler; do
-          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env "$target" \
-            ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
-            ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
-            ZO_META_DDL_DSN="$OO_RW_DSN" \
-            ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
-            ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
-            ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
-            ZO_META_TRANSACTION_RETRIES=30 \
-            ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
-            RUST_BACKTRACE=1 >/dev/null 2>&1 || true
+          if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get "$target" >/dev/null 2>&1; then
+            if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env "$target" \
+              ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
+              ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
+              ZO_META_DDL_DSN="$OO_RW_DSN" \
+              ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
+              ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
+              ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
+              ZO_META_TRANSACTION_RETRIES=30 \
+              ZO_META_TRANSACTION_LOCK_TIMEOUT=3600 \
+              RUST_BACKTRACE=1 >/dev/null; then
+              echo "❌ Failed to enforce OpenObserve metadata DSN env on $target"
+              dump_openobserve_debug
+              exit 1
+            fi
+          else
+            echo "ℹ️ Skipping missing OpenObserve target $target"
+          fi
         done
       }
 
@@ -7345,6 +7490,18 @@ write_files:
           exit 1
         fi
       }
+
+      wait_for_openobserve_rollout_if_present() {
+        target="$1"
+        timeout="$2"
+        if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get "$target" >/dev/null 2>&1; then
+          wait_for_openobserve_rollout "$target" "$timeout"
+        else
+          echo "ℹ️ Skipping missing OpenObserve rollout target $target"
+        fi
+      }
+
+      apply_openobserve_metadata_dsn_reconciler
 
       echo "🚀 Starting OpenObserve router first so DB migrations run once..."
       sudo helm upgrade openobserve openobserve/openobserve \
@@ -7423,7 +7580,8 @@ write_files:
       wait_for_openobserve_rollout statefulset/openobserve-ingester 600s
       wait_for_openobserve_rollout statefulset/openobserve-querier 600s
       wait_for_openobserve_rollout deployment/openobserve-compactor 600s
-      wait_for_openobserve_rollout statefulset/openobserve-alertmanager 600s
+      wait_for_openobserve_rollout_if_present statefulset/openobserve-alertmanager 600s
+      wait_for_openobserve_rollout statefulset/openobserve-scheduler 600s
       wait_for_openobserve_rollout deployment/openobserve-router 600s
       echo "✔️ OpenObserve installed."
 
