@@ -7059,14 +7059,6 @@ write_files:
               spec:
                 priorityClassName: platform-system-high
                 restartPolicy: Never
-                affinity:
-                  podAffinity:
-                    requiredDuringSchedulingIgnoredDuringExecution:
-                      - labelSelector:
-                          matchLabels:
-                            app: minio
-                            release: openobserve
-                        topologyKey: kubernetes.io/hostname
                 containers:
                   - name: cleanup
                     image: quay.io/minio/mc
@@ -7087,46 +7079,96 @@ write_files:
                         set -eu
                         mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null
                         cutoff="$(date -u -d '7 days ago' +%Y%m%d)"
-                        root=/mnt/minio/openobserve/files/default
-                        removed=0
-                        for type in logs metrics metadata traces index; do
-                          for stream in "$root/$type"/*; do
-                            [ -d "$stream" ] || continue
-                            for base in "$stream" "$stream"/[0-9]*; do
-                              [ -d "$base" ] || continue
-                              for year in "$base"/[0-9][0-9][0-9][0-9]; do
-                                [ -d "$year" ] || continue
-                                y="${year##*/}"
-                                for month in "$year"/[0-9][0-9]; do
-                                  [ -d "$month" ] || continue
-                                  m="${month##*/}"
-                                  for day in "$month"/[0-9][0-9]; do
-                                    [ -d "$day" ] || continue
-                                    d="${day##*/}"
-                                    key="$y$m$d"
-                                    if [ "$key" -lt "$cutoff" ]; then
-                                      prefix="${day#/mnt/minio/openobserve/}"
-                                      mc --quiet rm --recursive --force "local/openobserve/$prefix/" || true
-                                      removed=$((removed+1))
-                                    fi
-                                  done
-                                done
+                        started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                        prefixes="$(mktemp /tmp/openobserve-old-prefixes.XXXXXX)"
+                        sorted_prefixes="$(mktemp /tmp/openobserve-old-prefixes-sorted.XXXXXX)"
+                        delete_targets="$(mktemp /tmp/openobserve-delete-targets.XXXXXX)"
+                        trap 'rm -f "$prefixes" "$sorted_prefixes" "$delete_targets"' EXIT
+                        echo "retention_cleanup_start mode=api-only bucket=openobserve base=files/default cutoff=$cutoff started_at=$started_at"
+                        list_names() {
+                          mc ls "local/openobserve/$1/" 2>/dev/null |
+                            while IFS= read -r line; do
+                              name="${line##* }"
+                              name="${name%/}"
+                              [ -n "$name" ] || continue
+                              echo "$name"
+                            done
+                        }
+                        scan_days() {
+                          base="$1"
+                          for year in $(list_names "$base"); do
+                            case "$year" in
+                              [0-9][0-9][0-9][0-9]) ;;
+                              *) continue ;;
+                            esac
+                            for month in $(list_names "$base/$year"); do
+                              case "$month" in
+                                [0-9][0-9]) ;;
+                                *) continue ;;
+                              esac
+                              for day in $(list_names "$base/$year/$month"); do
+                                case "$day" in
+                                  [0-9][0-9]) ;;
+                                  *) continue ;;
+                                esac
+                                key_date="$year$month$day"
+                                if [ "$key_date" -lt "$cutoff" ]; then
+                                  echo "$base/$year/$month/$day" >> "$prefixes"
+                                  type_candidates=$((type_candidates+1))
+                                fi
                               done
                             done
                           done
+                        }
+                        removed=0
+                        for type in logs metrics metadata traces index; do
+                          echo "retention_cleanup_scan type=$type prefix=files/default/$type"
+                          streams=0
+                          bases=0
+                          type_candidates=0
+                          for stream in $(list_names "files/default/$type"); do
+                            streams=$((streams+1))
+                            stream_prefix="files/default/$type/$stream"
+                            bases=$((bases+1))
+                            scan_days "$stream_prefix"
+                            for base in $(list_names "$stream_prefix"); do
+                              case "$base" in
+                                [0-9][0-9][0-9][0-9]) continue ;;
+                                [0-9]*)
+                                  bases=$((bases+1))
+                                  scan_days "$stream_prefix/$base"
+                                  ;;
+                              esac
+                            done
+                          done
+                          echo "retention_cleanup_scan_complete type=$type streams=$streams bases_checked=$bases discovered_prefixes=$type_candidates"
                         done
-                        echo "cutoff=$cutoff removed_prefixes=$removed"
-                        df -h /mnt/minio
-                        df -ih /mnt/minio
-                    volumeMounts:
-                      - name: minio-data
-                        mountPath: /mnt/minio
-                        readOnly: true
-                volumes:
-                  - name: minio-data
-                    persistentVolumeClaim:
-                      claimName: openobserve-minio
-                      readOnly: true
+                        sort -u "$prefixes" > "$sorted_prefixes"
+                        candidate_prefixes=0
+                        while IFS= read -r prefix; do
+                          [ -n "$prefix" ] || continue
+                          candidate_prefixes=$((candidate_prefixes+1))
+                        done < "$sorted_prefixes"
+                        echo "retention_cleanup_candidates candidate_prefixes=$candidate_prefixes"
+                        while IFS= read -r prefix; do
+                          [ -n "$prefix" ] || continue
+                          if [ "$removed" -lt 10 ]; then
+                            echo "retention_cleanup_delete_sample prefix=$prefix"
+                          fi
+                          echo "local/openobserve/$prefix/" >> "$delete_targets"
+                          removed=$((removed+1))
+                        done < "$sorted_prefixes"
+                        if [ "$candidate_prefixes" -gt 10 ]; then
+                          omitted=$((candidate_prefixes-10))
+                          echo "retention_cleanup_delete_sample_omitted count=$omitted"
+                        fi
+                        if [ "$candidate_prefixes" -gt 0 ]; then
+                          mc --quiet rm --recursive --force --stdin < "$delete_targets"
+                        fi
+                        finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                        echo "retention_cleanup_complete mode=api-only cutoff=$cutoff candidate_prefixes=$candidate_prefixes removed_prefixes=$removed finished_at=$finished_at"
+                        mc ilm rule list local/openobserve
+                        mc quota info local/openobserve
       ---
       apiVersion: batch/v1
       kind: CronJob
