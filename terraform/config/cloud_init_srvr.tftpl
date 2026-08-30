@@ -7022,7 +7022,7 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/minio-mc || true
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod minio-mc --ignore-not-found >/dev/null 2>&1 || true
 
-      echo "Installing OpenObserve 7-day retention cleanup jobs..."
+      echo "Installing OpenObserve MinIO maintenance and 7-day retention cleanup jobs..."
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: batch/v1
       kind: CronJob
@@ -7038,7 +7038,7 @@ write_files:
           spec:
             ttlSecondsAfterFinished: 3600
             backoffLimit: 1
-            activeDeadlineSeconds: 7200
+            activeDeadlineSeconds: 600
             template:
               spec:
                 priorityClassName: platform-system-high
@@ -7046,6 +7046,10 @@ write_files:
                 containers:
                   - name: cleanup
                     image: quay.io/minio/mc
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
                     command: ["/bin/sh", "-c"]
                     env:
                       - name: MINIO_USER
@@ -7061,6 +7065,8 @@ write_files:
                     args:
                       - |
                         set -eu
+                        started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                        echo "minio_maintenance_start bucket=openobserve started_at=$started_at"
                         mc alias set local http://openobserve-minio:9000 "$MINIO_USER" "$MINIO_PASS" >/dev/null
                         ilm_json="$(mc ilm rule export local/openobserve 2>/dev/null || true)"
                         case "$ilm_json" in
@@ -7068,9 +7074,10 @@ write_files:
                           *) mc ilm rule add --expire-days 7 local/openobserve ;;
                         esac
                         mc quota set local/openobserve --size 400Gi
-                        mc --quiet rm --recursive --force --older-than 7d local/openobserve/
                         mc ilm rule list local/openobserve
                         mc quota info local/openobserve
+                        finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+                        echo "minio_maintenance_complete bucket=openobserve finished_at=$finished_at"
       ---
       apiVersion: batch/v1
       kind: CronJob
@@ -7086,7 +7093,7 @@ write_files:
           spec:
             ttlSecondsAfterFinished: 3600
             backoffLimit: 1
-            activeDeadlineSeconds: 7200
+            activeDeadlineSeconds: 3300
             template:
               spec:
                 priorityClassName: platform-system-high
@@ -7094,6 +7101,10 @@ write_files:
                 containers:
                   - name: cleanup
                     image: quay.io/minio/mc
+                    resources:
+                      requests:
+                        cpu: 100m
+                        memory: 128Mi
                     command: ["/bin/sh", "-c"]
                     env:
                       - name: MINIO_USER
@@ -7195,6 +7206,7 @@ write_files:
                           echo "retention_cleanup_delete_sample_omitted count=$omitted"
                         fi
                         if [ "$candidate_prefixes" -gt 0 ]; then
+                          echo "retention_cleanup_delete_start candidate_prefixes=$candidate_prefixes"
                           mc --quiet rm --recursive --force --stdin < "$delete_targets"
                         fi
                         finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
