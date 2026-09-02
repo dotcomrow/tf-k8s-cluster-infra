@@ -89,6 +89,7 @@ write_files:
       systemctl daemon-reload
       /usr/local/bin/performance-tuning.sh
       sysctl --system
+      /usr/local/bin/configure-longhorn-multipath.sh
       /usr/local/bin/disable-swap.sh
       
       systemctl enable setup-hosts-dns.service
@@ -134,6 +135,33 @@ write_files:
           systemctl reset-failed "$svc" || true
         fi
       done
+
+  - path: /usr/local/bin/configure-longhorn-multipath.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      # Longhorn iSCSI volumes present as IET VIRTUAL-DISK devices. If multipathd
+      # claims them, kubelet can fail to format or mount new Longhorn PVCs.
+      install -d -m 0755 /etc/multipath/conf.d
+      cat >/etc/multipath/conf.d/99-longhorn.conf <<'EOF'
+      blacklist {
+        device {
+          vendor "IET"
+          product "VIRTUAL-DISK"
+        }
+      }
+      EOF
+
+      if systemctl list-unit-files multipathd.service >/dev/null 2>&1; then
+        systemctl disable --now multipathd.service || true
+        systemctl reset-failed multipathd.service || true
+      fi
+      if systemctl list-unit-files multipathd.socket >/dev/null 2>&1; then
+        systemctl disable --now multipathd.socket || true
+        systemctl reset-failed multipathd.socket || true
+      fi
 
   - path: /usr/local/bin/performance-tuning.sh
     permissions: '0755'
