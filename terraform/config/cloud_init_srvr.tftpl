@@ -7709,8 +7709,21 @@ write_files:
         x_user_issuer \
         x_user_username \
         gravitee_request_id \
-        gravitee_transaction_id | base64 | tr -d '\r\n')
+        gravitee_transaction_id \
+        gravitee_client_identifier \
+        x_gravitee_request_id \
+        x_gravitee_transaction_id \
+        x_gravitee_client_identifier | base64 | tr -d '\r\n')
       OO_STREAMS_B64=$(printf '%s\n' default k8s_pod_logs | base64 | tr -d '\r\n')
+      OO_TRACE_STREAM_INDEX_FIELDS_B64=$(printf '%s\n' \
+        trace_id \
+        span_id \
+        service_name \
+        operation_name \
+        http_method \
+        http_target \
+        http_status_code | base64 | tr -d '\r\n')
+      OO_TRACE_STREAMS_B64=$(printf '%s\n' default | base64 | tr -d '\r\n')
 
       echo "Seeding OpenObserve log stream schema with trace_id/span_id fields..."
       if [[ -z "$OO_AUTH_HEADER" ]]; then
@@ -7748,6 +7761,10 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_user_username": "administrator@suncoast.systems",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "gravitee_request_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "gravitee_transaction_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "gravitee_client_identifier": "0000000000000000000000000000000000000000000000000000000000000001",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_request_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_transaction_id": "c0b0a3d0-8b63-406b-b0a3-d08b63206b6a",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "x_gravitee_client_identifier": "0000000000000000000000000000000000000000000000000000000000000001",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "level": "info",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "message": "openobserve schema seed: trace/span + header fields",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "source": "bootstrap",\n'
@@ -7812,6 +7829,7 @@ write_files:
           OO_STREAM_SETTINGS_SCRIPT+=$'streams_raw = os.environ.get("OO_STREAMS_B64", "")\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'default_stream = os.environ.get("OO_STREAM", "default")\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'fields_raw = os.environ.get("OO_STREAM_INDEX_FIELDS_B64", "")\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'stream_type = os.environ.get("OO_STREAM_TYPE", "logs")\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'try:\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    fields = [f.strip() for f in base64.b64decode(fields_raw).decode().splitlines() if f.strip()]\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'except Exception as exc:\n'
@@ -7841,7 +7859,7 @@ write_files:
           OO_STREAM_SETTINGS_SCRIPT+=$'        except Exception:\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'            return {}\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'def fetch_stream_settings(stream_name):\n'
-          OO_STREAM_SETTINGS_SCRIPT+=$'    url = f"http://openobserve-router:5080/api/{org}/streams/{stream_name}/schema?type=logs"\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'    url = f"http://openobserve-router:5080/api/{org}/streams/{stream_name}/schema?type={stream_type}"\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    req = urllib.request.Request(url, headers=headers)\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    with urllib.request.urlopen(req, timeout=20) as resp:\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'        data = json.loads(resp.read().decode("utf-8"))\n'
@@ -7874,8 +7892,7 @@ write_files:
           OO_STREAM_SETTINGS_SCRIPT+=$'    try:\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'        settings = fetch_stream_settings(stream)\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    except Exception as exc:\n'
-          OO_STREAM_SETTINGS_SCRIPT+=$'        print(f"[{stream}] settings fetch error: {exc}", file=sys.stderr)\n'
-          OO_STREAM_SETTINGS_SCRIPT+=$'        continue\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        print(f"[{stream}] settings fetch warning: {exc}; attempting {stream_type} settings update", file=sys.stderr)\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    current = settings.get("index_fields") or settings.get("indexFields") or []\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    normalized, _ = normalize_index_fields(current)\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    counts = {field: normalized.count(field) for field in fields}\n'
@@ -7884,7 +7901,7 @@ write_files:
           OO_STREAM_SETTINGS_SCRIPT+=$'        continue\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    urls = [\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'        f"http://openobserve-router:5080/api/{org}/streams/{stream}/settings",\n'
-          OO_STREAM_SETTINGS_SCRIPT+=$'        f"http://openobserve-router:5080/api/{org}/streams/{stream}/settings?type=logs",\n'
+          OO_STREAM_SETTINGS_SCRIPT+=$'        f"http://openobserve-router:5080/api/{org}/streams/{stream}/settings?type={stream_type}",\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    ]\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'    def apply_payload(payload, label):\n'
           OO_STREAM_SETTINGS_SCRIPT+=$'        last_err = None\n'
@@ -7940,12 +7957,49 @@ write_files:
                     value: "$OO_STREAMS_B64"
                   - name: OO_STREAM_INDEX_FIELDS_B64
                     value: "$OO_STREAM_INDEX_FIELDS_B64"
+                  - name: OO_STREAM_TYPE
+                    value: "logs"
                   - name: OO_STREAM_SETTINGS_SCRIPT64
                     value: "$OO_STREAM_SETTINGS_SCRIPT64"
       EOF
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-stream-settings --timeout=300s
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-stream-settings || true
           sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-stream-settings --ignore-not-found >/dev/null 2>&1 || true
+
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-trace-stream-settings --ignore-not-found >/dev/null 2>&1 || true
+          cat <<EOF | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: oo-trace-stream-settings
+            namespace: openobserve
+          spec:
+            priorityClassName: platform-system-high
+            restartPolicy: Never
+            containers:
+              - name: runner
+                image: python:3-alpine
+                command: ["/bin/sh","-c"]
+                args:
+                  - |
+                    python -c 'import os,base64;exec(base64.b64decode(os.environ["OO_STREAM_SETTINGS_SCRIPT64"]).decode())'
+                env:
+                  - name: OO_AUTH_HEADER
+                    value: "$OO_AUTH_HEADER"
+                  - name: OO_ORG
+                    value: "default"
+                  - name: OO_STREAMS_B64
+                    value: "$OO_TRACE_STREAMS_B64"
+                  - name: OO_STREAM_INDEX_FIELDS_B64
+                    value: "$OO_TRACE_STREAM_INDEX_FIELDS_B64"
+                  - name: OO_STREAM_TYPE
+                    value: "traces"
+                  - name: OO_STREAM_SETTINGS_SCRIPT64
+                    value: "$OO_STREAM_SETTINGS_SCRIPT64"
+      EOF
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=jsonpath='{.status.phase}'=Succeeded pod/oo-trace-stream-settings --timeout=300s
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve logs pod/oo-trace-stream-settings || true
+          sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete pod oo-trace-stream-settings --ignore-not-found >/dev/null 2>&1 || true
       fi
 
       echo "🔐 Installing GitHub auth proxy for OpenObserve (Dex + oauth2-proxy + NGINX + cookie bootstrap)..."
@@ -9541,7 +9595,7 @@ write_files:
           | .nginx_config.http.real_ip_recursive = "on"
           | .nginx_config.http.enable_access_log = true
           | .nginx_config.http.access_log = "/dev/stdout"
-          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_forwarded_host\":\"$http_x_forwarded_host\",\"x_forwarded_proto\":\"$http_x_forwarded_proto\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
+          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_forwarded_host\":\"$http_x_forwarded_host\",\"x_forwarded_proto\":\"$http_x_forwarded_proto\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"gravitee_request_id\":\"$http_x_gravitee_request_id\",\"gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"x_gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
           | .nginx_config.http.access_log_format_escape = "json"
           | .nginx_config.http.proxy_buffer_size = "256k"
           | .nginx_config.http.proxy_buffers = "16 256k"
