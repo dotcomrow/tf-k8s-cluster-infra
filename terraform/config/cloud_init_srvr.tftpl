@@ -10118,19 +10118,6 @@ write_files:
         client_secret: "$VAULT_OIDC_SECRET"
         redirect_uri: "https://vault.teleport.app.${RANCHER_DOMAIN}/ui/vault/auth/oidc/oidc/callback"
       ---
-      apiVersion: v1
-      kind: PersistentVolumeClaim
-      metadata:
-        name: vault-creds-pvc
-        namespace: vault
-      spec:
-        accessModes:
-          - ReadWriteMany
-        resources:
-          requests:
-            storage: 1Gi
-        storageClassName: longhorn
-      ---
       # Dex configuration (GitHub connector and Vault client)
       apiVersion: v1
       kind: ConfigMap
@@ -10368,8 +10355,6 @@ write_files:
                   - name: shared-utils
                     mountPath: /usr/local/bin/kubectl
                     subPath: kubectl
-                  - name: shared-data
-                    mountPath: /vault/creds-data
                   - name: gcp-project-id
                     mountPath: /config/gcp-project-id
                     readOnly: true
@@ -10419,9 +10404,6 @@ write_files:
                   secretName: vault-oidc-creds
               - name: shared-utils
                 emptyDir: {}
-              - name: shared-data
-                persistentVolumeClaim:
-                  claimName: vault-creds-pvc
               - name: gcp-project-id
                 configMap:
                   name: gcp-project-id
@@ -10675,10 +10657,12 @@ write_files:
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/approle/role/vault-sync \
             token_ttl=1h token_max_ttl=4h bind_secret_id=true secret_id_bound_cidrs=0.0.0.0/0 policies=vault-sync
 
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault read -field=role_id auth/approle/role/vault-sync/role-id > /vault/creds-data/role_id.txt
-          echo >> /vault/creds-data/role_id.txt
-          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > /vault/creds-data/secret_id.txt
-          echo >> /vault/creds-data/secret_id.txt
+          VAULT_SYNC_CREDS_DIR="/tmp/vault-sync-creds"
+          mkdir -p "\$VAULT_SYNC_CREDS_DIR"
+          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault read -field=role_id auth/approle/role/vault-sync/role-id > "\$VAULT_SYNC_CREDS_DIR/role_id.txt"
+          echo >> "\$VAULT_SYNC_CREDS_DIR/role_id.txt"
+          VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write -f -field=secret_id auth/approle/role/vault-sync/secret-id > "\$VAULT_SYNC_CREDS_DIR/secret_id.txt"
+          echo >> "\$VAULT_SYNC_CREDS_DIR/secret_id.txt"
 
           # Store root token (idempotent)
           kubectl -n vault create secret generic vault-root-token \
@@ -10920,9 +10904,17 @@ write_files:
           fi
 
           # GCP identifiers for the follow-up job
-          cat /config/gcp-project-id/PROJECT_ID > /vault/creds-data/project_id.txt
-          cat /config/gcp-project-region/PROJECT_REGION > /vault/creds-data/region.txt
-          echo "vault-sync-run-container" > /vault/creds-data/service_name.txt
+          cat /config/gcp-project-id/PROJECT_ID > "\$VAULT_SYNC_CREDS_DIR/project_id.txt"
+          cat /config/gcp-project-region/PROJECT_REGION > "\$VAULT_SYNC_CREDS_DIR/region.txt"
+          echo "vault-sync-run-container" > "\$VAULT_SYNC_CREDS_DIR/service_name.txt"
+
+          kubectl -n vault create secret generic vault-sync-credentials \
+            --from-file=role_id.txt="\$VAULT_SYNC_CREDS_DIR/role_id.txt" \
+            --from-file=secret_id.txt="\$VAULT_SYNC_CREDS_DIR/secret_id.txt" \
+            --from-file=project_id.txt="\$VAULT_SYNC_CREDS_DIR/project_id.txt" \
+            --from-file=region.txt="\$VAULT_SYNC_CREDS_DIR/region.txt" \
+            --from-file=service_name.txt="\$VAULT_SYNC_CREDS_DIR/service_name.txt" \
+            --dry-run=client -o yaml | kubectl apply -f -
 
           # ArgoCD role for AVP
           VAULT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)" vault write auth/kubernetes/role/argocd \
@@ -10985,6 +10977,7 @@ write_files:
                         readOnly: true
                       - name: shared-creds
                         mountPath: /shared-creds
+                        readOnly: true
                       - name: script
                         mountPath: /opt/configscript
                         readOnly: true
@@ -10997,8 +10990,8 @@ write_files:
                     secret:
                       secretName: gcp-service-account
                   - name: shared-creds
-                    persistentVolumeClaim:
-                      claimName: vault-creds-pvc
+                    secret:
+                      secretName: vault-sync-credentials
                   - name: script
                     configMap:
                       name: vault-sync-script
