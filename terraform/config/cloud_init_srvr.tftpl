@@ -7699,6 +7699,10 @@ write_files:
         trace_id \
         span_id \
         user_agent \
+        client_ip \
+        remote_addr \
+        cf_connecting_ip \
+        true_client_ip \
         x_client_ip \
         x_forwarded_for \
         x_forwarded_host \
@@ -7722,6 +7726,7 @@ write_files:
         operation_name \
         http_method \
         http_target \
+        http_client_ip \
         http_status_code | base64 | tr -d '\r\n')
       OO_TRACE_STREAMS_B64=$(printf '%s\n' default | base64 | tr -d '\r\n')
 
@@ -7750,6 +7755,10 @@ write_files:
           OO_SCHEMA_SEED_SCRIPT+=$'        "trace_id": "00000000000000000000000000000001",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "span_id": "0000000000000001",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "user_agent": "Python-urllib/3.11",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "client_ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "remote_addr": "10.42.0.1",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "cf_connecting_ip": "72.187.152.150",\n'
+          OO_SCHEMA_SEED_SCRIPT+=$'        "true_client_ip": "72.187.152.150",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_client_ip": "72.187.152.150",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_forwarded_for": "72.187.152.150, 72.187.152.150, 72.187.152.150",\n'
           OO_SCHEMA_SEED_SCRIPT+=$'        "x_forwarded_host": "graphql.app.suncoast.systems",\n'
@@ -9595,7 +9604,7 @@ write_files:
           | .nginx_config.http.real_ip_recursive = "on"
           | .nginx_config.http.enable_access_log = true
           | .nginx_config.http.access_log = "/dev/stdout"
-          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_forwarded_host\":\"$http_x_forwarded_host\",\"x_forwarded_proto\":\"$http_x_forwarded_proto\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"gravitee_request_id\":\"$http_x_gravitee_request_id\",\"gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"x_gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
+          | .nginx_config.http.access_log_format = "{\"time\":\"$time_iso8601\",\"traceparent\":\"$opentelemetry_context_traceparent\",\"trace_id\":\"$opentelemetry_trace_id\",\"span_id\":\"$opentelemetry_span_id\",\"remote_addr\":\"$remote_addr\",\"cf_connecting_ip\":\"$http_cf_connecting_ip\",\"true_client_ip\":\"$http_true_client_ip\",\"x_forwarded_for\":\"$http_x_forwarded_for\",\"x_forwarded_host\":\"$http_x_forwarded_host\",\"x_forwarded_proto\":\"$http_x_forwarded_proto\",\"x_real_ip\":\"$http_x_real_ip\",\"x_client_ip\":\"$http_x_client_ip\",\"user_agent\":\"$http_user_agent\",\"x_user_email\":\"$http_x_user_email\",\"x_user_id\":\"$http_x_user_id\",\"x_user_issuer\":\"$http_x_user_issuer\",\"x_user_username\":\"$http_x_user_username\",\"gravitee_request_id\":\"$http_x_gravitee_request_id\",\"gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"x_gravitee_request_id\":\"$http_x_gravitee_request_id\",\"x_gravitee_transaction_id\":\"$http_x_gravitee_transaction_id\",\"x_gravitee_client_identifier\":\"$http_x_gravitee_client_identifier\",\"host\":\"$host\",\"scheme\":\"$scheme\",\"method\":\"$request_method\",\"uri\":\"$uri\",\"status\":\"$status\",\"request_time\":\"$request_time\",\"upstream_status\":\"$upstream_status\",\"upstream_response_time\":\"$upstream_response_time\"}"
           | .nginx_config.http.access_log_format_escape = "json"
           | .nginx_config.http.proxy_buffer_size = "256k"
           | .nginx_config.http.proxy_buffers = "16 256k"
