@@ -7726,7 +7726,6 @@ write_files:
         operation_name \
         http_method \
         http_target \
-        http_client_ip \
         http_status_code | base64 | tr -d '\r\n')
       OO_TRACE_STREAMS_B64=$(printf '%s\n' default | base64 | tr -d '\r\n')
 
