@@ -7689,6 +7689,12 @@ write_files:
         --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
         --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
 
+      sudo kubectl -n vault \
+        --kubeconfig=/etc/rancher/rke2/rke2.yaml \
+        create secret generic oo-auth \
+        --from-literal=OO_AUTH_HEADER="$OO_AUTH_HEADER" \
+        --dry-run=client -o yaml | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
         create secret generic openobserve-root-creds \
         --from-literal=username="$OPENOBSERVE_USERNAME" \
@@ -10492,6 +10498,8 @@ write_files:
         name: vault-init-script
         namespace: vault
       data:
+        bootstrap-openobserve-sourcemap-service-account.py: |
+          ${OPENOBSERVE_SOURCEMAP_BOOTSTRAP_SCRIPT}
         run.sh: |
           #!/bin/sh
           # Minimal/targeted changes only: robust state detection + one-time restart if sealed.
@@ -10730,6 +10738,71 @@ write_files:
           kubectl -n vault create secret generic vault-root-token \
             --from-literal=VAULT_TOKEN=\$(jq -r '.root_token' /vault/data/init.json) \
             --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "Ensuring OpenObserve source-map upload service-account auth..."
+          kubectl -n vault delete job openobserve-sourcemap-upload-auth-bootstrap --ignore-not-found >/dev/null 2>&1 || true
+          cat <<EOF | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: openobserve-sourcemap-upload-auth-bootstrap
+            namespace: vault
+          spec:
+            ttlSecondsAfterFinished: 3600
+            backoffLimit: 3
+            template:
+              spec:
+                serviceAccountName: vault-auth
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                containers:
+                  - name: bootstrap
+                    image: python:3-alpine
+                    command: ["python3", "/opt/configscript/bootstrap-openobserve-sourcemap-service-account.py"]
+                    args:
+                      - "--openobserve-url"
+                      - "http://openobserve-router.openobserve.svc.cluster.local:5080"
+                      - "--org"
+                      - "default"
+                      - "--write-vault"
+                      - "--rotate-if-existing-without-usable-vault-secret"
+                      - "--vault-addr"
+                      - "http://vault.vault.svc.cluster.local:8200"
+                    env:
+                      - name: OO_ADMIN_AUTH_HEADER
+                        valueFrom:
+                          secretKeyRef:
+                            name: oo-auth
+                            key: OO_AUTH_HEADER
+                      - name: VAULT_TOKEN
+                        valueFrom:
+                          secretKeyRef:
+                            name: vault-root-token
+                            key: VAULT_TOKEN
+                      - name: OO_SOURCEMAP_SERVICE_ACCOUNT_EMAIL
+                        value: "openobserve-sourcemap-uploader@suncoast.systems"
+                      - name: OO_SOURCEMAP_VAULT_MOUNT
+                        value: "secret"
+                      - name: OO_SOURCEMAP_VAULT_PATH
+                        value: "openobserve-sourcemap-upload-auth-token"
+                      - name: OO_SOURCEMAP_VAULT_FIELD
+                        value: "value"
+                    volumeMounts:
+                      - name: script
+                        mountPath: /opt/configscript
+                        readOnly: true
+                volumes:
+                  - name: script
+                    configMap:
+                      name: vault-init-script
+          EOF
+          if kubectl -n vault wait --for=condition=complete job/openobserve-sourcemap-upload-auth-bootstrap --timeout=300s; then
+            kubectl -n vault logs job/openobserve-sourcemap-upload-auth-bootstrap || true
+            echo "✅ OpenObserve source-map upload auth is stored in Vault."
+          else
+            echo "WARNING: OpenObserve source-map upload auth bootstrap did not complete successfully."
+            kubectl -n vault logs job/openobserve-sourcemap-upload-auth-bootstrap --all-containers=true || true
+          fi
 
           # Push/update Vault root token into Terraform Cloud variable set for external app runs.
           if [ -n "\$TFC_API_TOKEN" ]; then

@@ -65,6 +65,7 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         OPENOBSERVE_GITHUB_TOKEN = var.OPENOBSERVE_GITHUB_TOKEN
         OPENOBSERVE_GITHUB_ADMIN_TEAM = var.OPENOBSERVE_GITHUB_ADMIN_TEAM
         OPENOBSERVE_GITHUB_USER_TEAM = var.OPENOBSERVE_GITHUB_USER_TEAM
+        OPENOBSERVE_SOURCEMAP_BOOTSTRAP_SCRIPT = indent(10, file("${path.module}/scripts/bootstrap-openobserve-sourcemap-service-account.py"))
         JAEGER_OAUTH2_PROXY_COOKIE_SECRET = var.JAEGER_OAUTH2_PROXY_COOKIE_SECRET
         JAEGER_GITHUB_AUTH_TEAM = var.JAEGER_GITHUB_AUTH_TEAM
         NFS_DRIVE_STORAGE = var.NFS_DRIVE_STORAGE
