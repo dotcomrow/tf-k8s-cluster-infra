@@ -190,7 +190,7 @@ def shape_summary(value: Any, depth: int = 0) -> Any:
 
 
 def extract_created_token(response_json: Any) -> str:
-    candidates = [token for token in collect_tokens(response_json) if len(token) >= 20]
+    candidates = [token.strip() for token in collect_tokens(response_json) if token.strip()]
     if not candidates:
         pretty = json.dumps(shape_summary(response_json), sort_keys=True)[:1000]
         raise BootstrapError(
