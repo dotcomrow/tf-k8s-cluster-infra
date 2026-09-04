@@ -11,8 +11,9 @@ This script is intentionally safe to run during platform bootstrap:
 
 OpenObserve OSS does not expose scoped RBAC permissions, so service accounts
 have broad API access there. In Enterprise/OpenFGA deployments, grant this
-service account an Editor/Admin role that includes sourcemaps upload/list
-permissions before relying on it for source-map upload.
+service account an Admin role, or another role that includes sourcemaps
+upload/list/delete permissions, before relying on it for source-map upload and
+retention cleanup.
 """
 
 from __future__ import annotations
@@ -336,7 +337,7 @@ def verify_sourcemaps_permission(base_url: str, org: str, auth_header: str) -> N
     except BootstrapError as exc:
         raise BootstrapError(
             "generated service-account credential cannot list source maps; "
-            "on Enterprise/OpenFGA grant sourcemaps list/upload permissions "
+            "on Enterprise/OpenFGA grant sourcemaps list/upload/delete permissions "
             f"before upload. Root error: {exc}"
         ) from exc
 
