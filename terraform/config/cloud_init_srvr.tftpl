@@ -6949,7 +6949,7 @@ write_files:
         --set-string minio.rootPassword="$OPENOBSERVE_MINIO_PASSWORD" \
         --set-string minio.mode=standalone \
         --set minio.replicas=1 \
-        --set-string minio.resources.requests.cpu=1000m \
+        --set-string minio.resources.requests.cpu=500m \
         --set-string minio.resources.requests.memory=40Gi \
         --set-string minio.deploymentUpdate.type=Recreate \
         --set-string minio.persistence.storageClass=longhorn \
@@ -12237,6 +12237,78 @@ write_files:
 
       echo "✅ Argo CD is ready."
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" -n cattle-system rollout status deploy rancher-webhook --timeout=120s
+
+      echo "🔧 Applying manual CPU-only VPAs for Argo CD core components..."
+      sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
+      apiVersion: autoscaling.k8s.io/v1
+      kind: VerticalPodAutoscaler
+      metadata:
+        name: argocd-application-controller-cpu
+        namespace: argocd
+      spec:
+        targetRef:
+          apiVersion: apps/v1
+          kind: StatefulSet
+          name: argocd-application-controller
+        updatePolicy:
+          updateMode: "InPlaceOrRecreate"
+          minReplicas: 1
+        resourcePolicy:
+          containerPolicies:
+            - containerName: application-controller
+              controlledResources: ["cpu"]
+              controlledValues: "RequestsOnly"
+              minAllowed:
+                cpu: "100m"
+              maxAllowed:
+                cpu: "4"
+      ---
+      apiVersion: autoscaling.k8s.io/v1
+      kind: VerticalPodAutoscaler
+      metadata:
+        name: argocd-repo-server-cpu
+        namespace: argocd
+      spec:
+        targetRef:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: argocd-repo-server
+        updatePolicy:
+          updateMode: "InPlaceOrRecreate"
+          minReplicas: 1
+        resourcePolicy:
+          containerPolicies:
+            - containerName: repo-server
+              controlledResources: ["cpu"]
+              controlledValues: "RequestsOnly"
+              minAllowed:
+                cpu: "50m"
+              maxAllowed:
+                cpu: "2"
+      ---
+      apiVersion: autoscaling.k8s.io/v1
+      kind: VerticalPodAutoscaler
+      metadata:
+        name: argocd-server-cpu
+        namespace: argocd
+      spec:
+        targetRef:
+          apiVersion: apps/v1
+          kind: Deployment
+          name: argocd-server
+        updatePolicy:
+          updateMode: "InPlaceOrRecreate"
+          minReplicas: 1
+        resourcePolicy:
+          containerPolicies:
+            - containerName: server
+              controlledResources: ["cpu"]
+              controlledValues: "RequestsOnly"
+              minAllowed:
+                cpu: "25m"
+              maxAllowed:
+                cpu: "1"
+      EOF
       
       sudo kubectl --kubeconfig="$KUBECONFIG_PATH" apply -f - <<EOF
       apiVersion: v1
