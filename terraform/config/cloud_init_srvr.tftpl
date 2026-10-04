@@ -10983,6 +10983,10 @@ write_files:
                     value: "${TFC_EXTERNAL_APPS_VARSET_ID}"
                   - name: TFC_EXTERNAL_APPS_VARSET_NAME
                     value: "${TFC_EXTERNAL_APPS_VARSET_NAME}"
+                  - name: TFC_K8S_CLUSTER_VARSET_ID
+                    value: "${TFC_K8S_CLUSTER_VARSET_ID}"
+                  - name: TFC_K8S_CLUSTER_VARSET_NAME
+                    value: "${TFC_K8S_CLUSTER_VARSET_NAME}"
                   - name: TFC_ORGANIZATION
                     value: "${TFC_ORGANIZATION}"
                   - name: TFC_VAULT_TOKEN_VAR_KEY
@@ -11385,30 +11389,34 @@ write_files:
             kubectl -n vault logs job/openobserve-sourcemap-upload-auth-bootstrap --all-containers=true || true
           fi
 
-          # Push/update Vault root token into Terraform Cloud variable set for external app runs.
+          # Push/update the Vault root token in both Terraform Cloud variable sets.
           if [ -n "\$TFC_API_TOKEN" ]; then
             VAULT_ROOT_TOKEN="\$(jq -r '.root_token' /vault/data/init.json)"
             TFC_VAR_KEY="\$TFC_VAULT_TOKEN_VAR_KEY"
             [ -n "\$TFC_VAR_KEY" ] || TFC_VAR_KEY="VAULT_TOKEN"
             TFC_API_URL="\$TFC_API_BASE_URL"
             [ -n "\$TFC_API_URL" ] || TFC_API_URL="https://app.terraform.io/api/v2"
-            TFC_VARSET_ID="\$TFC_EXTERNAL_APPS_VARSET_ID"
+            for TFC_TARGET_SPEC in \
+              "\$TFC_EXTERNAL_APPS_VARSET_ID|\$TFC_EXTERNAL_APPS_VARSET_NAME" \
+              "\$TFC_K8S_CLUSTER_VARSET_ID|\$TFC_K8S_CLUSTER_VARSET_NAME"; do
+            TFC_VARSET_ID="$${TFC_TARGET_SPEC%%|*}"
+            TFC_VARSET_NAME="$${TFC_TARGET_SPEC#*|}"
             TFC_SYNC_OK="false"
-            TFC_VARSET_NAME_RAW="\$TFC_EXTERNAL_APPS_VARSET_NAME"
+            TFC_VARSET_NAME_RAW="\$TFC_VARSET_NAME"
             TFC_TOKEN_LEN="\$(printf '%s' "\$TFC_API_TOKEN" | wc -c | tr -d ' ')"
             TFC_VARSET_ID_LOG="\$TFC_VARSET_ID"
             [ -n "\$TFC_VARSET_ID_LOG" ] || TFC_VARSET_ID_LOG="<empty>"
-            TFC_VARSET_NAME_LOG="\$TFC_EXTERNAL_APPS_VARSET_NAME"
+            TFC_VARSET_NAME_LOG="\$TFC_VARSET_NAME"
             [ -n "\$TFC_VARSET_NAME_LOG" ] || TFC_VARSET_NAME_LOG="<empty>"
 
             echo "Terraform Cloud sync config: api_url=\$TFC_API_URL organization=\$TFC_ORGANIZATION varset_id=\$TFC_VARSET_ID_LOG varset_name=\$TFC_VARSET_NAME_LOG var_key=\$TFC_VAR_KEY token_present=true token_length=\$TFC_TOKEN_LEN"
 
-            if [ -z "\$TFC_VARSET_ID" ] && [ -n "\$TFC_EXTERNAL_APPS_VARSET_NAME" ]; then
+            if [ -z "\$TFC_VARSET_ID" ] && [ -n "\$TFC_VARSET_NAME" ]; then
               if [ -z "\$TFC_ORGANIZATION" ]; then
                 echo "ERROR: TFC_ORGANIZATION is required to resolve variable set by name."
               else
-                echo "Resolving Terraform variable set ID for '\$TFC_EXTERNAL_APPS_VARSET_NAME' in organization '\$TFC_ORGANIZATION'..."
-                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_EXTERNAL_APPS_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"")')"
+                echo "Resolving Terraform variable set ID for '\$TFC_VARSET_NAME' in organization '\$TFC_ORGANIZATION'..."
+                TARGET_NAME_NORMALIZED="\$(printf '%s' "\$TFC_VARSET_NAME" | jq -Rr 'ascii_downcase | gsub("[[:space:]]+";" ") | gsub("^[[:space:]]+|[[:space:]]+$";"")')"
                 echo "Terraform variable-set target normalized name: '\$TARGET_NAME_NORMALIZED'"
                 LOOKUP_ATTEMPT=1
                 LOOKUP_MAX_ATTEMPTS=12
@@ -11454,8 +11462,8 @@ write_files:
                       fi
                       while IFS="$(printf '\t')" read -r CANDIDATE_ID CANDIDATE_NAME CANDIDATE_NORMALIZED; do
                         [ -n "\$CANDIDATE_ID" ] || continue
-                        echo "Terraform variable-set compare: candidate_id=\$CANDIDATE_ID exact_match_name='\$CANDIDATE_NAME' normalized_match_name='\$CANDIDATE_NORMALIZED' target_name='\$TFC_EXTERNAL_APPS_VARSET_NAME' target_normalized='\$TARGET_NAME_NORMALIZED'"
-                        if [ "\$CANDIDATE_NAME" = "\$TFC_EXTERNAL_APPS_VARSET_NAME" ] || [ "\$CANDIDATE_NORMALIZED" = "\$TARGET_NAME_NORMALIZED" ]; then
+                        echo "Terraform variable-set compare: candidate_id=\$CANDIDATE_ID exact_match_name='\$CANDIDATE_NAME' normalized_match_name='\$CANDIDATE_NORMALIZED' target_name='\$TFC_VARSET_NAME' target_normalized='\$TARGET_NAME_NORMALIZED'"
+                        if [ "\$CANDIDATE_NAME" = "\$TFC_VARSET_NAME" ] || [ "\$CANDIDATE_NORMALIZED" = "\$TARGET_NAME_NORMALIZED" ]; then
                           if [ -n "\$MATCH_IDS" ]; then
                             MATCH_IDS="\$(printf '%s\n%s' "\$MATCH_IDS" "\$CANDIDATE_ID")"
                           else
@@ -11469,7 +11477,7 @@ write_files:
                         [ -n "\$MATCH_COUNT" ] || MATCH_COUNT=0
                         echo "Terraform variable-set lookup matched \$MATCH_COUNT id(s): \$(echo "\$MATCH_IDS" | tr '\n' ' ')"
                         if [ "\$MATCH_COUNT" -gt 1 ]; then
-                          echo "WARNING: multiple variable sets matched '\$TFC_EXTERNAL_APPS_VARSET_NAME'; using \$TFC_VARSET_ID."
+                          echo "WARNING: multiple variable sets matched '\$TFC_VARSET_NAME'; using \$TFC_VARSET_ID."
                         fi
                         break
                       fi
@@ -11615,6 +11623,7 @@ write_files:
             if [ "\$TFC_SYNC_OK" != "true" ]; then
               echo "WARNING: Terraform variable-set sync did not complete successfully; continuing Vault startup without forcing a pod restart."
             fi
+            done
           else
             echo "WARNING: Terraform variable-set sync skipped: missing TFC_API_TOKEN; continuing Vault startup."
           fi

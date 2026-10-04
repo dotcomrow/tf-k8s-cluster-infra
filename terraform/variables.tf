@@ -603,6 +603,18 @@ variable "TFC_EXTERNAL_APPS_VARSET_NAME" {
   default     = "Cloudflare Platform Variables"
 }
 
+variable "TFC_K8S_CLUSTER_VARSET_ID" {
+  description = "Terraform Cloud K8S Cluster Variables variable set ID that should receive the Vault root token (optional when TFC_K8S_CLUSTER_VARSET_NAME is set)."
+  type        = string
+  default     = ""
+}
+
+variable "TFC_K8S_CLUSTER_VARSET_NAME" {
+  description = "Terraform Cloud Kubernetes variable set name used to resolve the target variable set when ID is not provided."
+  type        = string
+  default     = "K8S Cluster Variables"
+}
+
 variable "TFC_ORGANIZATION" {
   description = "Terraform Cloud organization name used when resolving variable sets by name."
   type        = string
