@@ -6553,8 +6553,7 @@ write_files:
         isCA: true
         commonName: root.linkerd.cluster.local
         duration: 876000h
-        renewal:
-          policy: Disabled
+        renewBefore: 8760h
         privateKey:
           algorithm: ECDSA
           size: 256
@@ -6717,6 +6716,7 @@ write_files:
 
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --identity-external-issuer \
         --identity-trust-anchors-file=/tmp/linkerd-trust-anchor.crt \
         --set identity.externalCA=true \
         --set identity.issuer.scheme=kubernetes.io/tls \
@@ -7091,7 +7091,7 @@ write_files:
       fi
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.5.yaml
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
       apiVersion: v1
       kind: ConfigMap
