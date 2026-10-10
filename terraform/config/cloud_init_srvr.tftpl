@@ -4521,6 +4521,8 @@ write_files:
         namespace: kube-system
       spec:
         secretName: vpa-tls-certs
+        duration: 2160h
+        renewBeforePercentage: 50
         dnsNames:
           - vpa-webhook.kube-system.svc
         issuerRef:
@@ -6531,6 +6533,178 @@ write_files:
       sudo kubectl annotate ns linkerd-viz linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
       sudo kubectl annotate ns linkerd-jaeger linkerd.io/inject=enabled --overwrite --kubeconfig=/etc/rancher/rke2/rke2.yaml
 
+      echo "🔐 Configuring cert-manager-managed Linkerd credentials..."
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-selfsigned
+        namespace: linkerd
+      spec:
+        selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-trust-anchor
+        namespace: linkerd
+      spec:
+        secretName: linkerd-trust-anchor
+        isCA: true
+        commonName: root.linkerd.cluster.local
+        duration: 876000h
+        renewal:
+          policy: Disabled
+        privateKey:
+          algorithm: ECDSA
+          size: 256
+          rotationPolicy: Never
+        issuerRef:
+          name: linkerd-selfsigned
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-trust-anchor
+        namespace: linkerd
+      spec:
+        ca:
+          secretName: linkerd-trust-anchor
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-identity-issuer
+        namespace: linkerd
+      spec:
+        secretName: linkerd-identity-issuer
+        isCA: true
+        commonName: identity.linkerd.cluster.local
+        duration: 2160h
+        renewBeforePercentage: 50
+        privateKey:
+          algorithm: ECDSA
+          size: 256
+          rotationPolicy: Always
+        usages:
+          - cert sign
+          - crl sign
+          - server auth
+          - client auth
+        issuerRef:
+          name: linkerd-trust-anchor
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-policy-validator-k8s-tls
+        namespace: linkerd
+      spec:
+        secretName: linkerd-policy-validator-k8s-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - linkerd-policy-validator.linkerd.svc
+        usages: [server auth]
+        privateKey:
+          rotationPolicy: Always
+        issuerRef:
+          name: linkerd-trust-anchor
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-proxy-injector-k8s-tls
+        namespace: linkerd
+      spec:
+        secretName: linkerd-proxy-injector-k8s-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - linkerd-proxy-injector.linkerd.svc
+        usages: [server auth]
+        privateKey:
+          rotationPolicy: Always
+        issuerRef:
+          name: linkerd-trust-anchor
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-sp-validator-k8s-tls
+        namespace: linkerd
+      spec:
+        secretName: linkerd-sp-validator-k8s-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - linkerd-sp-validator.linkerd.svc
+        usages: [server auth]
+        privateKey:
+          rotationPolicy: Always
+        issuerRef:
+          name: linkerd-trust-anchor
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-viz-selfsigned
+        namespace: linkerd-viz
+      spec:
+        selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: tap-k8s-tls
+        namespace: linkerd-viz
+      spec:
+        secretName: tap-k8s-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - tap.linkerd-viz.svc
+        usages: [server auth]
+        privateKey:
+          rotationPolicy: Always
+        issuerRef:
+          name: linkerd-viz-selfsigned
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: tap-injector-k8s-tls
+        namespace: linkerd-viz
+      spec:
+        secretName: tap-injector-k8s-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - tap-injector.linkerd-viz.svc
+        usages: [server auth]
+        privateKey:
+          rotationPolicy: Always
+        issuerRef:
+          name: linkerd-viz-selfsigned
+          kind: Issuer
+      EOF
+
+      for cert in linkerd-trust-anchor linkerd-identity-issuer linkerd-policy-validator-k8s-tls linkerd-proxy-injector-k8s-tls linkerd-sp-validator-k8s-tls; do
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd wait --for=condition=Ready certificate/"$cert" --timeout=300s
+      done
+      for cert in tap-k8s-tls tap-injector-k8s-tls; do
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz wait --for=condition=Ready certificate/"$cert" --timeout=300s
+      done
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd get secret linkerd-trust-anchor -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-trust-anchor.crt >/dev/null
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz get secret tap-k8s-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-tap-ca.crt >/dev/null
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz get secret tap-injector-k8s-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-tap-injector-ca.crt >/dev/null
+
       echo "📥 Installing Gateway API CRDs..."
       # sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
             
@@ -6543,6 +6717,15 @@ write_files:
 
       sudo linkerd install \
         --kubeconfig /etc/rancher/rke2/rke2.yaml \
+        --identity-trust-anchors-file=/tmp/linkerd-trust-anchor.crt \
+        --set identity.externalCA=true \
+        --set identity.issuer.scheme=kubernetes.io/tls \
+        --set policyValidator.externalSecret=true \
+        --set-file policyValidator.caBundle=/tmp/linkerd-trust-anchor.crt \
+        --set proxyInjector.externalSecret=true \
+        --set-file proxyInjector.caBundle=/tmp/linkerd-trust-anchor.crt \
+        --set profileValidator.externalSecret=true \
+        --set-file profileValidator.caBundle=/tmp/linkerd-trust-anchor.crt \
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,2379\,8200" \
         --set proxyInit.ignoreInboundPorts="4567\,4568\,2379\,8200" \
@@ -6561,6 +6744,10 @@ write_files:
       for deploy in linkerd-identity linkerd-destination linkerd-proxy-injector; do
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd rollout status deploy/"$deploy" --timeout=900s
       done
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-identity secret.reloader.stakater.com/reload=linkerd-identity-issuer --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-policy-validator secret.reloader.stakater.com/reload=linkerd-policy-validator-k8s-tls --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-proxy-injector secret.reloader.stakater.com/reload=linkerd-proxy-injector-k8s-tls --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-sp-validator secret.reloader.stakater.com/reload=linkerd-sp-validator-k8s-tls --overwrite
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       # Installing NFS system
@@ -6905,7 +7092,18 @@ write_files:
 
       echo "📦 Installing CloudNativePG operator (for OpenObserve metadata store)..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply --server-side -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.1.yaml
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cnpg-controller-manager-config
+        namespace: cnpg-system
+      data:
+        CERTIFICATE_DURATION: "90"
+        EXPIRING_CHECK_THRESHOLD: "30"
+      EOF
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system patch deployment cnpg-controller-manager --type=strategic -p '{"spec":{"template":{"spec":{"containers":[{"name":"manager","readinessProbe":{"timeoutSeconds":5,"failureThreshold":6},"livenessProbe":{"timeoutSeconds":5,"failureThreshold":6}}]}}}}' || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system rollout restart deployment/cnpg-controller-manager
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system rollout status deploy/cnpg-controller-manager --timeout=300s
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cnpg-system wait --for=condition=Available deploy/cnpg-controller-manager --timeout=60s
 
@@ -9690,6 +9888,10 @@ write_files:
       # 6) Install the Viz extension (dashboard + embedded Jaeger UI),
       #    disabling *only* the dashboard’s TLS + auth
       sudo linkerd viz install \
+        --set tap.externalSecret=true \
+        --set-file tap.caBundle=/tmp/linkerd-tap-ca.crt \
+        --set tapInjector.externalSecret=true \
+        --set-file tapInjector.caBundle=/tmp/linkerd-tap-injector-ca.crt \
         --set dashboard.tls.enabled=false \
         --set dashboard.auth.enabled=false \
         --set jaeger.enabled=true \
@@ -9713,6 +9915,8 @@ write_files:
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap secret.reloader.stakater.com/reload=tap-k8s-tls --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap-injector secret.reloader.stakater.com/reload=tap-injector-k8s-tls --overwrite
 
       sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
 
@@ -11868,6 +12072,8 @@ write_files:
         namespace: vault
       spec:
         secretName: vault-agent-injector-tls
+        duration: 2160h
+        renewBeforePercentage: 50
         issuerRef:
           name: rancher-delegated
           kind: Issuer
@@ -11929,6 +12135,8 @@ write_files:
         namespace: vault
         labels:
           app: vault-agent-injector
+        annotations:
+          secret.reloader.stakater.com/reload: vault-agent-injector-tls
       spec:
         replicas: 1
         selector:
