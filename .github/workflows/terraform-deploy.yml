@@ -18,7 +18,7 @@ on:
           - state-cleanup
           - state-remove
       target_resource:
-        description: 'Terraform resource to cleanup or remove from state (e.g., google_eventarc_trigger.secret_manager_trigger)'
+        description: 'Required target address for apply-patch, state-cleanup, or state-remove (e.g., google_pubsub_subscription.vault_secret_event_push)'
         required: false
 
 permissions: write-all
@@ -47,6 +47,7 @@ jobs:
         if: ${{ github.event.inputs.mode == 'state-remove' }}
         env:
           TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+          TARGET_RESOURCE: ${{ github.event.inputs.target_resource }}
         run: |
           set -e
           echo "🔍 Fetching Terraform version from Terraform Cloud workspace..."
@@ -260,13 +261,66 @@ jobs:
           echo "🕐 Waiting 180 seconds to allow destroy to complete..."
           sleep 180
 
-      - name: Trigger Lightweight Terraform Apply (patch/fix only)
+      - name: Create targeted Terraform patch run (manual approval required)
         if: ${{ github.event.inputs.mode == 'apply-patch' }}
-        uses: hashicorp/tfc-workflows-github/actions/create-run@8e08d1ba957673f5fbf971a22b3219639dc45661
-        with:
-          workspace: ${{ github.event.repository.name }}
-          configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
-          plan_only: false
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          ORG_NAME="${{ github.repository_owner }}"
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          CONFIGURATION_VERSION_ID="${{ steps.upload.outputs.configuration_version_id }}"
+
+          if [[ -z "$TARGET_RESOURCE" ]]; then
+            echo "Error: target_resource is required for apply-patch."
+            exit 1
+          fi
+
+          if [[ ! "$TARGET_RESOURCE" =~ ^[A-Za-z0-9_.\[\]\"-]+$ ]]; then
+            echo "Error: target_resource must be one exact Terraform resource address."
+            exit 1
+          fi
+
+          WORKSPACE_ID=$(curl -fsS \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME" \
+            | jq -er '.data.id')
+
+          DATA=$(jq -n \
+            --arg workspace_id "$WORKSPACE_ID" \
+            --arg configuration_version_id "$CONFIGURATION_VERSION_ID" \
+            --arg target "$TARGET_RESOURCE" \
+            '{
+              data: {
+                type: "runs",
+                attributes: {
+                  message: ("Targeted patch plan for " + $target),
+                  "auto-apply": false,
+                  "target-addrs": [$target]
+                },
+                relationships: {
+                  workspace: {
+                    data: {type: "workspaces", id: $workspace_id}
+                  },
+                  "configuration-version": {
+                    data: {type: "configuration-versions", id: $configuration_version_id}
+                  }
+                }
+              }
+            }')
+
+          RESPONSE=$(curl -fsS -X POST \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$DATA" \
+            https://app.terraform.io/api/v2/runs)
+
+          RUN_ID=$(jq -er '.data.id' <<<"$RESPONSE")
+          echo "Created targeted run: $RUN_ID"
+          echo "Target: $TARGET_RESOURCE"
+          echo "Auto-apply: disabled; inspect and confirm the plan in HCP Terraform."
 
       - name: Trigger Terraform Apply
         if: contains(fromJson('["apply-all", "apply-vms", "rebuild-all", "rebuild-vms"]'), env.MODE)
