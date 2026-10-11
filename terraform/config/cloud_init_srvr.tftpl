@@ -7429,8 +7429,8 @@ write_files:
                         list_names() {
                           mc ls "local/openobserve/$1/" 2>/dev/null |
                             while IFS= read -r line; do
-                              name="${line##* }"
-                              name="${name%/}"
+                              name="$${line##* }"
+                              name="$${name%/}"
                               [ -n "$name" ] || continue
                               echo "$name"
                             done
@@ -7553,13 +7553,13 @@ write_files:
                             [ -d "$stream/0" ] || continue
                             for year in "$stream/0"/[0-9][0-9][0-9][0-9]; do
                               [ -d "$year" ] || continue
-                              y="${year##*/}"
+                              y="$${year##*/}"
                               for month in "$year"/[0-9][0-9]; do
                                 [ -d "$month" ] || continue
-                                m="${month##*/}"
+                                m="$${month##*/}"
                                 for day in "$month"/[0-9][0-9]; do
                                   [ -d "$day" ] || continue
-                                  d="${day##*/}"
+                                  d="$${day##*/}"
                                   key="$y$m$d"
                                   if [ "$key" -lt "$cutoff" ]; then
                                     rm -rf --one-file-system "$day"
@@ -7624,13 +7624,13 @@ write_files:
                             [ -d "$stream/0" ] || continue
                             for year in "$stream/0"/[0-9][0-9][0-9][0-9]; do
                               [ -d "$year" ] || continue
-                              y="${year##*/}"
+                              y="$${year##*/}"
                               for month in "$year"/[0-9][0-9]; do
                                 [ -d "$month" ] || continue
-                                m="${month##*/}"
+                                m="$${month##*/}"
                                 for day in "$month"/[0-9][0-9]; do
                                   [ -d "$day" ] || continue
-                                  d="${day##*/}"
+                                  d="$${day##*/}"
                                   key="$y$m$d"
                                   if [ "$key" -lt "$cutoff" ]; then
                                     rm -rf --one-file-system "$day"
