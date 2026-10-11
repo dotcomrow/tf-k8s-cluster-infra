@@ -131,3 +131,37 @@ resource "google_pubsub_topic_iam_member" "eventarc_sink_publisher" {
   role   = "roles/pubsub.publisher"
   member = google_logging_project_sink.eventarc_sink[each.key].writer_identity
 }
+
+# Deliver the audit-log entries that the logging sinks publish above directly
+# to the Vault sync service. These subscriptions are intentionally independent
+# of Eventarc's generated transport topics so a failure in Eventarc audit-log
+# ingestion cannot silently stop secret synchronization.
+resource "google_pubsub_subscription" "vault_secret_event_push" {
+  for_each = local.secret_event_methods
+
+  name    = "vault-${replace(each.key, "_", "-")}-push"
+  project = google_project.infra.project_id
+  topic   = google_pubsub_topic.eventarc_trigger_topic[each.key].id
+
+  ack_deadline_seconds       = 60
+  message_retention_duration = "604800s"
+
+  retry_policy {
+    minimum_backoff = "10s"
+    maximum_backoff = "600s"
+  }
+
+  push_config {
+    push_endpoint = google_cloud_run_v2_service.vault_sync_svc.uri
+
+    oidc_token {
+      service_account_email = google_service_account.eventarc_service_account.email
+      audience              = google_cloud_run_v2_service.vault_sync_svc.uri
+    }
+  }
+
+  depends_on = [
+    google_cloud_run_service_iam_member.allow_eventarc,
+    google_pubsub_topic_iam_member.eventarc_sink_publisher,
+  ]
+}
