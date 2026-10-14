@@ -15,7 +15,7 @@ choose when each local commit is pushed and when each application is synced.
 | Repository | Local commit | Remote state | Purpose |
 | --- | --- | --- | --- |
 | `tf-k8s-cluster-infra` | `b50bf95` plus preceding `fe2b39e` | Already pushed to `prod` before the hold instruction | Future-build certificate renewal configuration for VPA, Vault, CloudNativePG, and Linkerd |
-| `k8s-teleport` | `6ad749a` | Local only; `prod` is one commit ahead of `origin/prod` | Replace one-shot etcd PKI generation with cert-manager resources and consumer update behavior |
+| `k8s-teleport` | `70ab78d` | Local only; `prod` is one commit ahead of `origin/prod` | Replace one-shot etcd PKI generation with cert-manager resources and consumer update behavior |
 
 Both repositories have clean working trees at the time of this writing.
 
@@ -116,7 +116,7 @@ only after no proxy depends on it.
 
 ### Teleport etcd changes in `k8s-teleport`
 
-Local commit `6ad749a` replaces the one-shot OpenSSL bootstrap Job and combined
+Local commit `70ab78d` replaces the one-shot OpenSSL bootstrap Job and combined
 `etcd-tls` Secret with:
 
 - a self-signed bootstrap Issuer;
@@ -125,7 +125,8 @@ Local commit `6ad749a` replaces the one-shot OpenSSL bootstrap Job and combined
 - a 90-day etcd server/peer Certificate;
 - a 90-day Teleport client Certificate;
 - projected Secret volumes; and
-- rolling consumer update configuration.
+- a controlled one-time etcd cutover; and
+- rolling Teleport client-certificate updates.
 
 Leaf certificates renew at 50% remaining lifetime. The CA certificate renews
 with the same private key so routine CA certificate renewal does not invalidate
@@ -143,7 +144,7 @@ replica. Treat it as a maintenance-window migration.
    size, endpoint health, alarm list, and current TLS certificate fingerprints.
 3. Capture Teleport readiness, `tctl status`, cluster name, auth/proxy health,
    and a working login/API path as the pre-change baseline.
-4. Push `6ad749a` only after the maintenance window is approved.
+4. Push `70ab78d` only after the maintenance window is approved.
 5. Sync only the new Issuer and Certificate resources first. Do not change the
    StatefulSets yet.
 6. Wait for `etcd-ca`, `etcd-server-tls`, and `etcd-client-tls` to become
@@ -164,16 +165,12 @@ replica. Treat it as a maintenance-window migration.
     served by etcd and used by Teleport. If a consumer rollout is required,
     verify it remains ordered and healthy.
 
-Before enabling unattended etcd restarts, decide between these operating
-models:
-
-- expand etcd to three members so a rolling restart remains available; or
-- prove that the deployed etcd version reloads the projected certificate and
-  CA files safely, then remove automatic restart of the single-member etcd
-  StatefulSet while retaining the Teleport client rollout.
-
-The first model offers the clearest availability guarantee. Until one model is
-chosen and tested, keep the Teleport commit local.
+The selected routine-renewal model does not automatically restart the
+single-member etcd StatefulSet. etcd reloads the projected certificate on new
+TLS connections. Teleport retains its two-replica rolling update behavior and
+Reloader integration for client-certificate changes. The first live renewal
+must still prove the certificate presented by a new etcd connection changed
+without restarting the etcd pod.
 
 ## Recommended rollout order
 
