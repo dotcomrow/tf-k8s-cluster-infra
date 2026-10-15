@@ -54,7 +54,7 @@ acceptance evidence.
 | Priority | Certificate family | Main gap | Proposed owner/update mechanism |
 | --- | --- | --- | --- |
 | Urgent observation | Rancher imperative API | Vendor leaf expires 2026-10-29; it is not a cert-manager object | Keep Rancher as owner, monitor the built-in rotator and served/bundled certificate, and define a supported repair gate. |
-| High | Linkerd identity | Webhook migration is complete; the workload-identity issuer and trust anchor still require a separate overlapping-trust migration | cert-manager with a stable identity root, renewable issuer, dual-root trust interval, and controlled workload rollouts. |
+| High | Linkerd identity | Phase 3A created the new unused cert-manager trust anchor; publishing dual trust, rolling meshed workloads, and transferring issuer ownership remain | cert-manager with a stable identity root, renewable issuer, dual-root trust interval, and controlled workload rollouts. |
 | High | ingress-nginx admission webhooks | Two controllers claim the same class; both use long-lived one-shot certificates | Consolidate to one controller, then use cert-manager, CA injection, and Reloader. |
 | High | NiFi server and client TLS | Long-lived self-signed PKCS12 material has no expiry-driven renewal | cert-manager/Vault PKI leaves, automated PKCS12 conversion, NiFi native reload, and dual-trust migration. |
 | High | RKE2 node certificates | Renewal occurs only when RKE2 starts; CA rotation is manual | Host expiry inventory, alerts, and a controlled node-by-node restart/rotation procedure. |
@@ -112,9 +112,9 @@ is not detected before 2026-10-29.
 
 The live cluster is running Linkerd edge-26.5.1 and currently passes both
 `linkerd check` and `linkerd viz check`. The three core webhook certificates
-and two Viz certificates are now cert-manager resources. The identity issuer
-and trust anchor remain CLI-created Secrets and are the only Linkerd
-certificate family still awaiting migration.
+and two Viz certificates are now cert-manager resources. The active identity
+issuer and trust bundle remain CLI-generated; Phase 3A has created a separate,
+unused cert-manager trust anchor for the overlapping-trust migration.
 
 Identity trust-anchor key rotation also cannot be handled as an ordinary leaf
 renewal. Every meshed proxy trusts that anchor.
@@ -127,8 +127,10 @@ Teleport access to Kubernetes. Keep the `sudo -E kubectl` console path on
 ### Prepared future-build implementation
 
 The future-build template implements the supported steady state. Its webhook
-portions have been applied and proven on the existing cluster; the identity
-resources remain source-only until the separately approved Phase 3 migration:
+portions and Phase 3A identity trust-anchor resources have been applied and
+proven on the existing cluster. Publishing dual trust, rolling meshed
+workloads, and replacing the active identity issuer remain separately approved
+Phase 3 changes:
 
 1. A stable identity trust anchor uses `rotationPolicy: Never`; its 90-day
    identity issuer uses `rotationPolicy: Always` and renews at 50 percent.
@@ -276,26 +278,44 @@ resources remain source-only until the separately approved Phase 3 migration:
 - Viz webhook migration Phase 2 and its renewal-validation gate are complete.
   Phase 3 remains a separate high-risk approval boundary because it changes
   workload identity trust and rolls meshed workloads.
+- Phase 3A created `Issuer/linkerd-identity-selfsigned`,
+  `Certificate/linkerd-trust-anchor`, and `Issuer/linkerd-trust-anchor` from
+  the future-build manifest. All three became Ready without modifying an
+  existing object. The new root is a self-signed ECDSA P-256 CA with SHA-256
+  fingerprint
+  `99:C5:AB:84:A1:CF:34:A6:EB:7A:6D:1C:BD:6E:68:2C:E8:AD:0E:D5:08:02:7C:BF:E0:1F:71:04:E0:DF:38:60`,
+  expires on 2126-09-21, and preserves its private key for routine renewal.
+- Phase 3A did not publish the new root or replace the active issuer. The
+  active `linkerd-identity-issuer` Secret retained resource version `20535`,
+  the active `linkerd-identity-trust-roots` ConfigMap retained resource version
+  `20536`, and both retained fingerprint
+  `09:B6:9A:F9:81:78:48:35:99:7C:D2:7B:FD:15:73:E3:19:A5:57:8D:AD:4A:80:6C:DA:81:66:81:1D:4B:B4:D5`.
+  No running pod references `Secret/linkerd-trust-anchor`.
+- The Linkerd identity pod retained UID
+  `dfd4daa3-9f3d-466e-b5e9-0be6dd4a38ee`, remained ready, and had zero
+  restarts. The complete Linkerd check passed after Phase 3A. Phase 3B must be
+  reviewed separately before publishing a dual-root trust bundle or rolling
+  any meshed workload.
 
 ### Rebuild validation: 2026-10-15
 
 - All five cloud-init templates and both GitHub Actions workflows parse as
   YAML. All 66 embedded Bash scripts pass `bash -n`; this caught and corrected
-  an indented Longhorn heredoc terminator in `50-k8s-addons.sh`.
+  an indented Longhorn heredoc terminator in `50-k8s-addons.sh`. The GitHub
+  Actions workflows were deliberately left unchanged because their cleanup
+  names are environment-specific and already proven in the rebuild process.
 - The cert-manager install is pinned to the live-tested v1.20.2 manifest rather
   than a moving `releases/latest` URL. The official asset resolves to HTTP 200,
   and rebuild startup now waits for the controller, cainjector, and webhook.
 - VPA and Vault leaf Certificates explicitly use `rotationPolicy: Always`.
   Their certificate waits are fail-fast, and rebuild startup waits for the
   Vault injector rollout after certificate readiness.
-- The platform-destroy workflow's five Proxmox snippet cleanup names now match
-  the exact Terraform `file_name` values, preventing stale snippets from being
-  reused during a rebuild.
 - Server-side dry-runs accept the Linkerd, VPA, OpenObserve Dex, and Vault
   certificate resources. Existing Linkerd webhook/Viz objects render
-  unchanged; the Phase 3 identity resources validate as new objects but were
-  not created. Exact Linkerd control-plane and Viz renders also pass
-  server-side dry-run and reference the cert-manager-managed Secrets.
+  unchanged; the Phase 3A identity root resources are now live, while the
+  active identity issuer Certificate remains unapplied. Exact Linkerd
+  control-plane and Viz renders also pass server-side dry-run and reference the
+  cert-manager-managed Secrets.
 - `k8s-teleport` is clean on `prod`; local HEAD, `origin/prod`, and Argo's
   synchronized revision all match `5ed8f8f85e8ab22bea9f0a6475a76806623331d2`,
   and the Argo Application is Synced/Healthy. Its complete checked-in manifest
