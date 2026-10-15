@@ -2251,8 +2251,11 @@ write_files:
         -p='[{"op":"remove","path":"/spec/template/spec/containers/0/resources"}]' || true
 
       echo "📥 Installing Cert-Manager..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+      # Keep certificate behavior reproducible across rebuilds. This is the
+      # version validated by the platform certificate-rotation rollout.
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.20.2/cert-manager.yaml
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager -n cert-manager
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-cainjector -n cert-manager
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml wait --for=condition=available --timeout=600s deployment/cert-manager-webhook -n cert-manager
 
       echo "📥 Installing MetalLB..."
@@ -2571,7 +2574,7 @@ write_files:
             }
           }
         }
-        EOF
+      EOF
           if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n longhorn-system patch nodes.longhorn.io "$LONGHORN_NODE" --type=merge --patch-file /tmp/$LONGHORN_NODE-longhorn-storage.yaml; then
             echo "✅ storageReserved set to 0 on $LONGHORN_NODE ($LONGHORN_DISK)"
           else
@@ -4531,6 +4534,7 @@ write_files:
         privateKey:
           algorithm: RSA
           size: 2048
+          rotationPolicy: Always
         usages:
           - digital signature
           - key encipherment
@@ -6314,7 +6318,7 @@ write_files:
       EOF
 
       echo "⏳ Waiting for VPA webhook cert to be ready..."
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system wait --for=condition=Ready --timeout=600s certificate/vpa-webhook-tls || true
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system wait --for=condition=Ready --timeout=600s certificate/vpa-webhook-tls
 
       echo "⏳ Waiting for VPA deployments..."
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n kube-system rollout status deploy/vpa-recommender --timeout=600s
@@ -12218,6 +12222,10 @@ write_files:
         secretName: vault-agent-injector-tls
         duration: 2160h
         renewBeforePercentage: 50
+        privateKey:
+          algorithm: RSA
+          size: 2048
+          rotationPolicy: Always
         issuerRef:
           name: rancher-delegated
           kind: Issuer
@@ -12357,6 +12365,10 @@ write_files:
           failurePolicy: Ignore
           namespaceSelector: {}
       EOF
+
+      echo "⏳ Waiting for Vault injector certificate and deployment..."
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n vault wait --for=condition=Ready --timeout=600s certificate/vault-agent-injector-tls
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n vault rollout status deployment/vault-agent-injector --timeout=600s
 
       echo "🏗️ Installing Stakater Reloader..."
       RETRIES=5

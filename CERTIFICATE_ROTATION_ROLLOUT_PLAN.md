@@ -43,6 +43,7 @@ write a new Secret. Each certificate family must have all of the following:
 | Vault agent injector | cert-manager | Stakater Reloader rolls the injector | `Ready=True`; current certificate expires 2027-01-12 and has a 2026-11-28 renewal time. |
 | Rancher public ingress | cert-manager | ingress controller dynamic Secret reload | `Ready=True`; current certificate expires 2027-05-02. |
 | OpenObserve Dex ingress | cert-manager | ingress controller dynamic Secret reload | Revision 2 is `Ready=True`, has a standards-compliant Subject/Issuer DN, and is stored and served internally with the same fingerprint. Current certificate expires 2027-01-13 and renews on 2026-11-29. |
+| Linkerd core and Viz webhook TLS | cert-manager | Linkerd native certificate watchers plus cert-manager CA injection | All five leaves and both stable webhook CAs are managed and verified. A controlled Tap renewal reached revision 2, changed both certificate and key, reloaded without a pod restart, and remained healthy through the observation interval. |
 
 Completed work is not a substitute for observing the next natural renewal.
 The first normal renewal of each management pattern must remain part of the
@@ -53,7 +54,7 @@ acceptance evidence.
 | Priority | Certificate family | Main gap | Proposed owner/update mechanism |
 | --- | --- | --- | --- |
 | Urgent observation | Rancher imperative API | Vendor leaf expires 2026-10-29; it is not a cert-manager object | Keep Rancher as owner, monitor the built-in rotator and served/bundled certificate, and define a supported repair gate. |
-| High | Linkerd identity and webhooks | Live certificates remain static through 2027-05-02; corrected future-build resources are prepared locally but not applied | cert-manager with stable CAs, CA injection, corrected rollouts, and a separate overlapping-trust identity migration. |
+| High | Linkerd identity | Webhook migration is complete; the workload-identity issuer and trust anchor still require a separate overlapping-trust migration | cert-manager with a stable identity root, renewable issuer, dual-root trust interval, and controlled workload rollouts. |
 | High | ingress-nginx admission webhooks | Two controllers claim the same class; both use long-lived one-shot certificates | Consolidate to one controller, then use cert-manager, CA injection, and Reloader. |
 | High | NiFi server and client TLS | Long-lived self-signed PKCS12 material has no expiry-driven renewal | cert-manager/Vault PKI leaves, automated PKCS12 conversion, NiFi native reload, and dual-trust migration. |
 | High | RKE2 node certificates | Renewal occurs only when RKE2 starts; CA rotation is manual | Host expiry inventory, alerts, and a controlled node-by-node restart/rotation procedure. |
@@ -110,9 +111,10 @@ is not detected before 2026-10-29.
 ### Evidence and risks
 
 The live cluster is running Linkerd edge-26.5.1 and currently passes both
-`linkerd check` and `linkerd viz check`. Its identity issuer, three core
-webhook certificates, and two Viz certificates are CLI-created Secrets rather
-than cert-manager resources. They expire on 2027-05-02.
+`linkerd check` and `linkerd viz check`. The three core webhook certificates
+and two Viz certificates are now cert-manager resources. The identity issuer
+and trust anchor remain CLI-created Secrets and are the only Linkerd
+certificate family still awaiting migration.
 
 Identity trust-anchor key rotation also cannot be handled as an ordinary leaf
 renewal. Every meshed proxy trusts that anchor.
@@ -124,8 +126,9 @@ Teleport access to Kubernetes. Keep the `sudo -E kubectl` console path on
 
 ### Prepared future-build implementation
 
-The future-build template now implements the supported steady state but has
-not been applied to the existing Linkerd installation:
+The future-build template implements the supported steady state. Its webhook
+portions have been applied and proven on the existing cluster; the identity
+resources remain source-only until the separately approved Phase 3 migration:
 
 1. A stable identity trust anchor uses `rotationPolicy: Never`; its 90-day
    identity issuer uses `rotationPolicy: Always` and renews at 50 percent.
@@ -249,10 +252,60 @@ not been applied to the existing Linkerd installation:
   Linkerd Viz checks returned passing results. The temporary
   `tap-injector-k8s-tls-rollback-20261015` rollback Secret remains in-cluster
   for the observation window and is not part of the future-build manifests.
-- Viz webhook migration Phase 2 is complete. Before Phase 3 identity work, the
-  next approval gate is the required observation interval and a controlled
-  test renewal of one Viz leaf, followed by stored/served/bundle and complete
-  Linkerd verification.
+- The pre-Phase-3 validation gate is complete. At `2026-10-15T20:45:07Z`, a
+  controlled `cmctl v2.5.0` renewal advanced `tap-k8s-tls` from revision 1 to
+  revision 2. The certificate fingerprint changed from
+  `94:3A:25:3A:0B:2E:5E:15:56:19:B4:F3:CF:3F:35:1B:6C:CF:20:12:3F:E5:69:07:94:A7:83:51:36:67:EE:C1`
+  to
+  `8F:C3:5B:B7:E6:C9:2D:63:4E:A3:E1:B0:BA:5F:5B:53:8A:A3:9F:46:54:85:24:46:90:FC:32:46:DF:EB:D9:FD`,
+  and the public-key digest changed from
+  `3cd4071490b48141360f19739a5a081b517c79789a8897224e7353c6ebd45de8`
+  to
+  `3e44b75afd31df7912be5d017807ca892ac2faa6ad3e2ad80b429e529d2588ce`.
+- Tap logged `Updated certificate` and began serving the new leaf within about
+  15 seconds. The stable Viz CA fingerprint and single-certificate APIService
+  bundle did not change. The leaf validates against that CA, the Tap
+  APIService remained Available and responsive, and the Tap pod retained UID
+  `945ffe57-dd03-41fb-9691-5445f37cb95c` with zero restarts.
+- Eleven samples over the following five minutes showed revision 2 Ready, the
+  new stored and served fingerprints equal, one stable CA in the bundle, the
+  APIService Available, and unchanged pod identity/restart counts. Complete
+  `linkerd check` and `linkerd viz check` runs passed after the interval. Their
+  only notices were that edge-26.5.1 is older than the reported latest edge
+  release; the CLI, control plane, and proxies still match each other.
+- Viz webhook migration Phase 2 and its renewal-validation gate are complete.
+  Phase 3 remains a separate high-risk approval boundary because it changes
+  workload identity trust and rolls meshed workloads.
+
+### Rebuild validation: 2026-10-15
+
+- All five cloud-init templates and both GitHub Actions workflows parse as
+  YAML. All 66 embedded Bash scripts pass `bash -n`; this caught and corrected
+  an indented Longhorn heredoc terminator in `50-k8s-addons.sh`.
+- The cert-manager install is pinned to the live-tested v1.20.2 manifest rather
+  than a moving `releases/latest` URL. The official asset resolves to HTTP 200,
+  and rebuild startup now waits for the controller, cainjector, and webhook.
+- VPA and Vault leaf Certificates explicitly use `rotationPolicy: Always`.
+  Their certificate waits are fail-fast, and rebuild startup waits for the
+  Vault injector rollout after certificate readiness.
+- The platform-destroy workflow's five Proxmox snippet cleanup names now match
+  the exact Terraform `file_name` values, preventing stale snippets from being
+  reused during a rebuild.
+- Server-side dry-runs accept the Linkerd, VPA, OpenObserve Dex, and Vault
+  certificate resources. Existing Linkerd webhook/Viz objects render
+  unchanged; the Phase 3 identity resources validate as new objects but were
+  not created. Exact Linkerd control-plane and Viz renders also pass
+  server-side dry-run and reference the cert-manager-managed Secrets.
+- `k8s-teleport` is clean on `prod`; local HEAD, `origin/prod`, and Argo's
+  synchronized revision all match `5ed8f8f85e8ab22bea9f0a6475a76806623331d2`,
+  and the Argo Application is Synced/Healthy. Its complete checked-in manifest
+  set passes server-side dry-run, including the stable etcd CA, renewable
+  server and client leaves, and consumer update configuration.
+- Terraform or OpenTofu is not installed in this workstation environment, so
+  `terraform validate` could not be run locally. The template input bindings,
+  YAML, embedded scripts, rendered Kubernetes resources, and live API schema
+  were checked, but this audit is not a substitute for reviewing the next
+  Terraform Cloud plan before a rebuild is approved.
 
 ### Existing-cluster migration
 
