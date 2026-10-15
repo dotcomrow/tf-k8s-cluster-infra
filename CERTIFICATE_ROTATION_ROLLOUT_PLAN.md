@@ -210,9 +210,19 @@ not been applied to the existing Linkerd installation:
   `linkerd-sp-validator-k8s-tls-rollback-20261015` rollback Secret remains
   in-cluster for the observation window and is not part of the future-build
   manifests.
-- Core webhook migration Phase 1 is complete. The next approval gate is Phase
-  2A: create the dedicated stable Viz webhook CA without changing the existing
-  tap or tap-injector certificates.
+- Core webhook migration Phase 1 is complete.
+- Phase 2A created `Issuer/linkerd-viz-webhook-selfsigned`,
+  `Certificate/linkerd-viz-webhook-ca`, and `Issuer/linkerd-viz-webhook-ca`.
+  All three are Ready. The stable ECDSA CA expires on 2036-10-12, renews on
+  2035-10-13 with its key preserved, and has SHA-256 fingerprint
+  `B0:23:25:3C:81:59:C2:AA:12:B9:AD:B4:96:CD:EA:08:42:C9:06:06:61:2B:7A:17:B9:67:40:9A:A6:A7:BF:1F`.
+- Phase 2A did not change `tap-k8s-tls`, `tap-injector-k8s-tls`, the tap
+  APIService bundle, the tap-injector webhook bundle, or either workload's pod
+  UID/restart counts. The tap APIService remained Available and the complete
+  Linkerd Viz check returned a passing result.
+- The next approval gate is Phase 2B: migrate `tap-k8s-tls` using its own
+  in-cluster rollback Secret and a temporary dual-CA bundle on
+  `APIService/v1alpha1.tap.linkerd.io`.
 
 ### Existing-cluster migration
 
