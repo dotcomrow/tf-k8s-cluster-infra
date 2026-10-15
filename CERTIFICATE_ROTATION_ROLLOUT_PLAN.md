@@ -220,9 +220,23 @@ not been applied to the existing Linkerd installation:
   APIService bundle, the tap-injector webhook bundle, or either workload's pod
   UID/restart counts. The tap APIService remained Available and the complete
   Linkerd Viz check returned a passing result.
-- The next approval gate is Phase 2B: migrate `tap-k8s-tls` using its own
-  in-cluster rollback Secret and a temporary dual-CA bundle on
-  `APIService/v1alpha1.tap.linkerd.io`.
+- Phase 2B migrated `tap-k8s-tls` to cert-manager. The ready revision 1 ECDSA
+  leaf expires on 2027-01-13, renews on 2026-11-29, and has SHA-256
+  fingerprint
+  `94:3A:25:3A:0B:2E:5E:15:56:19:B4:F3:CF:3F:35:1B:6C:CF:20:12:3F:E5:69:07:94:A7:83:51:36:67:EE:C1`.
+  The stored and served fingerprints match, the leaf validates against the
+  stable Viz webhook CA, cainjector owns the final single-CA APIService bundle,
+  and the aggregated Tap API remains Available and responds successfully.
+- Phase 2B proved Tap's native reload: its log recorded `Updated certificate`,
+  pod UID `945ffe57-dd03-41fb-9691-5445f37cb95c` remained unchanged, and
+  restart counts stayed at zero. The complete Linkerd Viz check returned a
+  passing result. The temporary `tap-k8s-tls-rollback-20261015` rollback Secret
+  remains in-cluster for the observation window and is not part of the
+  future-build manifests.
+- Phase 2B did not change the Tap Injector leaf, webhook bundle, pod identity,
+  or restart counts. The next approval gate is Phase 2C: migrate
+  `tap-injector-k8s-tls` using its own in-cluster rollback Secret and a
+  temporary dual-CA bundle.
 
 ### Existing-cluster migration
 
