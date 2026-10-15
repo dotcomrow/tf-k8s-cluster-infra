@@ -325,6 +325,33 @@ Phase 3 changes:
   set. There were no new Warning events or certificate/trust errors after
   stabilization. Phase 3C must roll those workload owners in controlled groups
   before issuer ownership can move to cert-manager.
+- Phase 3C began with controller ownership, disruption-budget, readiness, and
+  Teleport guard checks. The seven Linkerd Viz deployments rolled one pod at a
+  time. Every replacement became ready with the dual-bundle hash before the
+  next pod changed, and `linkerd viz check` passed afterward. One transient Tap
+  readiness HTTP 500 occurred during startup and cleared without intervention.
+- The two observability collector deployments, all five node-agent DaemonSet
+  pods, and only the separate `teleport-otel-collector` deployment then rolled
+  one at a time. All replacements are ready with zero restarts and the dual
+  bundle. The Teleport server pods and Teleport etcd were not rolled; the two
+  server pod UIDs remain
+  `4d8c7979-851c-4083-b30f-32f737c586e7` and
+  `1b3f0ddb-f828-4e79-aec7-049e368b4ffb`, both with zero restarts. The active
+  issuer Secret remains at resource version `20535`.
+- Both CRM API replicas also rolled sequentially and are ready with the dual
+  bundle. Restarting the single CRM worker exposed a defect in the newly
+  pulled mutable `latest` image: after KafkaJS starts the consumer, the startup
+  retry loop attempts to subscribe the already-running consumer and readiness
+  remains HTTP 503. A second controlled worker replacement reproduced the same
+  error, so Phase 3C stopped before any GraphQL or later application pod was
+  changed. The live mesh checkpoint is 21 dual-bundle pods and 49 old-bundle
+  entries; the CRM worker is the only Phase 3C replacement that is not ready.
+- The minimal source repair is committed locally in `suncoast-crm-api` as
+  `ec28687` (`Fix CRM Kafka worker startup retry loop`): break out of the
+  startup retry loop after `consumer.run()` succeeds. TypeScript typecheck and
+  all 17 repository tests pass. That commit is not pushed, so no corrected
+  image has been built and Phase 3C remains paused at this gate. No GitHub
+  Actions workflow was changed.
 
 ### Rebuild validation: 2026-10-15
 
