@@ -183,8 +183,21 @@ not been applied to the existing Linkerd installation:
   separator; parsing caught it and the bundle was corrected before the leaf was
   changed. The webhook retained `failurePolicy: Ignore`, and policy admission
   passed after correction.
-- The next approval gate is migration of the proxy-injector leaf using its own
-  in-cluster rollback Secret and temporary dual-CA bundle.
+- Phase 1C migrated `linkerd-proxy-injector-k8s-tls` to cert-manager. The ready
+  revision 1 ECDSA leaf expires on 2027-01-13, renews on 2026-11-29, and has
+  SHA-256 fingerprint
+  `50:6B:E3:CA:78:C4:71:E2:22:AD:00:E1:F8:E9:DE:45:5A:1B:74:E4:64:EC:9C:58:8F:67:81:74:59:A4:87:A5`.
+  The stored and served fingerprints match, the leaf validates against the
+  stable webhook CA, cainjector owns the final single-CA bundle, and a
+  server-side Pod dry-run received both `linkerd-init` and `linkerd-proxy`.
+- Phase 1C proved the proxy injector's native reload: its log recorded `Updated
+  certificate`, pod UID `9c9d5556-f5c1-4e52-a049-cc6734d8a93f` remained
+  unchanged, and restart counts stayed at zero. The complete Linkerd check
+  returned a passing result. The temporary proxy-injector rollback Secret
+  remains in-cluster for the observation window and is not part of the
+  future-build manifests.
+- The next approval gate is migration of the service-profile-validator leaf
+  using its own in-cluster rollback Secret and temporary dual-CA bundle.
 
 ### Existing-cluster migration
 
