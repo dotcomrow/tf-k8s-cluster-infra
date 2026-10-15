@@ -293,9 +293,38 @@ Phase 3 changes:
   No running pod references `Secret/linkerd-trust-anchor`.
 - The Linkerd identity pod retained UID
   `dfd4daa3-9f3d-466e-b5e9-0be6dd4a38ee`, remained ready, and had zero
-  restarts. The complete Linkerd check passed after Phase 3A. Phase 3B must be
-  reviewed separately before publishing a dual-root trust bundle or rolling
-  any meshed workload.
+  restarts. The complete Linkerd check passed after Phase 3A.
+- Phase 3B published the new-root-plus-old-root identity bundle, in that order,
+  to `ConfigMap/linkerd-identity-trust-roots`, the
+  `identityTrustAnchorsPEM` field in `ConfigMap/linkerd-config`, and the same
+  field in `Secret/linkerd-config-overrides`. Canonical comparison before the
+  live patch proved that every non-trust configuration value remained
+  semantically unchanged. All three stored bundles exactly match and have two
+  certificates with SHA-256 content hash
+  `bfbd280215ace23bb0a5500f71bdccee1a805eadee274287090bbab79338241b`.
+- The full edge-26.5.1 `linkerd upgrade` render was reviewed but deliberately
+  not applied. It would also have replaced cert-manager-owned webhook Secrets
+  and CA bundles and changed unrelated tracing, proxy-init, and heartbeat
+  settings. Phase 3B therefore used targeted trust-only patches.
+- `linkerd-identity`, `linkerd-destination`, and
+  `linkerd-proxy-injector` rolled one at a time and became ready before the next
+  deployment changed. Their final pods have zero restarts and declare the dual
+  trust hash. A server-side admission test injects both `linkerd-init` and
+  `linkerd-proxy`, includes exactly two trust anchors, and declares the same
+  dual-bundle hash.
+- The active `linkerd-identity-issuer` Secret remained at resource version
+  `20535` with its original certificate fingerprint. No application workload
+  was rolled and the two Teleport server pod UIDs and restart counts did not
+  change. The Tap APIService remained Available and every Linkerd Certificate
+  remained Ready.
+- Five observations over two minutes showed all three control-plane
+  deployments ready, the issuer unchanged, three control-plane proxies on the
+  dual hash, and 67 application, Viz, and observability proxies still on the
+  old-only bundle. The complete Linkerd check returned a successful status;
+  `linkerd check --proxy` reports those 67 pods as the expected next-rollout
+  set. There were no new Warning events or certificate/trust errors after
+  stabilization. Phase 3C must roll those workload owners in controlled groups
+  before issuer ownership can move to cert-manager.
 
 ### Rebuild validation: 2026-10-15
 
@@ -397,11 +426,16 @@ been stable through an observation window and a controlled test leaf renewal.
 
 1. Create the new cert-manager identity root and CA Issuer without changing the
    existing `linkerd-identity-issuer` Secret.
-2. Publish an old-plus-new identity trust bundle through a reviewed Linkerd
-   upgrade while the old issuer remains active.
-3. Roll every one of the approximately 70 currently meshed pods in controlled
-   workload groups. After each group, prove the proxy is ready and trusts both
-   roots. Keep unmeshed Teleport server pods unchanged.
+2. Publish a new-plus-old identity trust bundle while the old issuer remains
+   active. Review a same-version `linkerd upgrade` render, but do not apply it
+   when it includes unrelated or conflicting changes. For this installation,
+   update only `linkerd-identity-trust-roots`, the
+   `identityTrustAnchorsPEM` field in `linkerd-config` and
+   `linkerd-config-overrides`, and the control-plane pod-template trust hash;
+   roll the three control-plane deployments one at a time.
+3. Roll the remaining 67 meshed pods by workload owner in controlled groups.
+   After each group, prove the proxy is ready and trusts both roots. Keep the
+   unmeshed Teleport server pods unchanged.
 4. Only after every proxy trusts both roots, create the cert-manager
    `linkerd-identity-issuer` Certificate against the canonical Secret and prove
    that `Deployment/linkerd-identity` natively reloads it. Roll the deployment
