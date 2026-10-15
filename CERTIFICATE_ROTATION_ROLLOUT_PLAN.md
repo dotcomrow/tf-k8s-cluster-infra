@@ -338,20 +338,74 @@ Phase 3 changes:
   `4d8c7979-851c-4083-b30f-32f737c586e7` and
   `1b3f0ddb-f828-4e79-aec7-049e368b4ffb`, both with zero restarts. The active
   issuer Secret remains at resource version `20535`.
-- Both CRM API replicas also rolled sequentially and are ready with the dual
+- Both CRM API replicas rolled sequentially and became ready with the dual
   bundle. Restarting the single CRM worker exposed a defect in the newly
   pulled mutable `latest` image: after KafkaJS starts the consumer, the startup
-  retry loop attempts to subscribe the already-running consumer and readiness
-  remains HTTP 503. A second controlled worker replacement reproduced the same
-  error, so Phase 3C stopped before any GraphQL or later application pod was
-  changed. The live mesh checkpoint is 21 dual-bundle pods and 49 old-bundle
-  entries; the CRM worker is the only Phase 3C replacement that is not ready.
-- The minimal source repair is committed locally in `suncoast-crm-api` as
-  `ec28687` (`Fix CRM Kafka worker startup retry loop`): break out of the
-  startup retry loop after `consumer.run()` succeeds. TypeScript typecheck and
-  all 17 repository tests pass. That commit is not pushed, so no corrected
-  image has been built and Phase 3C remains paused at this gate. No GitHub
-  Actions workflow was changed.
+  retry loop attempted to subscribe the already-running consumer and readiness
+  remained HTTP 503. A second controlled worker replacement reproduced the
+  same error, and Phase 3C stopped at that gate.
+- The minimal repair was committed in `suncoast-crm-api` as `ec28687`
+  (`Fix CRM Kafka worker startup retry loop`) and pushed only after approval.
+  Existing GitHub Actions run `38813556663` passed typecheck, tests, image
+  build, and image push without any workflow-file change. The replacement
+  worker is 2/2 Ready with zero restarts, the dual trust hash, internal health
+  and readiness HTTP 200, and image digest
+  `sha256:a2efd56f9bffa190953cdbe225117fae3307cd522ec817636511d54a40475db4`.
+- Phase 3C then rolled the GraphQL, Directus, Keycloak, Drools, Ollama/Open
+  WebUI, APISIX, and stateless API-gateway workload groups one pod at a time.
+  Each replacement passed an application or service-endpoint check before the
+  next group advanced. All resulting pods are Ready with zero restarts and the
+  dual trust hash. The checks included Hasura and Gravitee sync, Directus
+  health, Keycloak OIDC discovery, both KIE server endpoints, Ollama model
+  inventory, Open WebUI HTTP responses, both APISIX gateway endpoint sets, and
+  Gravitee synchronization of 12 APIs.
+- The first KIE ordinal gate initially accepted pod existence before the
+  application's delayed readiness probe had run, so the second ordinal was
+  restarted too early and both KIE application containers were briefly
+  unready. Both recovered without a restart or trust/database error. All later
+  stateful and singleton gates required the application container to become
+  Ready and then remain stable for at least 60 seconds before advancing.
+- A 135-day-old `Succeeded` Open WebUI pod object with no IP, no finalizers,
+  a June deletion timestamp, and no remaining ReplicaSet owner was force
+  deleted. The active Open WebUI Deployment and its replacement pod remained
+  healthy; no live workload or persistent data was removed.
+- `gravitee-opensearch-0` and `kafka/nifi-0` were the final safe persistent
+  workloads rolled. OpenSearch reattached its healthy Longhorn PVC and, after
+  normal shard recovery, held its pre-roll baseline for the stability window:
+  yellow singleton health, 91 active primaries, 91 active shards, and 88
+  unassigned replica shards. NiFi reattached its healthy 40 GiB Longhorn PVC,
+  recovered its FlowFile write-ahead log, provenance history, and embedded
+  ZooKeeper state, and returned the expected authenticated HTTP 401 from its
+  processor-metadata endpoint for all 12 stability samples. Both pods have the
+  dual trust hash and zero restarts.
+- The remaining old-bundle pod is
+  `k8s-api-gateway/apisix-etcd-6cc4f45575-n7qhq`. Its Deployment has no volume,
+  and the live member stores approximately 128 MiB under its default
+  `/etcd.etcd` directory on the container filesystem. Endpoint status is
+  healthy with a 5,181,440-byte database, revision 2519, one leader, and 15
+  keys; revision and applied index remained unchanged across 12 samples over
+  one minute. Authenticated APISIX Admin API baselines succeeded for routes,
+  upstreams, services, consumers, plugin configurations, and global rules;
+  their response sizes were 1301, 22, 22, 22, 22, and 550 bytes respectively.
+  Restarting etcd now would discard that datastore, so it was not rolled.
+- A durable source repair is committed locally, but not pushed or applied, in
+  `k8s-api-gateway` as `edf34b6` (`Persist APISIX etcd data`). It adds a 1 GiB
+  Longhorn RWO PVC, explicit `/etcd-data`, `Recreate` strategy, and startup,
+  readiness, and liveness health probes. Client and server-side dry-runs pass,
+  and the live `/health` endpoint returns healthy. The controlled live cutover
+  still requires a fresh verified snapshot, a short APISIX write freeze,
+  restore into the new PVC, approved push/Argo sync, and key-count plus APISIX
+  Admin API comparison before the final etcd restart is accepted.
+- The current checkpoint is 69 meshed pods: 68 on the dual trust hash, one on
+  the old hash, none unready, and zero aggregate container restarts. Complete
+  `linkerd check` and `linkerd viz check` pass; `linkerd check --proxy`
+  identifies only APISIX etcd as lacking the current trust bundle. The two
+  Teleport server pod UIDs remain
+  `4d8c7979-851c-4083-b30f-32f737c586e7` and
+  `1b3f0ddb-f828-4e79-aec7-049e368b4ffb`, both with zero restarts, and the
+  active identity issuer Secret remains at resource version `20535`. Phase 3C
+  is paused only at the APISIX etcd persistence migration; the identity issuer
+  must not move to cert-manager until that pod also converges on dual trust.
 
 ### Rebuild validation: 2026-10-15
 
@@ -771,7 +825,7 @@ belong in `grafana-alloy-monitoring`.
 | `k8s-kafka` | NiFi stable CA/server leaf, PEM-to-PKCS12 conversion, native reload settings, and migration manifests. |
 | `dataflow-apps` | Managed external-client Certificate and operator Secret/reload integration. |
 | `dataflow-example-app`, `dataflow-notification-app`, `dataflow-platform-deploy-app`, `dataflow-cms-translation-app` | Verify and, where needed, update NiFi client trust/identity consumption. |
-| `k8s-api-gateway` | GKO chart upgrade/integration after single-writer support is proven. |
+| `k8s-api-gateway` | Persist the single APISIX etcd member and complete its snapshot/restore trust rollout; later evaluate GKO chart integration after single-writer support is proven. |
 | `k8s-teleport` | iDRAC bridge Certificate and rollout; later removal of legacy etcd rollback material. |
 | `argocd-post-install` | Argo application ordering/sync waves only where needed for new certificate dependencies. |
 | `proxmox-infra-ops` or dedicated edge repo | Non-secret pfSense ACME/HAProxy ownership and recovery documentation. |
