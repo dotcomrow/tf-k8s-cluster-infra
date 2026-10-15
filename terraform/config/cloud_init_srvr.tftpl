@@ -6456,7 +6456,8 @@ write_files:
 
       export HOME=/home/ubuntu
 
-      LINKERD_VERSION="edge-25.8.1"  # "stable-2.18.0", "edge-25.7.5", "version-2.18", etc.
+      # Keep rebuilds aligned with the version currently validated in the live cluster.
+      LINKERD_VERSION="edge-26.5.1"
       MAX_RETRIES=5
       SLEEP_BETWEEN_RETRIES=5
       LINKERD_CLI_PATH="$HOME/.linkerd2/bin/linkerd"
@@ -6544,10 +6545,13 @@ write_files:
 
       echo "🔐 Configuring cert-manager-managed Linkerd credentials..."
       cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      # Linkerd workload identity and Kubernetes webhook TLS intentionally use
+      # separate trust chains. The identity root is stable for routine issuer
+      # renewal; webhook CAs are stable while their short-lived leaves rotate.
       apiVersion: cert-manager.io/v1
       kind: Issuer
       metadata:
-        name: linkerd-selfsigned
+        name: linkerd-identity-selfsigned
         namespace: linkerd
       spec:
         selfSigned: {}
@@ -6568,7 +6572,7 @@ write_files:
           size: 256
           rotationPolicy: Never
         issuerRef:
-          name: linkerd-selfsigned
+          name: linkerd-identity-selfsigned
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
@@ -6605,6 +6609,45 @@ write_files:
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-webhook-selfsigned
+        namespace: linkerd
+      spec:
+        selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-webhook-ca
+        namespace: linkerd
+      spec:
+        secretName: linkerd-webhook-ca
+        isCA: true
+        commonName: linkerd-webhook-ca.linkerd.svc
+        duration: 87600h
+        renewBefore: 8760h
+        privateKey:
+          algorithm: ECDSA
+          size: 256
+          rotationPolicy: Never
+        usages:
+          - cert sign
+          - crl sign
+        issuerRef:
+          name: linkerd-webhook-selfsigned
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-webhook-ca
+        namespace: linkerd
+      spec:
+        ca:
+          secretName: linkerd-webhook-ca
+      ---
+      apiVersion: cert-manager.io/v1
       kind: Certificate
       metadata:
         name: linkerd-policy-validator-k8s-tls
@@ -6613,13 +6656,16 @@ write_files:
         secretName: linkerd-policy-validator-k8s-tls
         duration: 2160h
         renewBeforePercentage: 50
+        commonName: linkerd-policy-validator.linkerd.svc
         dnsNames:
           - linkerd-policy-validator.linkerd.svc
         usages: [server auth]
         privateKey:
+          algorithm: ECDSA
+          size: 256
           rotationPolicy: Always
         issuerRef:
-          name: linkerd-trust-anchor
+          name: linkerd-webhook-ca
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
@@ -6631,13 +6677,16 @@ write_files:
         secretName: linkerd-proxy-injector-k8s-tls
         duration: 2160h
         renewBeforePercentage: 50
+        commonName: linkerd-proxy-injector.linkerd.svc
         dnsNames:
           - linkerd-proxy-injector.linkerd.svc
         usages: [server auth]
         privateKey:
+          algorithm: ECDSA
+          size: 256
           rotationPolicy: Always
         issuerRef:
-          name: linkerd-trust-anchor
+          name: linkerd-webhook-ca
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
@@ -6649,22 +6698,56 @@ write_files:
         secretName: linkerd-sp-validator-k8s-tls
         duration: 2160h
         renewBeforePercentage: 50
+        commonName: linkerd-sp-validator.linkerd.svc
         dnsNames:
           - linkerd-sp-validator.linkerd.svc
         usages: [server auth]
         privateKey:
+          algorithm: ECDSA
+          size: 256
           rotationPolicy: Always
         issuerRef:
-          name: linkerd-trust-anchor
+          name: linkerd-webhook-ca
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
       kind: Issuer
       metadata:
-        name: linkerd-viz-selfsigned
+        name: linkerd-viz-webhook-selfsigned
         namespace: linkerd-viz
       spec:
         selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: linkerd-viz-webhook-ca
+        namespace: linkerd-viz
+      spec:
+        secretName: linkerd-viz-webhook-ca
+        isCA: true
+        commonName: linkerd-viz-webhook-ca.linkerd-viz.svc
+        duration: 87600h
+        renewBefore: 8760h
+        privateKey:
+          algorithm: ECDSA
+          size: 256
+          rotationPolicy: Never
+        usages:
+          - cert sign
+          - crl sign
+        issuerRef:
+          name: linkerd-viz-webhook-selfsigned
+          kind: Issuer
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: linkerd-viz-webhook-ca
+        namespace: linkerd-viz
+      spec:
+        ca:
+          secretName: linkerd-viz-webhook-ca
       ---
       apiVersion: cert-manager.io/v1
       kind: Certificate
@@ -6675,13 +6758,16 @@ write_files:
         secretName: tap-k8s-tls
         duration: 2160h
         renewBeforePercentage: 50
+        commonName: tap.linkerd-viz.svc
         dnsNames:
           - tap.linkerd-viz.svc
         usages: [server auth]
         privateKey:
+          algorithm: ECDSA
+          size: 256
           rotationPolicy: Always
         issuerRef:
-          name: linkerd-viz-selfsigned
+          name: linkerd-viz-webhook-ca
           kind: Issuer
       ---
       apiVersion: cert-manager.io/v1
@@ -6693,25 +6779,28 @@ write_files:
         secretName: tap-injector-k8s-tls
         duration: 2160h
         renewBeforePercentage: 50
+        commonName: tap-injector.linkerd-viz.svc
         dnsNames:
           - tap-injector.linkerd-viz.svc
         usages: [server auth]
         privateKey:
+          algorithm: ECDSA
+          size: 256
           rotationPolicy: Always
         issuerRef:
-          name: linkerd-viz-selfsigned
+          name: linkerd-viz-webhook-ca
           kind: Issuer
       EOF
 
-      for cert in linkerd-trust-anchor linkerd-identity-issuer linkerd-policy-validator-k8s-tls linkerd-proxy-injector-k8s-tls linkerd-sp-validator-k8s-tls; do
+      for cert in linkerd-trust-anchor linkerd-identity-issuer linkerd-webhook-ca linkerd-policy-validator-k8s-tls linkerd-proxy-injector-k8s-tls linkerd-sp-validator-k8s-tls; do
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd wait --for=condition=Ready certificate/"$cert" --timeout=300s
       done
-      for cert in tap-k8s-tls tap-injector-k8s-tls; do
+      for cert in linkerd-viz-webhook-ca tap-k8s-tls tap-injector-k8s-tls; do
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz wait --for=condition=Ready certificate/"$cert" --timeout=300s
       done
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd get secret linkerd-trust-anchor -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-trust-anchor.crt >/dev/null
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz get secret tap-k8s-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-tap-ca.crt >/dev/null
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz get secret tap-injector-k8s-tls -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-tap-injector-ca.crt >/dev/null
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd get secret linkerd-webhook-ca -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-webhook-ca.crt >/dev/null
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz get secret linkerd-viz-webhook-ca -o jsonpath='{.data.tls\.crt}' | base64 -d | sudo tee /tmp/linkerd-viz-webhook-ca.crt >/dev/null
 
       echo "📥 Installing Gateway API CRDs..."
       # sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
@@ -6730,11 +6819,11 @@ write_files:
         --set identity.externalCA=true \
         --set identity.issuer.scheme=kubernetes.io/tls \
         --set policyValidator.externalSecret=true \
-        --set-file policyValidator.caBundle=/tmp/linkerd-trust-anchor.crt \
+        --set-file policyValidator.caBundle=/tmp/linkerd-webhook-ca.crt \
         --set proxyInjector.externalSecret=true \
-        --set-file proxyInjector.caBundle=/tmp/linkerd-trust-anchor.crt \
+        --set-file proxyInjector.caBundle=/tmp/linkerd-webhook-ca.crt \
         --set profileValidator.externalSecret=true \
-        --set-file profileValidator.caBundle=/tmp/linkerd-trust-anchor.crt \
+        --set-file profileValidator.caBundle=/tmp/linkerd-webhook-ca.crt \
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,2379\,8200" \
         --set proxyInit.ignoreInboundPorts="4567\,4568\,2379\,8200" \
@@ -6753,10 +6842,12 @@ write_files:
       for deploy in linkerd-identity linkerd-destination linkerd-proxy-injector; do
         sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd rollout status deploy/"$deploy" --timeout=900s
       done
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate validatingwebhookconfiguration linkerd-policy-validator-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate mutatingwebhookconfiguration linkerd-proxy-injector-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate validatingwebhookconfiguration linkerd-sp-validator-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-identity secret.reloader.stakater.com/reload=linkerd-identity-issuer --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-policy-validator secret.reloader.stakater.com/reload=linkerd-policy-validator-k8s-tls --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-proxy-injector secret.reloader.stakater.com/reload=linkerd-proxy-injector-k8s-tls --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-sp-validator secret.reloader.stakater.com/reload=linkerd-sp-validator-k8s-tls --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-destination secret.reloader.stakater.com/reload=linkerd-policy-validator-k8s-tls,linkerd-sp-validator-k8s-tls --overwrite
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       # Installing NFS system
@@ -7257,6 +7348,11 @@ write_files:
         secretName: dex-openobserve-tls
         duration: 2160h
         renewBeforePercentage: 50
+        subject:
+          organizations:
+            - Suncoast Systems
+          organizationalUnits:
+            - Kubernetes Internal Services
         dnsNames:
           - openobserve-dex.teleport.app.${RANCHER_DOMAIN}
         issuerRef:
@@ -9937,9 +10033,9 @@ write_files:
       #    disabling *only* the dashboard’s TLS + auth
       sudo linkerd viz install \
         --set tap.externalSecret=true \
-        --set-file tap.caBundle=/tmp/linkerd-tap-ca.crt \
+        --set-file tap.caBundle=/tmp/linkerd-viz-webhook-ca.crt \
         --set tapInjector.externalSecret=true \
-        --set-file tapInjector.caBundle=/tmp/linkerd-tap-injector-ca.crt \
+        --set-file tapInjector.caBundle=/tmp/linkerd-viz-webhook-ca.crt \
         --set dashboard.tls.enabled=false \
         --set dashboard.auth.enabled=false \
         --set jaeger.enabled=true \
@@ -9959,12 +10055,15 @@ write_files:
       sudo kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml -n linkerd-viz \
         annotate deployment/prometheus platform.suncoast.systems/vpa-exclude=true --overwrite
 
-      # 8) Validate the viz extension
-      sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
-
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate apiservice v1alpha1.tap.linkerd.io cert-manager.io/inject-ca-from=linkerd-viz/linkerd-viz-webhook-ca --overwrite
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate mutatingwebhookconfiguration linkerd-tap-injector-webhook-config cert-manager.io/inject-ca-from=linkerd-viz/linkerd-viz-webhook-ca --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap secret.reloader.stakater.com/reload=tap-k8s-tls --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap-injector secret.reloader.stakater.com/reload=tap-injector-k8s-tls --overwrite
+
+      # 8) Validate the viz extension after cert-manager has taken ownership of
+      #    CA-bundle injection and reload targets have been declared.
+      sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
 

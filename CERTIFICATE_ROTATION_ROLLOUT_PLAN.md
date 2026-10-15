@@ -1,15 +1,16 @@
 # Platform Certificate Auto-Rotation Plan
 
-Status date: 2026-10-14
+Status date: 2026-10-15
 
 This document is the implementation and rollout plan for ensuring that every
 platform certificate has an automatic renewal owner and that every consumer
 either hot-reloads the renewed certificate or is rolled in a safe, automated
 order.
 
-No repository push, Argo sync, cluster mutation, or workload restart is
-authorized by this plan. Each implementation stage must be reviewed, committed
-locally, and approved separately before it is pushed or applied.
+This plan does not itself authorize a repository push, Argo sync, cluster
+mutation, or workload restart. Completed sections record separately approved
+work. Each remaining implementation stage must be reviewed and approved before
+it is pushed or applied.
 
 ## Definition of done
 
@@ -41,6 +42,7 @@ write a new Secret. Each certificate family must have all of the following:
 | VPA webhook | cert-manager | VPA `--reload-cert` | `Ready=True`; current certificate expires 2027-01-12 and has a 2026-11-28 renewal time. |
 | Vault agent injector | cert-manager | Stakater Reloader rolls the injector | `Ready=True`; current certificate expires 2027-01-12 and has a 2026-11-28 renewal time. |
 | Rancher public ingress | cert-manager | ingress controller dynamic Secret reload | `Ready=True`; current certificate expires 2027-05-02. |
+| OpenObserve Dex ingress | cert-manager | ingress controller dynamic Secret reload | Revision 2 is `Ready=True`, has a standards-compliant Subject/Issuer DN, and is stored and served internally with the same fingerprint. Current certificate expires 2027-01-13 and renews on 2026-11-29. |
 
 Completed work is not a substitute for observing the next natural renewal.
 The first normal renewal of each management pattern must remain part of the
@@ -51,9 +53,8 @@ acceptance evidence.
 | Priority | Certificate family | Main gap | Proposed owner/update mechanism |
 | --- | --- | --- | --- |
 | Urgent observation | Rancher imperative API | Vendor leaf expires 2026-10-29; it is not a cert-manager object | Keep Rancher as owner, monitor the built-in rotator and served/bundled certificate, and define a supported repair gate. |
-| High | Linkerd identity and webhooks | Future-build resources have incorrect rollout targets and unsafe independent CA changes | cert-manager with stable CAs, CA injection, corrected rollouts, and a separate overlapping-trust identity migration. |
+| High | Linkerd identity and webhooks | Live certificates remain static through 2027-05-02; corrected future-build resources are prepared locally but not applied | cert-manager with stable CAs, CA injection, corrected rollouts, and a separate overlapping-trust identity migration. |
 | High | ingress-nginx admission webhooks | Two controllers claim the same class; both use long-lived one-shot certificates | Consolidate to one controller, then use cert-manager, CA injection, and Reloader. |
-| High | OpenObserve Dex ingress | Ingress references a TLS Secret that does not exist | Remove the unused ingress or create an actual managed certificate if the path is required. |
 | High | NiFi server and client TLS | Long-lived self-signed PKCS12 material has no expiry-driven renewal | cert-manager/Vault PKI leaves, automated PKCS12 conversion, NiFi native reload, and dual-trust migration. |
 | High | RKE2 node certificates | Renewal occurs only when RKE2 starts; CA rotation is manual | Host expiry inventory, alerts, and a controlled node-by-node restart/rotation procedure. |
 | Medium | Gravitee Kubernetes Operator webhook | Operator is the current certificate writer; external-certificate support is not yet proven | Preserve one writer, test the current chart's supported integration, then add cert-manager only if ownership can be transferred. |
@@ -109,63 +110,127 @@ is not detected before 2026-10-29.
 ### Evidence and risks
 
 The live cluster is running Linkerd edge-26.5.1 and currently passes both
-`linkerd check` and `linkerd viz check`. The future-build template defines
-cert-manager resources, but it has two correctness gaps:
-
-- Reloader annotations target `linkerd-policy-validator` and
-  `linkerd-sp-validator`, but those containers run inside
-  `Deployment/linkerd-destination`; those named deployments do not exist.
-- Linkerd Viz tap and tap-injector leaves use independently generated
-  self-signed roots. A leaf renewal therefore changes the trust anchor, while
-  their webhook/APIService `caBundle` values are static. Restarting pods alone
-  cannot update trust.
+`linkerd check` and `linkerd viz check`. Its identity issuer, three core
+webhook certificates, and two Viz certificates are CLI-created Secrets rather
+than cert-manager resources. They expire on 2027-05-02.
 
 Identity trust-anchor key rotation also cannot be handled as an ordinary leaf
 renewal. Every meshed proxy trusts that anchor.
 
-### Future-build source changes
+Teleport's namespace has Linkerd injection disabled and the two Teleport server
+pods are not meshed. A Linkerd identity transition should therefore not remove
+Teleport access to Kubernetes. Keep the `sudo -E kubectl` console path on
+`srvr-node` available throughout the migration anyway.
 
-1. Keep one stable identity trust anchor with `rotationPolicy: Never` for
-   routine certificate reissuance. Use a 90-day identity issuer leaf and renew
-   it at approximately 50% of its lifetime.
-2. Create one stable CA for the core Linkerd admission webhooks and one stable
-   CA for Linkerd Viz. Issue 90-day leaf certificates from those CAs.
-3. Annotate the MutatingWebhookConfiguration, ValidatingWebhookConfiguration,
-   and tap APIService for cert-manager CA injection instead of embedding
-   static bundles.
-4. Correct Reloader targets so policy and service-profile validator certificate
-   changes roll `linkerd-destination`. Keep targeted rollouts for identity,
-   proxy-injector, tap, and tap-injector only where the process cannot hot
-   reload.
-5. Add build-time checks that every Reloader target exists and every webhook
-   bundle has exactly one declared CA owner.
+### Prepared future-build implementation
+
+The future-build template now implements the supported steady state but has
+not been applied to the existing Linkerd installation:
+
+1. A stable identity trust anchor uses `rotationPolicy: Never`; its 90-day
+   identity issuer uses `rotationPolicy: Always` and renews at 50 percent.
+2. Core Linkerd webhooks use a dedicated stable CA and 90-day ECDSA leaves.
+   Linkerd Viz uses a second dedicated stable CA and 90-day ECDSA leaves.
+   Neither webhook family shares the workload-identity trust root.
+3. cert-manager CA injection owns all three core webhook bundles, the tap
+   APIService bundle, and the tap-injector webhook bundle.
+4. Reloader targets `linkerd-identity`, `linkerd-proxy-injector`,
+   `linkerd-destination`, `tap`, and `tap-injector`. The policy and
+   service-profile validator leaves both correctly target
+   `Deployment/linkerd-destination`.
+5. Initial Linkerd installation still supplies the correct stable CA files so
+   there is no bootstrap interval with an empty or incorrect bundle.
+6. The rebuild CLI is pinned to the currently deployed and audited
+   `edge-26.5.1` release instead of the older `edge-25.8.1` source value.
 
 ### Existing-cluster migration
 
-Perform webhook TLS and identity trust migration as two independent changes.
+Do not apply the future-build block wholesale to the current cluster. Perform
+webhook TLS and identity trust migration as separately approved changes.
 
-#### A. Webhook leaves
+#### Phase 0: preflight and rollback capture
 
-1. Record all current Secret, served, and bundle fingerprints plus pre-change
-   Linkerd checks.
-2. Create and validate the stable CAs, Issuers, and leaf Certificates without
-   changing consumers.
-3. For each webhook family, update the serving Secret and injected `caBundle`
-   in one controlled wave, then roll only its owning deployment if necessary.
-4. Verify admission, APIService availability, `linkerd check`, and
-   `linkerd viz check` after every family.
-5. Observe one natural leaf renewal and confirm both serving and bundle state.
+1. Confirm all Linkerd control-plane and Viz deployments are ready and run
+   `linkerd check` plus `linkerd viz check`.
+2. Record the Secret, served-certificate, webhook, and APIService bundle
+   fingerprints for every Linkerd certificate consumer.
+3. Export the existing Linkerd Secrets, webhook configurations, tap APIService,
+   trust-root ConfigMap, and Linkerd-generated install manifests to an encrypted
+   or mode-0600 backup on `srvr-node`. Do not commit private keys.
+4. Inventory all meshed workloads. Record their current proxy versions and
+   identity trust anchors so every rollout can be accounted for.
+5. Stop if any APIService is unavailable, any admission webhook is failing, or
+   any Linkerd check is not green before the migration begins.
 
-#### B. Identity trust anchor
+#### Phase 1: core webhook certificates
 
-1. Create the new root and issuer, retaining the old root and key.
-2. Publish an old-plus-new trust bundle and roll every meshed workload until
-   every proxy trusts both anchors.
-3. Switch the Linkerd issuer and prove that newly issued workload identities
-   chain to the new root while old identities continue to work.
-4. Wait beyond the maximum workload identity lifetime and prove that no active
-   proxy depends on the old root.
-5. Remove the old root in a later, separately approved rollout.
+1. Create the dedicated core webhook self-signed Issuer, stable CA Certificate,
+   and CA Issuer. Wait for the CA Certificate and Issuer to become ready.
+2. For one consumer at a time, temporarily set its webhook `caBundle` to the
+   old CA plus the new CA. This dual bundle prevents an API-server trust gap.
+3. Create the cert-manager leaf Certificate using the existing canonical Secret
+   name, then roll its actual consumer:
+   - policy validator: `linkerd-policy-validator-k8s-tls` and
+     `Deployment/linkerd-destination`;
+   - proxy injector: `linkerd-proxy-injector-k8s-tls` and
+     `Deployment/linkerd-proxy-injector`;
+   - service-profile validator: `linkerd-sp-validator-k8s-tls` and
+     `Deployment/linkerd-destination`.
+4. After each consumer, prove the stored and served leaf match, the new CA
+   validates the leaf, admission succeeds, and `linkerd check` remains green.
+5. Annotate that webhook configuration for cert-manager CA injection. Wait for
+   cainjector to replace the temporary dual bundle with the stable new CA, then
+   repeat the functional check.
+
+**Gate:** do not start the next webhook until the current webhook has passed
+stored/served/bundle comparison and admission testing.
+
+#### Phase 2: Linkerd Viz certificates
+
+1. Create the dedicated Viz self-signed Issuer, stable CA Certificate, and CA
+   Issuer. Wait for them to become ready.
+2. Migrate `tap-k8s-tls` using a temporary old-plus-new CA bundle on
+   `APIService/v1alpha1.tap.linkerd.io`, roll `Deployment/tap`, then enable
+   cert-manager CA injection.
+3. Migrate `tap-injector-k8s-tls` using a temporary old-plus-new CA bundle on
+   `MutatingWebhookConfiguration/linkerd-tap-injector-webhook-config`, roll
+   `Deployment/tap-injector`, then enable cert-manager CA injection.
+4. After each wave, compare stored, served, and bundled fingerprints and run
+   `linkerd viz check`. Confirm the tap APIService remains Available.
+
+**Gate:** do not proceed to workload identity until both webhook phases have
+been stable through an observation window and a controlled test leaf renewal.
+
+#### Phase 3: identity issuer and trust anchor
+
+1. Create the new cert-manager identity root and CA Issuer without changing the
+   existing `linkerd-identity-issuer` Secret.
+2. Publish an old-plus-new identity trust bundle through a reviewed Linkerd
+   upgrade while the old issuer remains active.
+3. Roll every one of the approximately 70 currently meshed pods in controlled
+   workload groups. After each group, prove the proxy is ready and trusts both
+   roots. Keep unmeshed Teleport server pods unchanged.
+4. Only after every proxy trusts both roots, create the cert-manager
+   `linkerd-identity-issuer` Certificate against the canonical Secret and roll
+   `Deployment/linkerd-identity`.
+5. Prove newly issued workload identities chain to the new root while old
+   identities continue to communicate. Run identity, policy, tap, application,
+   and complete Linkerd checks.
+6. Wait longer than the maximum workload identity lifetime and verify no active
+   proxy still presents an identity issued by the old root.
+7. Remove the old root from the trust bundle in a later, separately approved
+   rollout, then roll and verify every meshed workload again.
+
+#### Rollback boundaries
+
+- Before a webhook's old CA is removed, restore its saved Secret and old bundle,
+  then roll only that webhook's owning deployment.
+- During the dual-root identity period, restore the old issuer Secret and roll
+  `linkerd-identity`; both roots remain trusted, so this rollback is safe.
+- Never remove an old webhook CA or identity root in the same approval step that
+  introduces its replacement.
+- Stop immediately on APIService unavailability, admission timeouts, identity
+  errors, proxy readiness loss, or a failed Linkerd check.
 
 Routine identity leaf renewal becomes automatic. Root key replacement remains
 an intentionally gated security ceremony.
@@ -184,8 +249,10 @@ The platform template now creates a namespaced self-signed cert-manager
 `Certificate/openobserve-dex-tls`. The Certificate owns the existing
 `dex-openobserve-tls` Secret, has a 90-day lifetime, renews at 50 percent of its
 lifetime, rotates its private key, and contains the public Dex hostname as a
-SAN. Both NGINX controllers watch the Secret and hot-reload it, so routine
-renewal does not require a Dex or ingress-controller rollout.
+SAN. Its non-empty organization and organizational-unit Subject also gives the
+self-signed certificate a standards-compliant Issuer DN. Both NGINX controllers
+watch the Secret and hot-reload it, so routine renewal does not require a Dex or
+ingress-controller rollout.
 
 ### 2026-10-15 rollout evidence
 
@@ -199,6 +266,10 @@ renewal does not require a Dex or ingress-controller rollout.
   redirected through the GitHub connector to `github.com`.
 - The public endpoint continued to present the pfSense Let's Encrypt
   certificate; no user-facing trust or routing configuration changed.
+- A follow-up Subject correction issued revision 2 at 2026-10-15T17:00:05Z.
+  The stored and internally served fingerprints matched, `/dex` and Dex
+  discovery returned HTTP 200, and the retained empty-Issuer warning applied
+  only to deleted revision 1.
 
 Observe one natural renewal as ongoing lifecycle evidence. No additional Dex
 certificate cleanup is required for this configuration.
