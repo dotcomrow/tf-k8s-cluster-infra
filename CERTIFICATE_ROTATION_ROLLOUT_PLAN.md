@@ -196,8 +196,23 @@ not been applied to the existing Linkerd installation:
   returned a passing result. The temporary proxy-injector rollback Secret
   remains in-cluster for the observation window and is not part of the
   future-build manifests.
-- The next approval gate is migration of the service-profile-validator leaf
-  using its own in-cluster rollback Secret and temporary dual-CA bundle.
+- Phase 1D migrated `linkerd-sp-validator-k8s-tls` to cert-manager. The ready
+  revision 1 ECDSA leaf expires on 2027-01-13, renews on 2026-11-29, and has
+  SHA-256 fingerprint
+  `00:2D:C3:E6:27:A7:DF:81:FB:0B:F5:55:DB:85:16:56:3C:CB:B8:77:EC:A8:A9:6B:59:99:36:55:34:7D:39:38`.
+  The stored and served fingerprints match, the leaf validates against the
+  stable webhook CA, cainjector owns the final single-CA bundle, and a
+  server-side ServiceProfile admission dry-run succeeds.
+- Phase 1D proved the service-profile validator's native reload: its log
+  recorded `Updated certificate`, `linkerd-destination` retained pod UID
+  `8b88ddd3-72fe-4178-bcbb-3126017e2e23`, and its restart counts did not
+  change. The complete Linkerd check returned a passing result. The temporary
+  `linkerd-sp-validator-k8s-tls-rollback-20261015` rollback Secret remains
+  in-cluster for the observation window and is not part of the future-build
+  manifests.
+- Core webhook migration Phase 1 is complete. The next approval gate is Phase
+  2A: create the dedicated stable Viz webhook CA without changing the existing
+  tap or tap-injector certificates.
 
 ### Existing-cluster migration
 
