@@ -6662,6 +6662,8 @@ write_files:
         usages: [server auth]
         privateKey:
           algorithm: ECDSA
+          # kubert 0.25.0 accepts PKCS#8, not SEC1 EC PRIVATE KEY files.
+          encoding: PKCS8
           size: 256
           rotationPolicy: Always
         issuerRef:

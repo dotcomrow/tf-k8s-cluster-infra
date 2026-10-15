@@ -137,9 +137,11 @@ not been applied to the existing Linkerd installation:
 4. Linkerd's native certificate watchers update the identity issuer, proxy
    injector, service-profile validator, tap, and tap-injector without a pod
    restart. The policy validator's `kubert` TLS server rereads its key and
-   certificate for every new connection. Reloader is intentionally not attached
-   to these Secrets; an explicit rollout is only a recovery action if the served
-   certificate does not change within the verification timeout.
+   certificate for every new connection. Its ECDSA private key is explicitly
+   encoded as PKCS#8 because `kubert 0.25.0` does not parse SEC1 `EC PRIVATE
+   KEY` files. Reloader is intentionally not attached to these Secrets; an
+   explicit rollout is only a recovery action if the served certificate does
+   not change within the verification timeout.
 5. Initial Linkerd installation still supplies the correct stable CA files so
    there is no bootstrap interval with an empty or incorrect bundle.
 6. The rebuild CLI is pinned to the currently deployed and audited
@@ -160,8 +162,29 @@ not been applied to the existing Linkerd installation:
 - Phase 1A did not change an existing Secret, webhook `caBundle`, CA-injection
   annotation, or Linkerd pod identity/restart count. Admission and the complete
   Linkerd check remained healthy.
-- The next approval gate is migration of the policy-validator leaf using an
-  in-cluster rollback Secret and an old-plus-new temporary CA bundle.
+- Phase 1B migrated `linkerd-policy-validator-k8s-tls` to cert-manager. The
+  ready revision 2 leaf is ECDSA with a PKCS#8 key, expires on 2027-01-13,
+  renews on 2026-11-29, and has SHA-256 fingerprint
+  `AF:D1:8C:84:23:F4:2D:75:EE:24:4D:2C:37:5E:15:EF:B1:C4:BE:C6:19:75:B0:A1:FA:B5:DC:27:11:7E:31:BA`.
+  The stored and served fingerprints match, the leaf validates against the
+  stable webhook CA, policy admission succeeds, and CA injection owns the
+  final single-CA bundle.
+- Phase 1B proved native reload without a pod rollout. `linkerd-destination`
+  retained pod UID `8b88ddd3-72fe-4178-bcbb-3126017e2e23` and its restart
+  counts did not change. The complete Linkerd check returned a passing result.
+  The temporary rollback Secret remains in-cluster for the observation window
+  and is not part of the future-build manifests.
+- During Phase 1B, the first ECDSA revision used cert-manager's default SEC1
+  key encoding, which `kubert 0.25.0` could not load. The Certificate was
+  corrected to explicit PKCS#8 and manually renewed with verified `cmctl
+  v2.5.0`. cert-manager v1.20.2 also preserves unexpired entries when injecting
+  CA bundles, so the old CA was explicitly retired only after the new leaf was
+  served and verified. The first temporary dual-bundle write also lacked a PEM
+  separator; parsing caught it and the bundle was corrected before the leaf was
+  changed. The webhook retained `failurePolicy: Ignore`, and policy admission
+  passed after correction.
+- The next approval gate is migration of the proxy-injector leaf using its own
+  in-cluster rollback Secret and temporary dual-CA bundle.
 
 ### Existing-cluster migration
 
@@ -191,19 +214,24 @@ webhook TLS and identity trust migration as separately approved changes.
 3. Create the cert-manager leaf Certificate using the existing canonical Secret
    name, then wait for its actual consumer to reload the mounted files:
    - policy validator: `linkerd-policy-validator-k8s-tls` and
-     `Deployment/linkerd-destination`;
+     `Deployment/linkerd-destination`; its ECDSA key must use `encoding:
+     PKCS8` for `kubert 0.25.0` compatibility;
    - proxy injector: `linkerd-proxy-injector-k8s-tls` and
      `Deployment/linkerd-proxy-injector`;
    - service-profile validator: `linkerd-sp-validator-k8s-tls` and
      `Deployment/linkerd-destination`.
 4. After each consumer, prove the stored and served leaf match, the new CA
-   validates the leaf, admission succeeds, and `linkerd check` remains green.
-   If the served leaf does not change within the verification timeout, stop and
-   inspect the certificate-watcher logs before approving a rollout of only the
-   owning deployment.
-5. Annotate that webhook configuration for cert-manager CA injection. Wait for
-   cainjector to replace the temporary dual bundle with the stable new CA, then
-   repeat the functional check.
+   validates the leaf, and admission succeeds. During the temporary dual-bundle
+   interval, `linkerd check` may report `not a PEM certificate` because its
+   checker expects a single certificate. If the served leaf does not change
+   within the verification timeout, stop and inspect the certificate-watcher
+   logs before approving a rollout of only the owning deployment.
+5. Annotate that webhook configuration for cert-manager CA injection.
+   cert-manager v1.20.2 enables `CAInjectorMerging`, so it retains the unexpired
+   old certificate instead of replacing the temporary dual bundle. After the
+   new served leaf and admission path are verified, explicitly patch the bundle
+   to the stable new CA only while retaining the injection annotation. Confirm
+   the bundle stays single-CA, then require a passing complete Linkerd check.
 
 **Gate:** do not start the next webhook until the current webhook has passed
 stored/served/bundle comparison and admission testing.
