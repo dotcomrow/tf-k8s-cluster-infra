@@ -234,9 +234,25 @@ not been applied to the existing Linkerd installation:
   remains in-cluster for the observation window and is not part of the
   future-build manifests.
 - Phase 2B did not change the Tap Injector leaf, webhook bundle, pod identity,
-  or restart counts. The next approval gate is Phase 2C: migrate
-  `tap-injector-k8s-tls` using its own in-cluster rollback Secret and a
-  temporary dual-CA bundle.
+  or restart counts.
+- Phase 2C migrated `tap-injector-k8s-tls` to cert-manager. The ready revision
+  1 ECDSA leaf expires on 2027-01-13, renews on 2026-11-29, and has SHA-256
+  fingerprint
+  `A7:A4:80:DF:DA:4E:69:37:85:5C:C3:54:23:89:60:6A:8B:50:EC:47:1F:8C:69:A2:C0:16:B7:F9:D8:94:B6:04`.
+  The stored and served fingerprints match, the leaf validates against the
+  stable Viz webhook CA, and cainjector owns the final single-CA webhook
+  bundle. A server-side Pod dry-run still receives `linkerd-init`,
+  `linkerd-proxy`, and `viz.linkerd.io/tap-enabled=true`.
+- Phase 2C proved the Tap Injector's native reload: its log recorded `Updated
+  certificate`, pod UID `bc2f2718-cdf5-43df-ac24-41134786ed8d` remained
+  unchanged, and restart counts stayed at zero. The complete Linkerd and
+  Linkerd Viz checks returned passing results. The temporary
+  `tap-injector-k8s-tls-rollback-20261015` rollback Secret remains in-cluster
+  for the observation window and is not part of the future-build manifests.
+- Viz webhook migration Phase 2 is complete. Before Phase 3 identity work, the
+  next approval gate is the required observation interval and a controlled
+  test renewal of one Viz leaf, followed by stored/served/bundle and complete
+  Linkerd verification.
 
 ### Existing-cluster migration
 
