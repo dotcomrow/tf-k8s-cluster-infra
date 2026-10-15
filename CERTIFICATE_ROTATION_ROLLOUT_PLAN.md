@@ -172,30 +172,36 @@ an intentionally gated security ceremony.
 
 ## Plan 3: OpenObserve Dex ingress
 
-### Evidence and risk
+### Implemented minimal configuration
 
-`Ingress/openobserve/openobserve-dex` references `dex-openobserve-tls`, but
-that Secret does not exist. The platform template declares the same reference
-without declaring a `Certificate`. The externally published Dex application
-uses `Service/openobserve-dex-external` through Teleport; its public endpoint
-presents the external `*.suncoast.systems` certificate, not the missing NGINX
-Secret.
+The public TLS connection terminates at pfSense and presents its managed Let's
+Encrypt wildcard certificate. pfSense then forwards the request to the NGINX
+Ingress that references `dex-openobserve-tls`; that internal backend
+certificate is not presented to users.
 
-The likely result is an unused, misleading ingress path rather than an outage.
-That inference must be proven before removal.
+The platform template now creates a namespaced self-signed cert-manager
+`Issuer/openobserve-dex-selfsigned` and
+`Certificate/openobserve-dex-tls`. The Certificate owns the existing
+`dex-openobserve-tls` Secret, has a 90-day lifetime, renews at 50 percent of its
+lifetime, rotates its private key, and contains the public Dex hostname as a
+SAN. Both NGINX controllers watch the Secret and hot-reload it, so routine
+renewal does not require a Dex or ingress-controller rollout.
 
-### Preferred implementation plan
+### 2026-10-15 rollout evidence
 
-1. Inspect NGINX access logs and route metrics for use of the Dex hostname.
-2. Complete a full Dex/OAuth login through the Teleport-published service.
-3. If no required client uses NGINX, disable the Dex chart ingress in the
-   future-build template and retain the Teleport service path.
-4. Sync removal separately and repeat the end-to-end login test.
+- The Issuer and Certificate became Ready and cert-manager scheduled the first
+  renewal for 2026-11-29.
+- The custom NGINX load balancer and all five RKE2 ingress nodes served the same
+  newly issued certificate without restarting Dex or either ingress controller.
+- Missing-Secret errors stopped after issuance.
+- Public Dex discovery and the direct NGINX discovery endpoint both returned
+  HTTP 200 with the expected issuer, and the unauthenticated authorization flow
+  redirected through the GitHub connector to `github.com`.
+- The public endpoint continued to present the pfSense Let's Encrypt
+  certificate; no user-facing trust or routing configuration changed.
 
-If an independent NGINX endpoint is required, instead create a real ACME or
-approved internal cert-manager `Certificate` for `dex-openobserve-tls`, verify
-the intended DNS path, and monitor the certificate that the endpoint serves.
-Do not create a browser-facing self-signed leaf.
+Observe one natural renewal as ongoing lifecycle evidence. No additional Dex
+certificate cleanup is required for this configuration.
 
 ## Plan 4: NiFi server and external-client TLS
 

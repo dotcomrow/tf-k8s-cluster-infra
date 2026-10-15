@@ -7235,6 +7235,45 @@ write_files:
 
       sudo helm repo add dex https://charts.dexidp.io || true
       sudo helm repo update
+
+      # The public TLS connection terminates at pfSense. This internal,
+      # self-signed certificate keeps the NGINX ingress backend complete and
+      # lets cert-manager renew the referenced Secret automatically.
+      cat <<'EOF' | sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml apply -f -
+      apiVersion: cert-manager.io/v1
+      kind: Issuer
+      metadata:
+        name: openobserve-dex-selfsigned
+        namespace: openobserve
+      spec:
+        selfSigned: {}
+      ---
+      apiVersion: cert-manager.io/v1
+      kind: Certificate
+      metadata:
+        name: openobserve-dex-tls
+        namespace: openobserve
+      spec:
+        secretName: dex-openobserve-tls
+        duration: 2160h
+        renewBeforePercentage: 50
+        dnsNames:
+          - openobserve-dex.teleport.app.${RANCHER_DOMAIN}
+        issuerRef:
+          name: openobserve-dex-selfsigned
+          kind: Issuer
+        privateKey:
+          algorithm: RSA
+          size: 2048
+          rotationPolicy: Always
+        usages:
+          - digital signature
+          - key encipherment
+          - server auth
+      EOF
+      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve \
+        wait --for=condition=Ready certificate/openobserve-dex-tls --timeout=300s
+
       sudo helm upgrade --install openobserve-dex dex/dex \
         --kubeconfig=/etc/rancher/rke2/rke2.yaml \
         -n openobserve \
