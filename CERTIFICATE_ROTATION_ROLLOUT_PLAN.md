@@ -134,10 +134,12 @@ not been applied to the existing Linkerd installation:
    Neither webhook family shares the workload-identity trust root.
 3. cert-manager CA injection owns all three core webhook bundles, the tap
    APIService bundle, and the tap-injector webhook bundle.
-4. Reloader targets `linkerd-identity`, `linkerd-proxy-injector`,
-   `linkerd-destination`, `tap`, and `tap-injector`. The policy and
-   service-profile validator leaves both correctly target
-   `Deployment/linkerd-destination`.
+4. Linkerd's native certificate watchers update the identity issuer, proxy
+   injector, service-profile validator, tap, and tap-injector without a pod
+   restart. The policy validator's `kubert` TLS server rereads its key and
+   certificate for every new connection. Reloader is intentionally not attached
+   to these Secrets; an explicit rollout is only a recovery action if the served
+   certificate does not change within the verification timeout.
 5. Initial Linkerd installation still supplies the correct stable CA files so
    there is no bootstrap interval with an empty or incorrect bundle.
 6. The rebuild CLI is pinned to the currently deployed and audited
@@ -187,7 +189,7 @@ webhook TLS and identity trust migration as separately approved changes.
 2. For one consumer at a time, temporarily set its webhook `caBundle` to the
    old CA plus the new CA. This dual bundle prevents an API-server trust gap.
 3. Create the cert-manager leaf Certificate using the existing canonical Secret
-   name, then roll its actual consumer:
+   name, then wait for its actual consumer to reload the mounted files:
    - policy validator: `linkerd-policy-validator-k8s-tls` and
      `Deployment/linkerd-destination`;
    - proxy injector: `linkerd-proxy-injector-k8s-tls` and
@@ -196,6 +198,9 @@ webhook TLS and identity trust migration as separately approved changes.
      `Deployment/linkerd-destination`.
 4. After each consumer, prove the stored and served leaf match, the new CA
    validates the leaf, admission succeeds, and `linkerd check` remains green.
+   If the served leaf does not change within the verification timeout, stop and
+   inspect the certificate-watcher logs before approving a rollout of only the
+   owning deployment.
 5. Annotate that webhook configuration for cert-manager CA injection. Wait for
    cainjector to replace the temporary dual bundle with the stable new CA, then
    repeat the functional check.
@@ -208,11 +213,11 @@ stored/served/bundle comparison and admission testing.
 1. Create the dedicated Viz self-signed Issuer, stable CA Certificate, and CA
    Issuer. Wait for them to become ready.
 2. Migrate `tap-k8s-tls` using a temporary old-plus-new CA bundle on
-   `APIService/v1alpha1.tap.linkerd.io`, roll `Deployment/tap`, then enable
-   cert-manager CA injection.
+   `APIService/v1alpha1.tap.linkerd.io`, verify the Tap server's native reload,
+   then enable cert-manager CA injection.
 3. Migrate `tap-injector-k8s-tls` using a temporary old-plus-new CA bundle on
-   `MutatingWebhookConfiguration/linkerd-tap-injector-webhook-config`, roll
-   `Deployment/tap-injector`, then enable cert-manager CA injection.
+   `MutatingWebhookConfiguration/linkerd-tap-injector-webhook-config`, verify
+   the injector's native reload, then enable cert-manager CA injection.
 4. After each wave, compare stored, served, and bundled fingerprints and run
    `linkerd viz check`. Confirm the tap APIService remains Available.
 
@@ -229,8 +234,10 @@ been stable through an observation window and a controlled test leaf renewal.
    workload groups. After each group, prove the proxy is ready and trusts both
    roots. Keep unmeshed Teleport server pods unchanged.
 4. Only after every proxy trusts both roots, create the cert-manager
-   `linkerd-identity-issuer` Certificate against the canonical Secret and roll
-   `Deployment/linkerd-identity`.
+   `linkerd-identity-issuer` Certificate against the canonical Secret and prove
+   that `Deployment/linkerd-identity` natively reloads it. Roll the deployment
+   only as a recovery action if the issuer does not reload within the
+   verification timeout.
 5. Prove newly issued workload identities chain to the new root while old
    identities continue to communicate. Run identity, policy, tap, application,
    and complete Linkerd checks.
@@ -242,9 +249,11 @@ been stable through an observation window and a controlled test leaf renewal.
 #### Rollback boundaries
 
 - Before a webhook's old CA is removed, restore its saved Secret and old bundle,
-  then roll only that webhook's owning deployment.
-- During the dual-root identity period, restore the old issuer Secret and roll
-  `linkerd-identity`; both roots remain trusted, so this rollback is safe.
+  then verify native reload. Roll only that webhook's owning deployment if the
+  served certificate does not revert within the verification timeout.
+- During the dual-root identity period, restore the old issuer Secret and verify
+  that `linkerd-identity` reloads it; both roots remain trusted, so a targeted
+  deployment rollout remains a safe fallback.
 - Never remove an old webhook CA or identity root in the same approval step that
   introduces its replacement.
 - Stop immediately on APIService unavailability, admission timeouts, identity

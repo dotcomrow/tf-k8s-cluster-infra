@@ -6845,9 +6845,6 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate validatingwebhookconfiguration linkerd-policy-validator-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate mutatingwebhookconfiguration linkerd-proxy-injector-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate validatingwebhookconfiguration linkerd-sp-validator-webhook-config cert-manager.io/inject-ca-from=linkerd/linkerd-webhook-ca --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-identity secret.reloader.stakater.com/reload=linkerd-identity-issuer --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-proxy-injector secret.reloader.stakater.com/reload=linkerd-proxy-injector-k8s-tls --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd annotate deployment linkerd-destination secret.reloader.stakater.com/reload=linkerd-policy-validator-k8s-tls,linkerd-sp-validator-k8s-tls --overwrite
       sudo linkerd check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       # Installing NFS system
@@ -10058,11 +10055,9 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz set env deployment/web LINKERD_DASHBOARD_ALLOW_ORIGIN="*"
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate apiservice v1alpha1.tap.linkerd.io cert-manager.io/inject-ca-from=linkerd-viz/linkerd-viz-webhook-ca --overwrite
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml annotate mutatingwebhookconfiguration linkerd-tap-injector-webhook-config cert-manager.io/inject-ca-from=linkerd-viz/linkerd-viz-webhook-ca --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap secret.reloader.stakater.com/reload=tap-k8s-tls --overwrite
-      sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n linkerd-viz annotate deployment tap-injector secret.reloader.stakater.com/reload=tap-injector-k8s-tls --overwrite
 
       # 8) Validate the viz extension after cert-manager has taken ownership of
-      #    CA-bundle injection and reload targets have been declared.
+      #    CA-bundle injection. Linkerd natively reloads the mounted TLS files.
       sudo linkerd viz check --kubeconfig /etc/rancher/rke2/rke2.yaml --wait 15m
 
       sudo kubectl rollout status deploy/web -n linkerd-viz --kubeconfig /etc/rancher/rke2/rke2.yaml
