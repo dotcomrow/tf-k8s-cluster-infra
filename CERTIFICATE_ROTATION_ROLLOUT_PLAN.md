@@ -143,6 +143,24 @@ not been applied to the existing Linkerd installation:
 6. The rebuild CLI is pinned to the currently deployed and audited
    `edge-26.5.1` release instead of the older `edge-25.8.1` source value.
 
+### Rollout progress: 2026-10-15
+
+- Phase 0 completed without changing live Linkerd resources. A mode-0600
+  rollback archive was created outside the repository, all five webhook/tap
+  stored, served, and bundled fingerprints matched, admission dry-run injected
+  a proxy, the tap APIService was Available, and the matching `edge-26.5.1`
+  CLI reported a passing Linkerd check.
+- Phase 1A created `Issuer/linkerd-webhook-selfsigned`,
+  `Certificate/linkerd-webhook-ca`, and `Issuer/linkerd-webhook-ca`. All three
+  are Ready. The stable ECDSA CA expires on 2036-10-12, renews on 2035-10-13,
+  and has SHA-256 fingerprint
+  `68:EF:C2:EC:E4:6D:36:F9:55:07:4C:A8:80:33:F9:22:81:DC:43:1A:91:29:33:87:68:15:22:0D:92:D5:3C:37`.
+- Phase 1A did not change an existing Secret, webhook `caBundle`, CA-injection
+  annotation, or Linkerd pod identity/restart count. Admission and the complete
+  Linkerd check remained healthy.
+- The next approval gate is migration of the policy-validator leaf using an
+  in-cluster rollback Secret and an old-plus-new temporary CA bundle.
+
 ### Existing-cluster migration
 
 Do not apply the future-build block wholesale to the current cluster. Perform
