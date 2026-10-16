@@ -7852,9 +7852,6 @@ write_files:
           resourceNames:
             - openobserve
           verbs: ["get", "patch"]
-        - apiGroups: ["apps"]
-          resources: ["deployments", "statefulsets"]
-          verbs: ["get", "patch"]
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
@@ -7934,14 +7931,6 @@ write_files:
                         PATCH='{"data":{"ZO_META_POSTGRES_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_POSTGRES_RO_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_DDL_DSN":"'"$OO_RW_DSN_B64"'"}}'
                         kubectl -n openobserve patch secret openobserve --type=merge -p "$PATCH" >/dev/null
 
-                        DSN_HASH="$(printf '%s' "$OO_RW_DSN" | sha256sum | awk '{print $1}')"
-                        ROLLOUT_PATCH='{"spec":{"template":{"metadata":{"annotations":{"platform.suncoast.systems/openobserve-dsn-hash":"'"$DSN_HASH"'"}}}}}'
-                        for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager statefulset/openobserve-scheduler; do
-                          if kubectl -n openobserve get "$target" >/dev/null 2>&1; then
-                            kubectl -n openobserve patch "$target" --type=merge -p "$ROLLOUT_PATCH" >/dev/null
-                          fi
-                        done
-
                         UPDATED_POSTGRES_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}')"
                         UPDATED_POSTGRES_RO_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}')"
                         UPDATED_DDL_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}')"
@@ -7950,7 +7939,7 @@ write_files:
                           exit 1
                         fi
 
-                        echo "OpenObserve metadata DSNs now target the writable Postgres service; consumers were rolled with hash $DSN_HASH"
+                        echo "OpenObserve metadata DSNs now target the writable Postgres service; Reloader owns consumer rollouts"
                     resources:
                       requests:
                         cpu: 10m
@@ -7987,18 +7976,16 @@ write_files:
       }
 
       set_openobserve_dsn_env() {
-        if [ -z "$OO_RW_DSN" ]; then
-          echo "❌ OpenObserve writable metadata DSN is empty"
-          dump_openobserve_debug
-          exit 1
-        fi
-        echo "🔧 Enforcing PostgreSQL DSNs on OpenObserve workloads..."
+        echo "🔧 Configuring OpenObserve workloads to consume the reconciled metadata Secret..."
         for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager statefulset/openobserve-scheduler; do
           if sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve get "$target" >/dev/null 2>&1; then
+            sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve annotate "$target" \
+              secret.reloader.stakater.com/reload=openobserve \
+              --overwrite >/dev/null
             if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve set env "$target" \
-              ZO_META_POSTGRES_DSN="$OO_RW_DSN" \
-              ZO_META_POSTGRES_RO_DSN="$OO_RW_DSN" \
-              ZO_META_DDL_DSN="$OO_RW_DSN" \
+              ZO_META_POSTGRES_DSN- \
+              ZO_META_POSTGRES_RO_DSN- \
+              ZO_META_DDL_DSN- \
               ZO_META_CONNECTION_POOL_MIN_SIZE=5 \
               ZO_META_CONNECTION_POOL_MAX_SIZE=50 \
               ZO_META_CONNECTION_POOL_ACQUIRE_TIMEOUT=120 \
@@ -8098,6 +8085,7 @@ write_files:
       if [ -n "$OO_RW_DSN" ]; then
         set_openobserve_dsn_env
       fi
+      apply_openobserve_metadata_dsn_reconciler
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
@@ -8148,6 +8136,7 @@ write_files:
       if [ -n "$OO_RW_DSN" ]; then
         set_openobserve_dsn_env
       fi
+      apply_openobserve_metadata_dsn_reconciler
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
         {"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}
       ]' || sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve patch deployment openobserve-router --type=json -p='[
