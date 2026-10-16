@@ -2858,7 +2858,9 @@ write_files:
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml create namespace cattle-system || true
 
       openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-        -keyout tls.key -out tls.crt -subj "/CN=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}/O=Rancher Self-Signed"
+        -keyout tls.key -out tls.crt \
+        -subj "/CN=${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}/O=Rancher Self-Signed" \
+        -addext "subjectAltName=DNS:${RANCHER_HOSTNAME}.${RANCHER_DOMAIN}"
 
       sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n cattle-system create secret tls tls-rancher-ingress \
         --cert=tls.crt --key=tls.key
