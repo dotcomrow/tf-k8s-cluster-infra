@@ -5706,84 +5706,56 @@ write_files:
                       - Deployment
                       - StatefulSet
                       - DaemonSet
-            preconditions:
-              all:
-                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
-                  operator: Equals
-                  value: "true"
             validate:
               message: "Vault-injected workload templates should include non-empty Vault Agent resource annotations."
-              deny:
-                conditions:
-                  any:
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
+              pattern:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        "(vault.hashicorp.com/agent-inject)": "true"
+                        "vault.hashicorp.com/agent-requests-cpu": "?*"
+                        "vault.hashicorp.com/agent-requests-mem": "?*"
+                        "vault.hashicorp.com/agent-limits-cpu": "?*"
+                        "vault.hashicorp.com/agent-limits-mem": "?*"
           - name: audit-vault-agent-resources-job-templates
             match:
               any:
                 - resources:
                     kinds:
                       - Job
-            preconditions:
-              all:
-                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
-                  operator: Equals
-                  value: "true"
             validate:
               message: "Active Vault-injected Job templates should include non-empty Vault Agent resource annotations."
-              deny:
-                conditions:
-                  any:
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
+              pattern:
+                spec:
+                  template:
+                    metadata:
+                      annotations:
+                        "(vault.hashicorp.com/agent-inject)": "true"
+                        "vault.hashicorp.com/agent-requests-cpu": "?*"
+                        "vault.hashicorp.com/agent-requests-mem": "?*"
+                        "vault.hashicorp.com/agent-limits-cpu": "?*"
+                        "vault.hashicorp.com/agent-limits-mem": "?*"
           - name: audit-vault-agent-resources-cronjob-templates
             match:
               any:
                 - resources:
                     kinds:
                       - CronJob
-            preconditions:
-              all:
-                - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
-                  operator: Equals
-                  value: "true"
             validate:
               message: "Vault-injected CronJob templates should include non-empty Vault Agent resource annotations."
-              deny:
-                conditions:
-                  any:
-                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-requests-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-cpu\" || '' }}"
-                      operator: Equals
-                      value: ""
-                    - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-limits-mem\" || '' }}"
-                      operator: Equals
-                      value: ""
+              pattern:
+                spec:
+                  jobTemplate:
+                    spec:
+                      template:
+                        metadata:
+                          annotations:
+                            "(vault.hashicorp.com/agent-inject)": "true"
+                            "vault.hashicorp.com/agent-requests-cpu": "?*"
+                            "vault.hashicorp.com/agent-requests-mem": "?*"
+                            "vault.hashicorp.com/agent-limits-cpu": "?*"
+                            "vault.hashicorp.com/agent-limits-mem": "?*"
       
       ---
       apiVersion: rbac.authorization.k8s.io/v1
