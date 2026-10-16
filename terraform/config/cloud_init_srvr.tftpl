@@ -5706,6 +5706,11 @@ write_files:
                       - Deployment
                       - StatefulSet
                       - DaemonSet
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
             validate:
               message: "Vault-injected workload templates should include non-empty Vault Agent resource annotations."
               pattern:
@@ -5713,7 +5718,6 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        "(vault.hashicorp.com/agent-inject)": "true"
                         "vault.hashicorp.com/agent-requests-cpu": "?*"
                         "vault.hashicorp.com/agent-requests-mem": "?*"
                         "vault.hashicorp.com/agent-limits-cpu": "?*"
@@ -5724,6 +5728,11 @@ write_files:
                 - resources:
                     kinds:
                       - Job
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
             validate:
               message: "Active Vault-injected Job templates should include non-empty Vault Agent resource annotations."
               pattern:
@@ -5731,7 +5740,6 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        "(vault.hashicorp.com/agent-inject)": "true"
                         "vault.hashicorp.com/agent-requests-cpu": "?*"
                         "vault.hashicorp.com/agent-requests-mem": "?*"
                         "vault.hashicorp.com/agent-limits-cpu": "?*"
@@ -5742,6 +5750,11 @@ write_files:
                 - resources:
                     kinds:
                       - CronJob
+            preconditions:
+              all:
+                - key: "{{ request.object.spec.jobTemplate.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
+                  operator: Equals
+                  value: "true"
             validate:
               message: "Vault-injected CronJob templates should include non-empty Vault Agent resource annotations."
               pattern:
@@ -5751,7 +5764,6 @@ write_files:
                       template:
                         metadata:
                           annotations:
-                            "(vault.hashicorp.com/agent-inject)": "true"
                             "vault.hashicorp.com/agent-requests-cpu": "?*"
                             "vault.hashicorp.com/agent-requests-mem": "?*"
                             "vault.hashicorp.com/agent-limits-cpu": "?*"
