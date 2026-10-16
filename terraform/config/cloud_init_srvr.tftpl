@@ -12116,6 +12116,25 @@ write_files:
 
           echo "✅ Vault credentials updated successfully"
 
+          ARGO_APPLICATION_CRD="applications.argoproj.io"
+          echo "⏳ Waiting for Argo CD Application CRD to be registered..."
+          for i in \$(seq 1 60); do
+            if kubectl get crd "\$ARGO_APPLICATION_CRD" >/dev/null 2>&1; then
+              break
+            fi
+            echo "Waiting for \$ARGO_APPLICATION_CRD (\$i/60)..."
+            sleep 5
+          done
+          if ! kubectl get crd "\$ARGO_APPLICATION_CRD" >/dev/null 2>&1; then
+            echo "❌ Argo CD Application CRD was not registered after 300 seconds."
+            exit 1
+          fi
+          if ! kubectl wait --for=condition=Established --timeout=300s "crd/\$ARGO_APPLICATION_CRD"; then
+            echo "❌ Argo CD Application CRD did not become established."
+            exit 1
+          fi
+          echo "✅ Argo CD Application CRD is established."
+
           echo "🚀 Applying App of Apps configuration..."
           kubectl apply -n argocd -f - <<EOF
           apiVersion: argoproj.io/v1alpha1
