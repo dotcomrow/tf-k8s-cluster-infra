@@ -5739,9 +5739,9 @@ write_files:
                 - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
                   operator: Equals
                   value: "true"
-                - key: "{{ request.object.status.succeeded || '0' }}"
+                - key: "{{ request.object.status.succeeded || `0` }}"
                   operator: Equals
-                  value: "0"
+                  value: 0
             validate:
               message: "Active Vault-injected Job templates should include non-empty Vault Agent resource annotations."
               deny:
@@ -7852,6 +7852,9 @@ write_files:
           resourceNames:
             - openobserve
           verbs: ["get", "patch"]
+        - apiGroups: ["apps"]
+          resources: ["deployments", "statefulsets"]
+          verbs: ["get", "patch"]
       ---
       apiVersion: rbac.authorization.k8s.io/v1
       kind: RoleBinding
@@ -7868,73 +7871,97 @@ write_files:
         name: openobserve-metadata-dsn-reconciler
       ---
       apiVersion: batch/v1
-      kind: Job
+      kind: CronJob
       metadata:
-        name: openobserve-metadata-dsn-reconcile
+        name: openobserve-metadata-dsn-reconciler
         namespace: openobserve
         labels:
           app.kubernetes.io/name: openobserve
           app.kubernetes.io/component: metadata-dsn-reconciler
       spec:
-        ttlSecondsAfterFinished: 3600
-        backoffLimit: 1
-        template:
-          metadata:
-            labels:
-              app.kubernetes.io/name: openobserve
-              app.kubernetes.io/component: metadata-dsn-reconciler
+        schedule: "*/5 * * * *"
+        concurrencyPolicy: Forbid
+        successfulJobsHistoryLimit: 1
+        failedJobsHistoryLimit: 3
+        jobTemplate:
           spec:
-            serviceAccountName: openobserve-metadata-dsn-reconciler
-            priorityClassName: platform-system-high
-            restartPolicy: Never
-            containers:
-              - name: reconcile
-                image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
-                imagePullPolicy: IfNotPresent
-                command: ["/bin/sh", "-ec"]
-                args:
-                  - |
-                    read_secret_key() {
-                      key="$1"
-                      kubectl -n openobserve get secret openobserve-postgres-app -o "jsonpath={.data.$key}" | base64 -d
-                    }
+            ttlSecondsAfterFinished: 3600
+            backoffLimit: 1
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: openobserve
+                  app.kubernetes.io/component: metadata-dsn-reconciler
+              spec:
+                serviceAccountName: openobserve-metadata-dsn-reconciler
+                priorityClassName: platform-system-high
+                restartPolicy: Never
+                containers:
+                  - name: reconcile
+                    image: alpine/k8s:${KUBECTL_IMAGE_VERSION}
+                    imagePullPolicy: IfNotPresent
+                    command: ["/bin/sh", "-ec"]
+                    args:
+                      - |
+                        read_secret_key() {
+                          key="$1"
+                          kubectl -n openobserve get secret openobserve-postgres-app -o "jsonpath={.data.$key}" | base64 -d
+                        }
 
-                    PG_APP_USER="$(read_secret_key username || true)"
-                    PG_APP_PASS="$(read_secret_key password || true)"
-                    PG_APP_DB="$(read_secret_key dbname || true)"
+                        PG_APP_USER="$(read_secret_key username || true)"
+                        PG_APP_PASS="$(read_secret_key password || true)"
+                        PG_APP_DB="$(read_secret_key dbname || true)"
 
-                    if [ -z "$PG_APP_DB" ]; then
-                      PG_APP_DB="app"
-                    fi
-                    if [ -z "$PG_APP_USER" ] || [ -z "$PG_APP_PASS" ]; then
-                      echo "OpenObserve Postgres app secret is missing username or password"
-                      exit 1
-                    fi
+                        if [ -z "$PG_APP_DB" ]; then
+                          PG_APP_DB="app"
+                        fi
+                        if [ -z "$PG_APP_USER" ] || [ -z "$PG_APP_PASS" ]; then
+                          echo "OpenObserve Postgres app secret is missing username or password"
+                          exit 1
+                        fi
 
-                    OO_RW_DSN="postgres://$PG_APP_USER:$PG_APP_PASS@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/$PG_APP_DB?sslmode=disable"
-                    OO_RW_DSN_B64="$(printf '%s' "$OO_RW_DSN" | base64 | tr -d '\n')"
-                    PATCH='{"data":{"ZO_META_POSTGRES_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_POSTGRES_RO_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_DDL_DSN":"'"$OO_RW_DSN_B64"'"}}'
+                        OO_RW_DSN="postgres://$PG_APP_USER:$PG_APP_PASS@openobserve-postgres-rw.openobserve.svc.cluster.local:5432/$PG_APP_DB?sslmode=disable"
+                        OO_RW_DSN_B64="$(printf '%s' "$OO_RW_DSN" | base64 | tr -d '\n')"
+                        CURRENT_POSTGRES_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}')"
+                        CURRENT_POSTGRES_RO_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}')"
+                        CURRENT_DDL_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}')"
 
-                    kubectl -n openobserve patch secret openobserve --type=merge -p "$PATCH" >/dev/null
+                        if [ "$CURRENT_POSTGRES_DSN" = "$OO_RW_DSN_B64" ] && [ "$CURRENT_POSTGRES_RO_DSN" = "$OO_RW_DSN_B64" ] && [ "$CURRENT_DDL_DSN" = "$OO_RW_DSN_B64" ]; then
+                          echo "OpenObserve metadata DSNs already match the CloudNativePG app Secret"
+                          exit 0
+                        fi
 
-                    UPDATED_POSTGRES_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}')"
-                    UPDATED_POSTGRES_RO_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}')"
-                    UPDATED_DDL_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}')"
-                    if [ "$UPDATED_POSTGRES_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_POSTGRES_RO_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_DDL_DSN" != "$OO_RW_DSN_B64" ]; then
-                      echo "OpenObserve metadata DSN reconciliation did not converge"
-                      exit 1
-                    fi
+                        PATCH='{"data":{"ZO_META_POSTGRES_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_POSTGRES_RO_DSN":"'"$OO_RW_DSN_B64"'","ZO_META_DDL_DSN":"'"$OO_RW_DSN_B64"'"}}'
+                        kubectl -n openobserve patch secret openobserve --type=merge -p "$PATCH" >/dev/null
 
-                    echo "OpenObserve metadata DSNs now target the writable Postgres service"
-                resources:
-                  requests:
-                    cpu: 10m
-                    memory: 32Mi
-                  limits:
-                    cpu: 100m
-                    memory: 128Mi
+                        DSN_HASH="$(printf '%s' "$OO_RW_DSN" | sha256sum | awk '{print $1}')"
+                        ROLLOUT_PATCH='{"spec":{"template":{"metadata":{"annotations":{"platform.suncoast.systems/openobserve-dsn-hash":"'"$DSN_HASH"'"}}}}}'
+                        for target in deployment/openobserve-router statefulset/openobserve-ingester statefulset/openobserve-querier deployment/openobserve-compactor statefulset/openobserve-alertmanager statefulset/openobserve-scheduler; do
+                          if kubectl -n openobserve get "$target" >/dev/null 2>&1; then
+                            kubectl -n openobserve patch "$target" --type=merge -p "$ROLLOUT_PATCH" >/dev/null
+                          fi
+                        done
+
+                        UPDATED_POSTGRES_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_DSN}')"
+                        UPDATED_POSTGRES_RO_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_POSTGRES_RO_DSN}')"
+                        UPDATED_DDL_DSN="$(kubectl -n openobserve get secret openobserve -o jsonpath='{.data.ZO_META_DDL_DSN}')"
+                        if [ "$UPDATED_POSTGRES_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_POSTGRES_RO_DSN" != "$OO_RW_DSN_B64" ] || [ "$UPDATED_DDL_DSN" != "$OO_RW_DSN_B64" ]; then
+                          echo "OpenObserve metadata DSN reconciliation did not converge"
+                          exit 1
+                        fi
+
+                        echo "OpenObserve metadata DSNs now target the writable Postgres service; consumers were rolled with hash $DSN_HASH"
+                    resources:
+                      requests:
+                        cpu: 10m
+                        memory: 32Mi
+                      limits:
+                        cpu: 100m
+                        memory: 128Mi
       EOF
-        if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=complete job/openobserve-metadata-dsn-reconcile --timeout=180s; then
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve delete job openobserve-metadata-dsn-reconcile-now --ignore-not-found --wait=true
+        sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve create job openobserve-metadata-dsn-reconcile-now --from=cronjob/openobserve-metadata-dsn-reconciler
+        if ! sudo kubectl --kubeconfig=/etc/rancher/rke2/rke2.yaml -n openobserve wait --for=condition=complete job/openobserve-metadata-dsn-reconcile-now --timeout=180s; then
           echo "❌ OpenObserve metadata DSN reconciliation job failed"
           dump_openobserve_debug
           exit 1
