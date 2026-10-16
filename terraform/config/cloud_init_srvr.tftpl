@@ -4667,6 +4667,7 @@ write_files:
                   scheme: HTTP
                 initialDelaySeconds: 5
                 periodSeconds: 10
+                timeoutSeconds: 3
                 failureThreshold: 3
               readinessProbe:
                 httpGet:
@@ -4674,6 +4675,7 @@ write_files:
                   port: prometheus
                   scheme: HTTP
                 periodSeconds: 10
+                timeoutSeconds: 3
                 failureThreshold: 3
       
       ---
