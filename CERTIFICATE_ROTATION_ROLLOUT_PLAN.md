@@ -903,7 +903,7 @@ belong in `grafana-alloy-monitoring`.
 | `grafana-alloy-monitoring` | Certificate audit ingestion, dashboards, and 30/14/7-day plus mismatch alerts. |
 | `k8s-kafka` | NiFi stable CA/server leaf, PEM-to-PKCS12 conversion, native reload settings, and migration manifests. |
 | `dataflow-apps` | Managed external-client Certificate and operator Secret/reload integration. |
-| `dataflow-example-app`, `dataflow-notification-app`, `dataflow-platform-deploy-app`, `dataflow-cms-translation-app` | Verify and, where needed, update NiFi client trust/identity consumption. |
+| `dataflow-notification-app`, `dataflow-platform-deploy-app`, `dataflow-cms-translation-app` | Verify and, where needed, update NiFi client trust/identity consumption. |
 | `k8s-api-gateway` | Persist the single APISIX etcd member and complete its snapshot/restore trust rollout; later evaluate GKO chart integration after single-writer support is proven. |
 | `k8s-teleport` | iDRAC bridge Certificate and rollout; later removal of legacy etcd rollback material. |
 | `argocd-post-install` | Argo application ordering/sync waves only where needed for new certificate dependencies. |
