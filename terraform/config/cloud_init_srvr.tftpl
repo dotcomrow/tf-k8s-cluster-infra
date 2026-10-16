@@ -5733,6 +5733,9 @@ write_files:
                 - key: "{{ request.object.spec.template.metadata.annotations.\"vault.hashicorp.com/agent-inject\" || '' }}"
                   operator: Equals
                   value: "true"
+                - key: "{{ request.object.status.succeeded || `0` }}"
+                  operator: Equals
+                  value: 0
             validate:
               message: "Active Vault-injected Job templates should include non-empty Vault Agent resource annotations."
               pattern:
