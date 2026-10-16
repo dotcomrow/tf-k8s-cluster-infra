@@ -378,34 +378,61 @@ Phase 3 changes:
   ZooKeeper state, and returned the expected authenticated HTTP 401 from its
   processor-metadata endpoint for all 12 stability samples. Both pods have the
   dual trust hash and zero restarts.
-- The remaining old-bundle pod is
-  `k8s-api-gateway/apisix-etcd-6cc4f45575-n7qhq`. Its Deployment has no volume,
-  and the live member stores approximately 128 MiB under its default
-  `/etcd.etcd` directory on the container filesystem. Endpoint status is
-  healthy with a 5,181,440-byte database, revision 2519, one leader, and 15
-  keys; revision and applied index remained unchanged across 12 samples over
-  one minute. Authenticated APISIX Admin API baselines succeeded for routes,
-  upstreams, services, consumers, plugin configurations, and global rules;
-  their response sizes were 1301, 22, 22, 22, 22, and 550 bytes respectively.
-  Restarting etcd now would discard that datastore, so it was not rolled.
-- A durable source repair is committed locally, but not pushed or applied, in
-  `k8s-api-gateway` as `edf34b6` (`Persist APISIX etcd data`). It adds a 1 GiB
-  Longhorn RWO PVC, explicit `/etcd-data`, `Recreate` strategy, and startup,
-  readiness, and liveness health probes. Client and server-side dry-runs pass,
-  and the live `/health` endpoint returns healthy. The controlled live cutover
-  still requires a fresh verified snapshot, a short APISIX write freeze,
-  restore into the new PVC, approved push/Argo sync, and key-count plus APISIX
-  Admin API comparison before the final etcd restart is accepted.
-- The current checkpoint is 69 meshed pods: 68 on the dual trust hash, one on
-  the old hash, none unready, and zero aggregate container restarts. Complete
-  `linkerd check` and `linkerd viz check` pass; `linkerd check --proxy`
-  identifies only APISIX etcd as lacking the current trust bundle. The two
-  Teleport server pod UIDs remain
-  `4d8c7979-851c-4083-b30f-32f737c586e7` and
+- The approved APISIX etcd cutover froze the four API-gateway writers and the
+  dependent APISIX and Gravitee workloads before taking snapshot
+  `/tmp/apisix-etcd-pre-pvc-20261015T231400Z.db`. The snapshot is 5,185,536
+  bytes, contains revision 2521 and 2526 total keys, and has SHA-256
+  `9d3e971408bbcf85243341900b35eaa52f95390d81da3bb00ff4b57fcdc41cb0`.
+  It was restored into the new 1 GiB Longhorn RWO `apisix-etcd-data` PVC, and
+  the pushed `k8s-api-gateway` commit `edf34b6` (`Persist APISIX etcd data`)
+  supplied the durable PVC, explicit `/etcd-data`, `Recreate` strategy, and
+  health probes. The replacement pod
+  `apisix-etcd-686445f759-hdw8m` has UID
+  `8f8202f4-9953-463d-8f7a-f32be9e55568`, both containers Ready, zero
+  restarts, and the dual identity trust bundle.
+- Twelve post-restore samples and six final post-Argo samples kept the etcd
+  pod Ready with zero restarts and a single healthy leader. The restored key
+  count remained 15; expected route-reconciliation writes advanced the final
+  revision to 2555. Authenticated APISIX Admin API baselines still match the
+  pre-cutover responses: routes 1301 bytes; upstreams, services, consumers,
+  and plugin configurations 22 bytes each; global rules 550 bytes. APISIX,
+  Gravitee Management API, both Gravitee gateways, annotation sync, and the
+  GKO controller are fully available. The four suspended CronJobs were
+  restored and each recorded a successful run.
+- The Gravitee Management API cold start took approximately 15 minutes while
+  it counted and globally scanned the approximately 15.96 GB
+  `gravitee.page_revisions` table. It remained on the same startup attempt,
+  had no database blocker or trust failure, and became Ready without a
+  restart. The manifest's existing extended startup probe accommodates this;
+  reducing the scan cost is a separate database-performance change, not part
+  of certificate rotation.
+- Restoring normal Argo reconciliation exposed a pre-existing forced setup Job
+  that regenerated the Gravitee JWT and API-properties encryption values on
+  every sync. `k8s-api-gateway` commit `1e46ac2` (`Preserve Gravitee secrets
+  across syncs`) makes both writes create-if-absent. The replacement Job
+  explicitly reported that the existing values were left unchanged. A
+  separate pre-existing issue remains: the Gravitee Vault templates read
+  `.Data.secret` instead of the KV-v2 `.Data.data.secret`, so both currently
+  render the literal `<no value>`. Correcting that would change active
+  Gravitee authentication/encryption behavior and was intentionally kept out
+  of this certificate rollout.
+- Phase 3C is complete. There are 69 running meshed pods, none unready, and
+  zero aggregate container restarts. Sixty-six workload proxies embed the
+  dual trust bundle and three Linkerd control-plane proxies reference it from
+  `ConfigMap/linkerd-identity-trust-roots`; both forms have canonical
+  certificate-set SHA-256
+  `e86096afdd6a5a1957a324d5f018ab409ee3ec3478e11779ff77f5901362f49c`.
+  Complete `linkerd check` and `linkerd viz check` runs pass. The final
+  `linkerd check --proxy` reached and passed certificate-match, data-plane
+  readiness, label, and service checks, then the older CLI stalled after the
+  pre-existing `argocd-redis` opaque-port advisory and was interrupted. Both
+  Argo applications are `Synced/Healthy/Succeeded` with automated prune and
+  self-heal enabled and no skip-reconcile annotation. The Teleport server pod
+  UIDs remain `4d8c7979-851c-4083-b30f-32f737c586e7` and
   `1b3f0ddb-f828-4e79-aec7-049e368b4ffb`, both with zero restarts, and the
-  active identity issuer Secret remains at resource version `20535`. Phase 3C
-  is paused only at the APISIX etcd persistence migration; the identity issuer
-  must not move to cert-manager until that pod also converges on dual trust.
+  active identity issuer Secret remains at resource version `20535`. Replacing
+  that issuer with the cert-manager Certificate is Phase 3D and still requires
+  a new explicit approval.
 
 ### Rebuild validation: 2026-10-15
 
