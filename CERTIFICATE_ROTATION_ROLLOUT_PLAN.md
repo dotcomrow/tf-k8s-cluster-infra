@@ -433,6 +433,56 @@ Phase 3 changes:
   active identity issuer Secret remains at resource version `20535`. Replacing
   that issuer with the cert-manager Certificate is Phase 3D and still requires
   a new explicit approval.
+- Phase 3D began from a clean platform baseline: all five nodes were Ready;
+  279 pods were Running and 65 completed; every Deployment, StatefulSet,
+  DaemonSet, PVC, APIService, Argo application, and existing cert-manager
+  Certificate was healthy. All 69 meshed pods still trusted the dual root.
+  `Secret/linkerd-identity-issuer` was preserved as
+  `linkerd-identity-issuer-rollback-20261015-phase3d` before any issuer or
+  controller change.
+- The live control plane still used Linkerd's legacy `linkerd.io/tls` Secret
+  keys even though the future-build install already selected
+  `identity.externalCA=true` and `identity.issuer.scheme=kubernetes.io/tls`.
+  The migration therefore added byte-equivalent `tls.crt` and `tls.key`
+  aliases plus the dual bundle as `ca.crt`, changed only `linkerd-config` and
+  `Deployment/linkerd-identity` to the Kubernetes TLS scheme, and rolled that
+  one deployment while it still served the old issuer. The first complete
+  check correctly rejected the compatibility Secret until `ca.crt` was
+  present; no issuer change was attempted until the corrected check passed.
+- `Certificate/linkerd-identity-issuer` is now live, Ready, and owns routine
+  issuance against `Issuer/linkerd-trust-anchor`. Revision 1 is valid from
+  2026-10-16 00:15:07 UTC through 2027-01-14 00:15:07 UTC, with automatic
+  renewal scheduled for 2026-11-30 00:15:07 UTC. Its SHA-256 fingerprint is
+  `FF:F6:64:63:37:90:0C:FE:68:83:11:60:B6:28:91:0D:1B:77:1D:83:50:1B:2D:82:46:FC:E6:24:D0:A3:75:1B`,
+  and OpenSSL verifies it against the cert-manager trust anchor. The adopted
+  Secret retains immutable type `Opaque`, but contains the standard
+  `tls.crt`, `tls.key`, and `ca.crt` data cert-manager manages. Its stale
+  last-applied annotation containing the old Secret payload was removed. A
+  fresh rebuild creates this Secret directly through cert-manager.
+- The identity controller logged `Updated identity issuer` at 00:15:20 UTC
+  without a pod replacement or restart. A controlled replacement of only
+  `linkerd-viz/linkerd-web-proxy` then received a 24-hour workload identity
+  issued by `identity.linkerd.cluster.local`, while the unrolled APISIX etcd
+  proxy retained a valid identity from the old `identity.linkerd.` issuer.
+  The new and old identities communicated during passing complete Linkerd and
+  Viz checks. The bounded proxy-wide check passed CA
+  matching and data-plane readiness, then timed out only after printing the
+  pre-existing `argocd-redis` opaque-port advisory because the older CLI does
+  not terminate cleanly on that path.
+- The post-change platform comparison found no unready pod or workload, no
+  unbound PVC, no unavailable APIService, no unhealthy Argo application or
+  Certificate, and no rollout Warning event. Teleport retained both original
+  pod UIDs with zero restarts. APISIX Admin API baselines and the 15-key etcd
+  datastore still match, Vault is initialized and unsealed, and the
+  OpenObserve PostgreSQL cluster is healthy. The only restart delta was the
+  pre-existing `openobserve-scheduler-0` loop from 601 to 602: that instance
+  began before Phase 3D and exited after five PostgreSQL pool-acquisition
+  timeouts. It recovered Ready and remained at 602 through the observation
+  interval; it is unrelated follow-up work.
+- Phase 3D is complete. Do not remove the old root or rollback Secret yet.
+  Wait longer than the 24-hour workload identity lifetime from the 00:15:20
+  UTC issuer switch, inventory every active proxy identity, and require a new
+  approval before removing the old root in the later cleanup phase.
 
 ### Rebuild validation: 2026-10-15
 
@@ -449,10 +499,12 @@ Phase 3 changes:
   Vault injector rollout after certificate readiness.
 - Server-side dry-runs accept the Linkerd, VPA, OpenObserve Dex, and Vault
   certificate resources. Existing Linkerd webhook/Viz objects render
-  unchanged; the Phase 3A identity root resources are now live, while the
-  active identity issuer Certificate remains unapplied. Exact Linkerd
-  control-plane and Viz renders also pass server-side dry-run and reference the
-  cert-manager-managed Secrets.
+  unchanged. The Phase 3A identity root and Phase 3D identity issuer resources
+  are now live and Ready. The committed issuer spec matches the live resource
+  exactly, and the live control plane uses the same external-CA and
+  `kubernetes.io/tls` scheme configured for a fresh platform build.
+- All five cloud-init templates parse as YAML and all 66 embedded Bash scripts
+  pass `bash -n` after Phase 3D. No GitHub Actions workflow was changed.
 - `k8s-teleport` is clean on `prod`; local HEAD, `origin/prod`, and Argo's
   synchronized revision all match `5ed8f8f85e8ab22bea9f0a6475a76806623331d2`,
   and the Argo Application is Synced/Healthy. Its complete checked-in manifest
