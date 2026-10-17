@@ -483,6 +483,37 @@ Phase 3 changes:
   Wait longer than the 24-hour workload identity lifetime from the 00:15:20
   UTC issuer switch, inventory every active proxy identity, and require a new
   approval before removing the old root in the later cleanup phase.
+- Phase 3E completed the deferred cleanup on 2026-10-17, more than 35 hours
+  after the issuer switch. Before cleanup, all 69 active meshed pods presented
+  identities issued by `identity.linkerd.cluster.local`; none used the retired
+  `identity.linkerd.` issuer and none were unreadable. All three transitional
+  trust locations contained the canonical root followed by the retired root.
+- The retired root was removed from `ConfigMap/linkerd-identity-trust-roots`,
+  the `identityTrustAnchorsPEM` field in `ConfigMap/linkerd-config`, and the
+  same field in `Secret/linkerd-config-overrides`. Each location now contains
+  exactly one certificate with SHA-256 fingerprint
+  `99:C5:AB:84:A1:CF:34:A6:EB:7A:6D:1C:BD:6E:68:2C:E8:AD:0E:D5:08:02:7C:BF:E0:1F:71:04:E0:DF:38:60`.
+- The three Linkerd control-plane deployments, all seven Viz deployments, and
+  every remaining meshed workload were reloaded sequentially. Stateful pods
+  were recreated under their existing controllers: `kie-server-1` reached
+  Ready before `kie-server-0` changed, followed by `gravitee-opensearch-0` and
+  `nifi-0`. Their PVCs remained Bound. The actual Teleport server and Teleport
+  etcd pods were not restarted.
+- Post-rollout identity inventory again found 69 of 69 active proxies using
+  the new issuer with zero anomalies. `linkerd check`, `linkerd viz check`, and
+  `linkerd check --proxy` all exited successfully; the data-plane certificate
+  check reports that every proxy matches the current CA. A server-side dry-run
+  was injected with `linkerd-proxy`, proving admission still works.
+- All 16 cert-manager Certificates were Ready, there were no active unready
+  pods, and every Argo application was Healthy and Synced. NiFi returned 2/2
+  Ready, rejoined its cluster, resumed heartbeats and Kafka consumers, and its
+  three Git-backed flows retained `syncMode: always` and their process-group
+  IDs. The NiFi operator logged no errors after application startup.
+- No pod referenced the six migration rollback Secrets. They were deleted
+  only after the final convergence checks; all canonical cert-manager-managed
+  Secrets remain. The rebuild template already installs Linkerd from the
+  single canonical root, so no additional future-build manifest change was
+  required for Phase 3E.
 
 ### Rebuild validation: 2026-10-15
 
