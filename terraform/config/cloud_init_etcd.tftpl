@@ -999,6 +999,7 @@ write_files:
       {
         daily
         rotate 7
+        maxage 7
         maxsize 50M
         missingok
         notifempty
@@ -1015,7 +1016,8 @@ write_files:
     content: |
       /var/log/nginx/*.log {
         daily
-        rotate 14
+        rotate 7
+        maxage 7
         maxsize 100M
         missingok
         notifempty
@@ -1036,6 +1038,7 @@ write_files:
       {
         daily
         rotate 7
+        maxage 7
         maxsize 25M
         missingok
         notifempty
