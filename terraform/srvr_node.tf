@@ -62,7 +62,6 @@ resource "proxmox_virtual_environment_file" "srvr_cloud_init_config" {
         LINKERD_GITHUB_AUTH_TEAM = var.LINKERD_GITHUB_AUTH_TEAM
         OPENOBSERVE_CLIENT_ID = var.OPENOBSERVE_CLIENT_ID
         OPENOBSERVE_CLIENT_SECRET = var.OPENOBSERVE_CLIENT_SECRET
-        OPENOBSERVE_GITHUB_TOKEN = var.OPENOBSERVE_GITHUB_TOKEN
         OPENOBSERVE_GITHUB_ADMIN_TEAM = var.OPENOBSERVE_GITHUB_ADMIN_TEAM
         OPENOBSERVE_GITHUB_USER_TEAM = var.OPENOBSERVE_GITHUB_USER_TEAM
         OPENOBSERVE_SOURCEMAP_BOOTSTRAP_SCRIPT = indent(10, file("${path.module}/scripts/bootstrap-openobserve-sourcemap-service-account.py"))

@@ -413,13 +413,6 @@ variable "OPENOBSERVE_CLIENT_SECRET" {
   sensitive   = true
 }
 
-variable "OPENOBSERVE_GITHUB_TOKEN" {
-  description = "GitHub token with read:org for syncing OpenObserve roles."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
 variable "OPENOBSERVE_GITHUB_ADMIN_TEAM" {
   description = "GitHub team slug whose members should be OpenObserve admins."
   type        = string
