@@ -12522,6 +12522,14 @@ write_files:
 
             podSecurityContext:
               fsGroup: 999
+            copyutil:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 1Gi
+                limits:
+                  cpu: "2"
+                  memory: 2Gi
             resources:
               requests:
                 cpu: 500m
