@@ -5538,7 +5538,7 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-cpu): "25m"
                         +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                         +(vault.hashicorp.com/agent-limits-cpu): "500m"
                         +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5561,7 +5561,7 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-cpu): "25m"
                         +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                         +(vault.hashicorp.com/agent-limits-cpu): "500m"
                         +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5587,7 +5587,7 @@ write_files:
                       template:
                         metadata:
                           annotations:
-                            +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                            +(vault.hashicorp.com/agent-requests-cpu): "25m"
                             +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                             +(vault.hashicorp.com/agent-limits-cpu): "500m"
                             +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5614,7 +5614,7 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-cpu): "25m"
                         +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                         +(vault.hashicorp.com/agent-limits-cpu): "500m"
                         +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5642,7 +5642,7 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-cpu): "25m"
                         +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                         +(vault.hashicorp.com/agent-limits-cpu): "500m"
                         +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5670,7 +5670,7 @@ write_files:
                   template:
                     metadata:
                       annotations:
-                        +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                        +(vault.hashicorp.com/agent-requests-cpu): "25m"
                         +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                         +(vault.hashicorp.com/agent-limits-cpu): "500m"
                         +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -5700,7 +5700,7 @@ write_files:
                       template:
                         metadata:
                           annotations:
-                            +(vault.hashicorp.com/agent-requests-cpu): "50m"
+                            +(vault.hashicorp.com/agent-requests-cpu): "25m"
                             +(vault.hashicorp.com/agent-requests-mem): "64Mi"
                             +(vault.hashicorp.com/agent-limits-cpu): "500m"
                             +(vault.hashicorp.com/agent-limits-mem): "128Mi"
@@ -6824,6 +6824,7 @@ write_files:
         --set clusterNetworks="10.42.0.0/16\,10.43.0.0/16" \
         --set proxyInit.ignoreOutboundPorts="4567\,4568\,2379\,8200" \
         --set proxyInit.ignoreInboundPorts="4567\,4568\,2379\,8200" \
+        --proxy-cpu-request="25m" \
         --set-string global.tracing.enabled=true \
         --set proxy.tracing.enabled=true \
         --set-string proxy.tracing.otlp.endpoint="otel-collector.observability.svc.cluster.local:4317" \
