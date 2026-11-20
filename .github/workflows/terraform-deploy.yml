@@ -10,6 +10,8 @@ on:
         type: choice
         options:
           - plan-all
+          - plan-vault-sync
+          - apply-vault-sync
           - apply-all
           - apply-vms
           - rebuild-all
@@ -338,3 +340,115 @@ jobs:
           workspace: ${{ github.event.repository.name }}
           configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
           plan_only: true
+
+      - name: Create targeted Vault sync run
+        if: contains(fromJson('["plan-vault-sync", "apply-vault-sync"]'), env.MODE)
+        env:
+          TFE_TOKEN: ${{ secrets.TFE_TOKEN }}
+          CONFIGURATION_VERSION_ID: ${{ steps.upload.outputs.configuration_version_id }}
+        run: |
+          set -euo pipefail
+
+          ORG_NAME="${{ github.repository_owner }}"
+          WORKSPACE_NAME="${{ github.event.repository.name }}"
+          TARGETS='[
+            "google_project_service.project_service[14]",
+            "google_pubsub_topic.eventarc_trigger_topic",
+            "google_pubsub_subscription.vault_secret_event_push",
+            "google_eventarc_trigger.vault_secret_events",
+            "google_monitoring_notification_channel.vault_sync_email",
+            "google_monitoring_alert_policy.vault_sync_subscription_missing",
+            "google_monitoring_alert_policy.vault_sync_push_failures"
+          ]'
+
+          if [[ "$MODE" == "apply-vault-sync" ]]; then
+            AUTO_APPLY=true
+            PLAN_ONLY=false
+            EXPECTED_STATUS="applied"
+          else
+            AUTO_APPLY=false
+            PLAN_ONLY=true
+            EXPECTED_STATUS="planned_and_finished"
+          fi
+
+          WORKSPACE_ID=$(curl -fsS \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/$ORG_NAME/workspaces/$WORKSPACE_NAME" \
+            | jq -er '.data.id')
+
+          DATA=$(jq -n \
+            --arg workspace_id "$WORKSPACE_ID" \
+            --arg configuration_version_id "$CONFIGURATION_VERSION_ID" \
+            --argjson auto_apply "$AUTO_APPLY" \
+            --argjson plan_only "$PLAN_ONLY" \
+            --argjson targets "$TARGETS" \
+            '{
+              data: {
+                type: "runs",
+                attributes: {
+                  message: "Vault sync infrastructure rollout",
+                  "auto-apply": $auto_apply,
+                  "plan-only": $plan_only,
+                  "target-addrs": $targets
+                },
+                relationships: {
+                  workspace: {
+                    data: {type: "workspaces", id: $workspace_id}
+                  },
+                  "configuration-version": {
+                    data: {type: "configuration-versions", id: $configuration_version_id}
+                  }
+                }
+              }
+            }')
+
+          RUN_RESPONSE=$(curl -fsS -X POST \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Content-Type: application/vnd.api+json" \
+            --data "$DATA" \
+            https://app.terraform.io/api/v2/runs)
+
+          RUN_ID=$(jq -er '.data.id' <<<"$RUN_RESPONSE")
+          RUN_URL="https://app.terraform.io/app/$ORG_NAME/workspaces/$WORKSPACE_NAME/runs/$RUN_ID"
+          echo "HCP Terraform run: $RUN_URL"
+
+          for _ in $(seq 1 120); do
+            RUN_RESPONSE=$(curl -fsS \
+              --header "Authorization: Bearer $TFE_TOKEN" \
+              --header "Content-Type: application/vnd.api+json" \
+              "https://app.terraform.io/api/v2/runs/$RUN_ID")
+            STATUS=$(jq -er '.data.attributes.status' <<<"$RUN_RESPONSE")
+            echo "Run status: $STATUS"
+
+            if [[ "$STATUS" == "$EXPECTED_STATUS" ]]; then
+              break
+            fi
+
+            case "$STATUS" in
+              canceled|discarded|errored|force_canceled|policy_hard_failed|policy_soft_failed)
+                echo "Vault sync run failed with status: $STATUS"
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          if [[ "$STATUS" != "$EXPECTED_STATUS" ]]; then
+            echo "Timed out waiting for $EXPECTED_STATUS; final status: $STATUS"
+            exit 1
+          fi
+
+          PLAN_ID=$(jq -er '.data.relationships.plan.data.id' <<<"$RUN_RESPONSE")
+          curl -fsSL \
+            --header "Authorization: Bearer $TFE_TOKEN" \
+            --header "Accept: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/plans/$PLAN_ID/json-output" \
+            | jq -r '
+              [.resource_changes[]
+                | select(.change.actions != ["no-op"])
+                | {address, actions: .change.actions}]
+              | sort_by(.address)
+              | .[]
+              | "\(.actions | join("/"))\t\(.address)"'
