@@ -27,8 +27,11 @@ resource "google_project_iam_audit_config" "secret_manager_audit_logs" {
 resource "google_eventarc_trigger" "vault_secret_events" {
   for_each = local.secret_event_methods
 
-  name     = "vault-${replace(each.key, "_", "-")}-trigger"
-  location = var.region
+  name = "vault-${replace(each.key, "_", "-")}-trigger"
+  # Secret Manager secrets use automatic/global replication. A regional
+  # Cloud Audit Logs trigger can silently miss those events, so keep the
+  # trigger global while the Cloud Run destination remains regional.
+  location = "global"
   project  = google_project.infra.project_id
 
   matching_criteria {
@@ -59,6 +62,10 @@ resource "google_eventarc_trigger" "vault_secret_events" {
     google_project_service.project_service,
     google_cloud_run_v2_service.vault_sync_svc
   ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Service Account for Eventarc triggers
@@ -102,8 +109,9 @@ resource "google_project_iam_member" "eventarc_invoker" {
 resource "google_pubsub_topic" "eventarc_trigger_topic" {
   for_each = local.secret_event_methods
 
-  name    = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-topic"
-  project = google_project.infra.project_id
+  name                       = "eventarc-${var.region}-vault-${replace(each.key, "_", "-")}-topic"
+  project                    = google_project.infra.project_id
+  message_retention_duration = "604800s"
 }
 
 resource "google_logging_project_sink" "eventarc_sink" {
@@ -145,6 +153,13 @@ resource "google_pubsub_subscription" "vault_secret_event_push" {
 
   ack_deadline_seconds       = 60
   message_retention_duration = "604800s"
+
+  # These subscriptions may legitimately be idle for more than 31 days.
+  # Without an explicit policy, Pub/Sub expires them after 31 days of
+  # inactivity and silently breaks the Vault synchronization pipeline.
+  expiration_policy {
+    ttl = ""
+  }
 
   retry_policy {
     minimum_backoff = "10s"

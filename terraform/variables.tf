@@ -654,6 +654,17 @@ variable "billing_account" {
   nullable    = false
 }
 
+variable "vault_sync_alert_email" {
+  description = "Email address that receives critical Vault sync delivery alerts."
+  type        = string
+  default     = "administrator@suncoast.systems"
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.vault_sync_alert_email))
+    error_message = "vault_sync_alert_email must be a valid email address."
+  }
+}
+
 variable "apis" {
   description = "List of Google APIs to enable in the created project."
   type        = list(string)
@@ -672,6 +683,7 @@ variable "apis" {
     "pubsub.googleapis.com",        # Used by Eventarc triggers
     "secretmanager.googleapis.com", # Required for secret sync
     "logging.googleapis.com",       # Optional, for better visibility
+    "monitoring.googleapis.com",    # Vault sync delivery alerts
   ]
 }
 
