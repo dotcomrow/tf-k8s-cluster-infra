@@ -441,14 +441,32 @@ jobs:
           fi
 
           PLAN_ID=$(jq -er '.data.relationships.plan.data.id' <<<"$RUN_RESPONSE")
-          curl -fsSL \
+          PLAN_JSON=$(curl -fsSL \
             --header "Authorization: Bearer $TFE_TOKEN" \
             --header "Accept: application/vnd.api+json" \
-            "https://app.terraform.io/api/v2/plans/$PLAN_ID/json-output" \
-            | jq -r '
-              [.resource_changes[]
-                | select(.change.actions != ["no-op"])
-                | {address, actions: .change.actions}]
-              | sort_by(.address)
-              | .[]
-              | "\(.actions | join("/"))\t\(.address)"'
+            "https://app.terraform.io/api/v2/plans/$PLAN_ID/json-output")
+
+          jq -r '
+            [.resource_changes[]
+              | select(.change.actions != ["no-op"])
+              | {address, actions: .change.actions}]
+            | sort_by(.address)
+            | .[]
+            | "\(.actions | join("/"))\t\(.address)"' <<<"$PLAN_JSON"
+
+          jq -r '
+            .resource_changes[]
+            | select(.address == "google_project_iam_member.secret_manager_grant")
+            | {
+                actions: .change.actions,
+                before: {
+                  project: .change.before.project,
+                  role: .change.before.role,
+                  member: .change.before.member
+                },
+                after: {
+                  project: .change.after.project,
+                  role: .change.after.role,
+                  member: .change.after.member
+                }
+              }' <<<"$PLAN_JSON"
